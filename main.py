@@ -75,6 +75,20 @@ async def handle_recording(request: Request, db: Session = Depends(get_db)):
         "extracted_info": extracted_info
     }
 
+@app.post("/make_call/")
+async def make_call_endpoint(to_phone_number: str):
+    print(to_phone_number)
+    call_sid = services.make_call(to_phone_number)  # Call the service function
+    return {"message": "Call initiated successfully", "call_sid": call_sid}
+
+@app.post("/handle_outgoing_call")
+def handle_outgoing_call():
+    response = VoiceResponse()
+    response.say("Hello, this is a call from your FastAPI application.")
+    response.say("Thank you for answering.")
+    response.hangup()
+    return str(response)
+
 @app.post("/configure_voice/")
 async def configure_voice(client_number: str, voice_id: str = 'Joanna', rate: str = 'medium', pitch: str = 'medium', volume: str = 
 'medium'):

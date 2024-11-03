@@ -4,6 +4,7 @@ from twilio.rest import Client
 import io
 import os
 from dotenv import load_dotenv
+from fastapi import HTTPException
 
 # Load environment variables from .env file
 load_dotenv()
@@ -15,6 +16,7 @@ AWS_REGION_POLLY = os.getenv("AWS_REGION_POLLY")
 AWS_REGION_TRANSCRIBE = os.getenv("AWS_REGION_TRANSCRIBE")
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Initialize AWS clients with specified regions
@@ -48,6 +50,18 @@ EXTRACTION_KEYWORDS = {
     "issue": ["issue", "problem", "trouble", "difficulty"],
     "request": ["request", "need", "want", "looking for"],
 }
+
+def make_call(to_phone_number: str):
+    try:
+        print(f"Making call to {to_phone_number}")
+        call = twilio_client.calls.create(
+            to=to_phone_number,
+            from_=os.getenv("TWILIO_PHONE_NUMBER"),  # Your Twilio number
+            url=os.getenv("OUTGOING_CALL_URL")  # Your endpoint for handling call responses
+        )
+        return call.sid
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 def build_prompt(client_number, user_input):
     context = get_context(client_number)
