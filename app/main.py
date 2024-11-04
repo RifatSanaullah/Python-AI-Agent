@@ -10,10 +10,13 @@ from app.models.base import init_db, SessionLocal
 from app.models.conversation import Conversation
 from app.services.call_handler import CallHandler
 from app.utils.db_utils import get_db
+from app.routes import knowledge_base
 
 load_dotenv()
 
 app = FastAPI()
+
+app.include_router(knowledge_base.router, prefix="/api", tags=["knowledge_base"])
 
 # Initialize the database tables
 init_db()
