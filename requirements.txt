@@ -1,8 +1,9 @@
-fastapi==0.68.2
-uvicorn==0.15.0
-sqlalchemy==1.4.25
-pymysql==1.0.2
-boto3==1.18.69
-twilio==6.63.0
-openai==0.10.2
-python-dotenv==0.19.0
+fastapi==0.95.2
+uvicorn==0.22.0
+sqlalchemy==2.0.16
+pymysql==1.1.0
+boto3==1.28.0
+twilio==7.18.0
+openai==0.27.8
+python-dotenv==1.0.0
+pydantic-settings==1.0.3
