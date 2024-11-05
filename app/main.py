@@ -5,16 +5,18 @@ from fastapi import FastAPI, Request, Depends, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from twilio.twiml.voice_response import VoiceResponse
-from app.config import settings
-from app.models.base import init_db, SessionLocal
-from app.models.conversation import Conversation
+from app.models.base import init_db
 from app.services.call_handler import CallHandler
 from app.utils.db_utils import get_db
 from app.routes import knowledge_base
 
 load_dotenv()
 
-app = FastAPI()
+app = FastAPI(
+    title="BoomerCall API",
+    description="API for Voice Assistant",
+    version="0.0.2",
+)
 
 app.include_router(knowledge_base.router, prefix="/api", tags=["knowledge_base"])
 
