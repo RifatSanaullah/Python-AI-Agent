@@ -13,6 +13,7 @@ from app.services.polly_service import PollyService
 from app.services.transcribe_service import TranscribeService  # Add this import
 from .knowledge_base_service import list_knowledge_entries
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
+from starlette.websockets import WebSocketDisconnect
 
 class CallHandler:
     def __init__(self, db: Session):
@@ -52,15 +53,13 @@ class CallHandler:
                 # Process audio buffer for transcription
                 if not self.twilio_service.audio_buffer.empty():
                     audio_data = await self.twilio_service.audio_buffer.get()
-                    # resp = await self.chatgpt_audio_service.transcribe_audio(audio_data)
-                    # print(resp)
-                    # await self.synthesize_response(resp)
-                    transcription = await self.transcribe_service.transcribe_audio_realtime(audio_data)
-                    if transcription:
-                        print(f"Transcription: {transcription}")
-                        await self.synthesize_response(transcription)
-                    # await self.twilio_service.response_buffer.put(audio_data)
-
+                    await self.transcribe_service.send_audio_chunk(audio_data)
+                    async for transcript in self.transcribe_service.receive_transcriptions():
+                        if transcript:
+                            response = await self.chatgpt_service.generate_response(transcript)
+                            print(f"Transcript: {transcript}")
+                            print(f"Response: {response}")
+                            await self.synthesize_response(response)
 
         except ConnectionClosedError as e:
             print(f"Connection closed with error: {e.code} - {e.reason}")
@@ -70,6 +69,7 @@ class CallHandler:
             print("Unexpected error:", e)
         finally:
             print("WebSocket connection closed.")
+            await self.transcribe_service.close_transcription()
             await websocket.close()
 
     def is_static_noise(self, audio_chunk):
@@ -84,6 +84,7 @@ class CallHandler:
     async def handle_call(self, call_id: str):
         print("Handling call...")
         response = self.twilio_service.initialize_call(call_id)
+        await self.transcribe_service.start_transcription()
         await self.synthesize_response("Hello and Welcome to BoomersHub!!")
         return response
 

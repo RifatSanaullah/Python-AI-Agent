@@ -117,7 +117,7 @@ class TranscribeService:
         k_signing = hmac.new(k_service, 'aws4_request'.encode('utf-8'), hashlib.sha256).digest()
         return k_signing
 
-    async def transcribe_audio_realtime(self, audio_bytes):
+    async def transcribe(self, audio_bytes):
         websocket_url = self.build_websocket_url()
         """Send audio to Amazon Transcribe via WebSocket and retrieve transcription text in real-time."""
         try:

@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     aws_access_key_id: str = os.getenv("AWS_ACCESS_KEY_ID")
     aws_secret_access_key: str = os.getenv("AWS_SECRET_ACCESS_KEY")
     aws_region: str = os.getenv("AWS_REGION")
+    aws_role_arn: str = os.getenv("AWS_ROLE_ARN")
     polly_voice_id: str = os.getenv("POLLY_VOICE_ID", "Joanna")
     polly_voice_pitch: str = os.getenv("POLLY_VOICE_PITCH", "medium")
     polly_voice_rate: str = os.getenv("POLLY_VOICE_RATE", "medium")
