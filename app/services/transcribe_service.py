@@ -9,7 +9,7 @@ import hmac
 import hashlib
 from urllib.parse import quote, urlencode
 import numpy as np
-import soundfile as sf
+from scipy import signal
 
 class TranscribeService:
     def __init__(self, language_code: str = "en-US"):
@@ -173,71 +173,36 @@ class TranscribeService:
                 print(f"Error establishing WebSocket connection: {error_message}")
                 raise
 
-    async def _convert_mulaw_to_pcm(self, audio_chunk: bytes) -> bytes:
-        """Convert mulaw 8kHz audio to PCM 16kHz."""
-        try:
-            if not audio_chunk:
-                raise ValueError("Empty audio chunk received")
+    def mu_law_to_pcm(self, mu_law_data):
+        # Ensure the input is a numpy array
+        mu_law_data = np.frombuffer(mu_law_data, dtype=np.uint8)
+        
+        # Proper mu-law decoding
+        mu = 255
+        y = mu_law_data.astype(np.float32)
+        y = 2 * (y / mu) - 1
+        # Apply inverse mu-law transformation
+        pcm_data = np.sign(y) * (1/mu) * ((1 + mu)**np.abs(y) - 1)
+        # Scale to 16-bit PCM range
+        pcm_data = (pcm_data * 32767).astype(np.int16)
+        
+        return pcm_data
 
-            # Step 1: Convert mulaw bytes to numpy array
-            mulaw_data = np.frombuffer(audio_chunk, dtype=np.uint8)
-
-            # Step 2: Mulaw to linear PCM conversion
-            # Create conversion table for μ-law to linear PCM
-            mulaw_table = np.zeros(256, dtype=np.int16)
-            for i in range(256):
-                # Remove the sign bit
-                sample = i ^ 0xFF
-                
-                # Extract the segment and quantization bits
-                segment = (sample & 0x70) >> 4
-                quantization = sample & 0x0F
-                
-                # Reconstruct linear sample
-                magnitude = (quantization << 3) + 0x84
-                magnitude <<= segment
-                
-                # Apply sign bit
-                if i > 127:
-                    mulaw_table[i] = magnitude
-                else:
-                    mulaw_table[i] = -magnitude
-
-            # Convert using the lookup table
-            pcm_8k = mulaw_table[mulaw_data]
-
-            # Step 3: Resample from 8kHz to 16kHz
-            # Create time arrays for interpolation
-            original_time = np.arange(len(pcm_8k))
-            new_time = np.linspace(0, len(pcm_8k) - 1, len(pcm_8k) * 2)
-
-            
-            # Linear interpolation for resampling
-            pcm_16k = np.interp(new_time, original_time, pcm_8k)
-            
-            # Convert to int16
-            pcm_16k = pcm_16k.astype(np.int16)
-            
-            # Verify the conversion
-            if not pcm_16k.any():
-                raise ValueError("Conversion resulted in empty data")
-                
-            print(f"Converted {len(mulaw_data)} mulaw samples to {len(pcm_16k)} PCM samples")
-            print(f"Sample value range: {pcm_16k.min()} to {pcm_16k.max()}")
-            
-            return pcm_16k.tobytes()
-
-        except Exception as e:
-            print(f"Error in mulaw to PCM conversion: {str(e)}")
-            raise
-
+    def upsample(self, pcm_data, original_rate=8000, target_rate=16000):
+        # Use resampy for better quality resampling
+        upsampled_data = signal.resample(pcm_data, int(len(pcm_data) * target_rate / original_rate))
+        # Ensure the data stays within int16 bounds
+        upsampled_data = np.clip(upsampled_data, -32768, 32767)
+        return upsampled_data.astype(np.int16)
 
     async def send_audio_chunk(self, audio_chunk: bytes):
         """Send an audio chunk to the WebSocket if it's open."""
         print("Sending audio chunk")
         if self.websocket and self.websocket.open:
             # Convert 8k mulaw to 16k pcm
-            pcm_audio_chunk = await self._convert_mulaw_to_pcm(audio_chunk)
+            pcm_audio_chunk = self.mu_law_to_pcm(audio_chunk)
+            upsampled_chunk = self.upsample(pcm_audio_chunk).tobytes()
+                
             headers = {
                 ":content-type": "application/octet-stream",
                 ":event-type": "AudioEvent",
@@ -249,13 +214,20 @@ class TranscribeService:
             headers_bytes = headers_json.encode('utf-8')
 
             # Create the prelude (total byte length and headers length)
-            total_length = len(headers_bytes) + len(pcm_audio_chunk)
+            total_length = len(headers_bytes) + len(upsampled_chunk)
             prelude = bytearray()
             prelude.extend(total_length.to_bytes(4, byteorder='big'))
             prelude.extend(len(headers_bytes).to_bytes(4, byteorder='big'))
 
+            message = bytearray()
+            message.extend(prelude)
+            message.extend(headers_bytes)
+            message.extend(upsampled_chunk)
+
             # Combine all parts into final message
-            message = prelude + headers_bytes + pcm_audio_chunk
+            # message = prelude + headers_bytes + upsampled_chunk
+
+            # print(f"Sending audio chunk of size {len(chunk_to_send)}")
             await self.websocket.send(message)
         else:
             raise RuntimeError("WebSocket connection is not open when sending audio chunk")
@@ -281,15 +253,26 @@ class TranscribeService:
         if self.websocket and self.websocket.open:
             try:
                 # Send end streaming message
-                end_event = {
-                    "headers": {
-                        ":content-type": "application/octet-stream",
-                        ":event-type": "AudioEvent",
-                        ":message-type": "event"
-                    },
-                    "body": b""  # Empty audio chunk
+ 
+                headers = {
+                    ":content-type": "application/octet-stream",
+                    ":event-type": "AudioEvent",
+                    ":message-type": "event"
                 }
-                await self.websocket.send(json.dumps(end_event))
+                body = b""  # Empty audio chunk
+
+                headers_json = json.dumps(headers)
+                headers_bytes = headers_json.encode('utf-8')
+
+                # Create the prelude (total byte length and headers length)
+                total_length = len(headers_bytes) + len(body)
+                prelude = bytearray()
+                prelude.extend(total_length.to_bytes(4, byteorder='big'))
+                prelude.extend(len(headers_bytes).to_bytes(4, byteorder='big'))
+
+                message = prelude + headers_bytes + body
+
+                await self.websocket.send(message)
                 print("Sent end_transcription request")
                 
                 # Wait for final response
