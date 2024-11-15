@@ -84,8 +84,8 @@ class CallHandler:
     async def handle_call(self, call_id: str):
         print("Handling call...")
         response = self.twilio_service.initialize_call(call_id)
-        await self.transcribe_service.start_transcription()
         await self.synthesize_response("Hello and Welcome to BoomersHub!!")
+        await self.transcribe_service.start_transcription()
         return response
 
     async def handle_incoming_call(self, call_id: str, client_message: str, required_info: dict = {"name": None, "phone_number": None, "email": None}):
