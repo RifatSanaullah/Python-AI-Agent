@@ -173,19 +173,40 @@ class TranscribeService:
                 print(f"Error establishing WebSocket connection: {error_message}")
                 raise
 
+    # def mu_law_to_pcm(self, mu_law_data):
+    #     # Ensure the input is a numpy array
+    #     mu_law_data = np.frombuffer(mu_law_data, dtype=np.uint8)
+        
+    #     # Proper mu-law decoding
+    #     mu = 255
+    #     y = mu_law_data.astype(np.float32)
+    #     y = 2 * (y / mu) - 1
+    #     # Apply inverse mu-law transformation
+    #     pcm_data = np.sign(y) * (1/mu) * ((1 + mu)**np.abs(y) - 1)
+    #     # Scale to 16-bit PCM range
+    #     pcm_data = (pcm_data * 32767).astype(np.int16)
+        
+    #     return pcm_data
+
     def mu_law_to_pcm(self, mu_law_data):
+        """
+        Decodes mu-law-encoded data to 16-bit PCM.
+        """
+        # Constants
+        mu = 255.0
+
         # Ensure the input is a numpy array
         mu_law_data = np.frombuffer(mu_law_data, dtype=np.uint8)
-        
-        # Proper mu-law decoding
-        mu = 255
-        y = mu_law_data.astype(np.float32)
-        y = 2 * (y / mu) - 1
-        # Apply inverse mu-law transformation
-        pcm_data = np.sign(y) * (1/mu) * ((1 + mu)**np.abs(y) - 1)
+
+        # Decode mu-law: Convert values from unsigned to signed (-128 to 127)
+        mu_law_data = mu_law_data - 128
+        # Perform inverse mu-law transformation
+        magnitude = (1 / mu) * ((1 + mu)**np.abs(mu_law_data / 127.0) - 1)
+        pcm_data = np.sign(mu_law_data) * magnitude
+
         # Scale to 16-bit PCM range
         pcm_data = (pcm_data * 32767).astype(np.int16)
-        
+
         return pcm_data
 
     def upsample(self, pcm_data, original_rate=8000, target_rate=16000):
