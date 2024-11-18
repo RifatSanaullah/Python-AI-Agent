@@ -1,17 +1,12 @@
 # import spacy
 # import re
 import base64
-import numpy as np
 from sqlalchemy.orm import Session
-from app.utils.db_utils import save_conversation
 from app.services.twilio_service import TwilioService
 from app.services.chatgpt_service import ChatGPTService
 from app.services.polly_service import PollyService
 from app.services.transcribe_service import TranscribeService
-from .knowledge_base_service import list_knowledge_entries
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
-import webrtcvad
-from scipy.signal import butter, lfilter
 
 class CallHandler:
     def __init__(self, db: Session):
@@ -21,34 +16,6 @@ class CallHandler:
         self.polly_service = PollyService()
         self.transcribe_service = TranscribeService()
         self.stream_sid = None
-        self.vad = webrtcvad.Vad()
-        self.vad.set_mode(2)
-
-    # High-pass filter for noise reduction
-    def highpass_filter(self, audio, cutoff=300, fs=8000, order=5):
-        nyquist = 0.5 * fs
-        normal_cutoff = cutoff / nyquist
-        b, a = butter(order, normal_cutoff, btype='high', analog=False)
-        return lfilter(b, a, audio)
-    
-    # Function to check for silence/static
-    def is_blank_or_static(self, audio_payload):
-        audio_data = np.frombuffer(audio_payload, dtype=np.int16)
-        rms = np.sqrt(np.mean(audio_data ** 2))
-        if np.isnan(rms):
-            return True
-        silence_threshold = 500
-        return rms < silence_threshold
-    
-    # Function to check for speech
-    def is_speech(self, audio_payload):
-        return self.vad.is_speech(audio_payload, sample_rate=8000)
-    
-    # Process valid audio
-    async def process_valid_audio(self, audio_payload):
-        audio_data = np.frombuffer(audio_payload, dtype=np.int16)
-        filtered_audio = self.highpass_filter(audio_data)
-        await self.twilio_service.audio_buffer.put(filtered_audio.tobytes())
 
     async def process_input(self, websocket):
         self.websocket = websocket  # Store websocket instance
@@ -64,13 +31,7 @@ class CallHandler:
                     media = data["media"]
                     chunk = media["payload"]
                     chunk_bytes = base64.b64decode(chunk)
-                    # Check for static noise
-                    if self.is_blank_or_static(chunk_bytes):
-                        print("Blank or static audio detected, skipping chunk.")
-                        continue
-                    if self.is_speech(chunk_bytes):
-                        # Add incoming audio to buffer for transcription
-                        await self.process_valid_audio(chunk_bytes) 
+                    await self.twilio_service.audio_buffer.put(chunk_bytes) 
 
                 if not self.twilio_service.response_buffer.empty():
                     print("Processing response buffers...")

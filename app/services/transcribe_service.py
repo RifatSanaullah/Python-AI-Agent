@@ -10,6 +10,7 @@ import hashlib
 from urllib.parse import quote, urlencode
 import numpy as np
 from scipy import signal
+import g711
 
 class TranscribeService:
     def __init__(self, language_code: str = "en-US"):
@@ -69,7 +70,7 @@ class TranscribeService:
             "X-Amz-SignedHeaders": "host",
             "language-code": self.language_code,
             "media-encoding": "pcm",  # Changed from mulaw to pcm
-            "sample-rate": "16000"    # Changed from 8000 to 16000
+            "sample-rate": "8000"    # Changed from 8000 to 16000
         }
         canonical_querystring = urlencode(sorted(query_params.items()))
 
@@ -151,15 +152,15 @@ class TranscribeService:
             # Combine all parts
             message = prelude + headers_bytes + body_bytes
 
-            # if self.websocket.open:
-            #     await self.websocket.send(message)
-            #     print("Sent start_transcription request")
+            if self.websocket.open:
+                await self.websocket.send(message)
+                print("Sent start_transcription request")
                 
-            #     # Wait for response
-            #     response = await self.websocket.recv()
-            #     print(f"Start response: {response}")
-            # else:
-            #     raise RuntimeError("WebSocket connection is not open after sending config request")
+                # Wait for response
+                response = await self.websocket.recv()
+                print(f"Start response: {response}")
+            else:
+                raise RuntimeError("WebSocket connection is not open after sending config request")
 
             print("WebSocket connection established for transcription")
             
@@ -173,41 +174,17 @@ class TranscribeService:
                 print(f"Error establishing WebSocket connection: {error_message}")
                 raise
 
-    # def mu_law_to_pcm(self, mu_law_data):
-    #     # Ensure the input is a numpy array
-    #     mu_law_data = np.frombuffer(mu_law_data, dtype=np.uint8)
-        
-    #     # Proper mu-law decoding
-    #     mu = 255
-    #     y = mu_law_data.astype(np.float32)
-    #     y = 2 * (y / mu) - 1
-    #     # Apply inverse mu-law transformation
-    #     pcm_data = np.sign(y) * (1/mu) * ((1 + mu)**np.abs(y) - 1)
-    #     # Scale to 16-bit PCM range
-    #     pcm_data = (pcm_data * 32767).astype(np.int16)
-        
-    #     return pcm_data
-
-    def mu_law_to_pcm(self, mu_law_data):
-        """
-        Decodes mu-law-encoded data to 16-bit PCM.
-        """
-        # Constants
-        mu = 255.0
-
-        # Ensure the input is a numpy array
-        mu_law_data = np.frombuffer(mu_law_data, dtype=np.uint8)
-
-        # Decode mu-law: Convert values from unsigned to signed (-128 to 127)
-        mu_law_data = mu_law_data - 128
-        # Perform inverse mu-law transformation
-        magnitude = (1 / mu) * ((1 + mu)**np.abs(mu_law_data / 127.0) - 1)
-        pcm_data = np.sign(mu_law_data) * magnitude
-
-        # Scale to 16-bit PCM range
-        pcm_data = (pcm_data * 32767).astype(np.int16)
-
-        return pcm_data
+    def is_blank_or_static(self, audio_chunk: bytes) -> bool:
+        """Check if the audio chunk is blank or static noise."""
+        print("audio_chunk", audio_chunk)
+        pcm_array = np.frombuffer(audio_chunk, dtype=np.int16)
+        print("pcm_array", pcm_array)
+        normalized_audio = pcm_array / 32768.0
+        max_amplitude = np.max(np.abs(normalized_audio))
+        energy = np.mean(normalized_audio ** 2)
+        print(f"Max amplitude: {max_amplitude}, Energy: {energy}")
+        print(max_amplitude < 0.1 or energy < 0.01)
+        return max_amplitude < 0.1 or energy < 0.01
 
     def upsample(self, pcm_data, original_rate=8000, target_rate=16000):
         # Use resampy for better quality resampling
@@ -221,35 +198,38 @@ class TranscribeService:
         print("Sending audio chunk")
         if self.websocket and self.websocket.open:
             # Convert 8k mulaw to 16k pcm
-            pcm_audio_chunk = self.mu_law_to_pcm(audio_chunk)
-            upsampled_chunk = self.upsample(pcm_audio_chunk).tobytes()
+            pcm_chunk = g711.decode_ulaw(audio_chunk)
+
+            if not self.is_blank_or_static(pcm_chunk):
                 
-            headers = {
-                ":content-type": "application/octet-stream",
-                ":event-type": "AudioEvent",
-                ":message-type": "event"
-            }
-            
-            # Convert headers to JSON and get bytes
-            headers_json = json.dumps(headers)
-            headers_bytes = headers_json.encode('utf-8')
+                headers = {
+                    ":content-type": "application/octet-stream",
+                    ":event-type": "AudioEvent",
+                    ":message-type": "event"
+                }
+                
+                # Convert headers to JSON and get bytes
+                headers_json = json.dumps(headers)
+                headers_bytes = headers_json.encode('utf-8')
 
-            # Create the prelude (total byte length and headers length)
-            total_length = len(headers_bytes) + len(upsampled_chunk)
-            prelude = bytearray()
-            prelude.extend(total_length.to_bytes(4, byteorder='big'))
-            prelude.extend(len(headers_bytes).to_bytes(4, byteorder='big'))
+                # Create the prelude (total byte length and headers length)
+                total_length = len(headers_bytes) + len(pcm_chunk)
+                prelude = bytearray()
+                prelude.extend(total_length.to_bytes(4, byteorder='big'))
+                prelude.extend(len(headers_bytes).to_bytes(4, byteorder='big'))
 
-            message = bytearray()
-            message.extend(prelude)
-            message.extend(headers_bytes)
-            message.extend(upsampled_chunk)
+                message = bytearray()
+                message.extend(prelude)
+                message.extend(headers_bytes)
+                message.extend(pcm_chunk)
 
-            # Combine all parts into final message
-            # message = prelude + headers_bytes + upsampled_chunk
+                # Combine all parts into final message
+                # message = prelude + headers_bytes + upsampled_chunk
 
-            # print(f"Sending audio chunk of size {len(chunk_to_send)}")
-            await self.websocket.send(message)
+                # print(f"Sending audio chunk of size {len(chunk_to_send)}")
+                await self.websocket.send(message)
+            else:
+                print("Blank or static audio detected, skipping chunk.")
         else:
             raise RuntimeError("WebSocket connection is not open when sending audio chunk")
 

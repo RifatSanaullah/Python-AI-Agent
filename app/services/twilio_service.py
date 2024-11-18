@@ -1,7 +1,6 @@
 # app/services/twilio_service.py
 import asyncio
 from twilio.rest import Client
-import json
 import base64  # Add this import
 from app.config import settings
 from twilio.twiml.voice_response import VoiceResponse, Gather, Connect
