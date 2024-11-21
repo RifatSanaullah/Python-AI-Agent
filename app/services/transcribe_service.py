@@ -1,27 +1,33 @@
-import json
+import audioop
 import boto3
-import websockets
-from typing import AsyncGenerator, Optional
-from app.config import settings
-from datetime import datetime
-import time
-import hmac
 import hashlib
-from urllib.parse import quote, urlencode
+import hmac
+import io
+import json
 import numpy as np
-from scipy import signal
-import g711
+import time
+import wave
+import websockets
+from datetime import datetime
+from typing import AsyncGenerator
+from urllib.parse import urlencode
+
+from app.config import settings
 
 class TranscribeService:
     def __init__(self, language_code: str = "en-US"):
         self.region = settings.aws_region
         self.language_code = language_code
-        self.websocket: Optional[websockets.WebSocketClientProtocol] = None
+        self.websocket = None
         self.sts_client = boto3.client(
             'sts',
             aws_access_key_id=settings.aws_access_key_id,      
             aws_secret_access_key=settings.aws_secret_access_key,
         )
+        self.audio_buffer = bytearray()
+        self.chunk_duration_ms = 250
+        self.sample_rate = 8000  # Ensure this matches the sample rate used in the service
+        self.chunk_size = int(self.sample_rate * self.chunk_duration_ms / 1000) * 2  # 2 bytes per sample for 16-bit audio
 
     async def _initialize_credentials(self):
         """Initialize or refresh AWS credentials."""
@@ -70,7 +76,7 @@ class TranscribeService:
             "X-Amz-SignedHeaders": "host",
             "language-code": self.language_code,
             "media-encoding": "pcm",  # Changed from mulaw to pcm
-            "sample-rate": "8000"    # Changed from 8000 to 16000
+            "sample-rate": 8000    # Changed from 8000 to 16000
         }
         canonical_querystring = urlencode(sorted(query_params.items()))
 
@@ -124,45 +130,8 @@ class TranscribeService:
                 ping_timeout=None
             )
 
-            # First message should be configuration
-            headers = {
-                ":content-type": "application/json",
-                ":event-type": "ConfigurationEvent",
-                ":message-type": "event"
-            }
-            
-            body = {
-                "LanguageCode": "en-US",
-                "MediaSampleRateHertz": 16000,
-                "MediaEncoding": "pcm"
-            }
-
-            # Convert headers and body to JSON and get bytes
-            headers_json = json.dumps(headers)
-            body_json = json.dumps(body)
-            headers_bytes = headers_json.encode('utf-8')
-            body_bytes = body_json.encode('utf-8')
-
-            # Create the prelude
-            total_length = len(headers_bytes) + len(body_bytes)
-            prelude = bytearray()
-            prelude.extend(total_length.to_bytes(4, byteorder='big'))
-            prelude.extend(len(headers_bytes).to_bytes(4, byteorder='big'))
-
-            # Combine all parts
-            message = prelude + headers_bytes + body_bytes
-
-            if self.websocket.open:
-                await self.websocket.send(message)
-                print("Sent start_transcription request")
-                
-                # Wait for response
-                response = await self.websocket.recv()
-                print(f"Start response: {response}")
-            else:
-                raise RuntimeError("WebSocket connection is not open after sending config request")
-
             print("WebSocket connection established for transcription")
+            # await self.send_config()
             
         except Exception as e:
             error_message = str(e)
@@ -174,64 +143,99 @@ class TranscribeService:
                 print(f"Error establishing WebSocket connection: {error_message}")
                 raise
 
+    async def send_config(self):
+        if self.websocket and self.websocket.open:
+            await self.websocket.send_json({
+                "LanguageCode": self.language_code,
+                "MediaSampleRateHertz": 8000,  # Changed from 8000 to 16000
+                "MediaEncoding": "pcm"
+            })
+            print("Sent configuration to WebSocket")
+
+            response = await self.websocket.recv()
+            print(f"Configuration response: {response}")
+        # headers = {
+        #     ":content-type": "application/json",
+        #     ":event-type": "ConfigurationEvent",
+        #     ":message-type": "event"
+        # }
+        
+        # body = {
+        #     "LanguageCode": self.language_code,
+        #     "MediaSampleRateHertz": 8000,  # Changed from 8000 to 16000
+        #     "MediaEncoding": "pcm"
+        # }
+
+        # # Convert headers and body to JSON and get bytes
+        # headers_json = json.dumps(headers)
+        # body_json = json.dumps(body)
+        # headers_bytes = headers_json.encode('utf-8')
+        # body_bytes = body_json.encode('utf-8')
+
+        # # Create the prelude
+        # total_length = len(headers_bytes) + len(body_bytes)
+        # prelude = bytearray()
+        # prelude.extend(total_length.to_bytes(4, byteorder='big'))
+        # prelude.extend(len(headers_bytes).to_bytes(4, byteorder='big'))
+
+        # # Combine all parts
+        # message = prelude + headers_bytes + body_bytes
+
+        # if self.websocket.open:
+        #     await self.websocket.send(message)
+        #     print("Sent start_transcription request")
+        #     # Wait for response
+        #     response = await self.websocket.recv()
+        #     print(f"Start response: {response}")
+
     def is_blank_or_static(self, audio_chunk: bytes) -> bool:
         """Check if the audio chunk is blank or static noise."""
-        print("audio_chunk", audio_chunk)
         pcm_array = np.frombuffer(audio_chunk, dtype=np.int16)
-        print("pcm_array", pcm_array)
         normalized_audio = pcm_array / 32768.0
         max_amplitude = np.max(np.abs(normalized_audio))
         energy = np.mean(normalized_audio ** 2)
-        print(f"Max amplitude: {max_amplitude}, Energy: {energy}")
-        print(max_amplitude < 0.1 or energy < 0.01)
-        return max_amplitude < 0.1 or energy < 0.01
+        return max_amplitude < 0.01 or energy < 0.0001
+    
+    def verify_pcm_format(self, pcm_data, sample_rate=8000):
+        """
+        Verify PCM data format and write to a WAV file if necessary for testing.
 
-    def upsample(self, pcm_data, original_rate=8000, target_rate=16000):
-        # Use resampy for better quality resampling
-        upsampled_data = signal.resample(pcm_data, int(len(pcm_data) * target_rate / original_rate))
-        # Ensure the data stays within int16 bounds
-        upsampled_data = np.clip(upsampled_data, -32768, 32767)
-        return upsampled_data.astype(np.int16)
+        Args:
+            pcm_data (bytes): Raw PCM audio data.
+            sample_rate (int): Expected sample rate (default 8000 Hz).
+        
+        Returns:
+            bool: True if format is valid, else False.
+        """
+        try:
+            # Attempt to write data to a WAV file (as a test)
+            with wave.open(io.BytesIO(), 'wb') as wav_file:
+                wav_file.setnchannels(1)  # Mono
+                wav_file.setsampwidth(2)  # 16-bit
+                wav_file.setframerate(sample_rate)
+                wav_file.writeframes(pcm_data)
+            print("PCM format is valid.")
+            return True
+        except Exception as e:
+            print(f"PCM format verification failed: {e}")
+            return False
 
     async def send_audio_chunk(self, audio_chunk: bytes):
-        """Send an audio chunk to the WebSocket if it's open."""
-        print("Sending audio chunk")
+        """Buffer audio chunks and send to WebSocket when 250ms of audio is accumulated."""
         if self.websocket and self.websocket.open:
-            # Convert 8k mulaw to 16k pcm
-            pcm_chunk = g711.decode_ulaw(audio_chunk)
-
+            pcm_chunk = audioop.ulaw2lin(audio_chunk, 2)
+            
             if not self.is_blank_or_static(pcm_chunk):
-                
-                headers = {
-                    ":content-type": "application/octet-stream",
-                    ":event-type": "AudioEvent",
-                    ":message-type": "event"
-                }
-                
-                # Convert headers to JSON and get bytes
-                headers_json = json.dumps(headers)
-                headers_bytes = headers_json.encode('utf-8')
+                if self.verify_pcm_format(pcm_chunk):
+                    self.audio_buffer.extend(pcm_chunk)
 
-                # Create the prelude (total byte length and headers length)
-                total_length = len(headers_bytes) + len(pcm_chunk)
-                prelude = bytearray()
-                prelude.extend(total_length.to_bytes(4, byteorder='big'))
-                prelude.extend(len(headers_bytes).to_bytes(4, byteorder='big'))
-
-                message = bytearray()
-                message.extend(prelude)
-                message.extend(headers_bytes)
-                message.extend(pcm_chunk)
-
-                # Combine all parts into final message
-                # message = prelude + headers_bytes + upsampled_chunk
-
-                # print(f"Sending audio chunk of size {len(chunk_to_send)}")
-                await self.websocket.send(message)
-            else:
-                print("Blank or static audio detected, skipping chunk.")
-        else:
-            raise RuntimeError("WebSocket connection is not open when sending audio chunk")
+                    if len(self.audio_buffer) >= self.chunk_size:
+                        chunk_to_send = self.audio_buffer[:self.chunk_size]
+                        self.audio_buffer = self.audio_buffer[self.chunk_size:]
+                        try:
+                            await self.websocket.send(chunk_to_send)
+                        except Exception as e:
+                            print(e)
 
     async def receive_transcriptions(self) -> AsyncGenerator[str, None]:
         """Receive transcriptions from the WebSocket in real-time."""
@@ -247,6 +251,7 @@ class TranscribeService:
                     if 'Alternatives' in result and len(result['Alternatives']) > 0:
                         transcript = result['Alternatives'][0]['Transcript']
                         if transcript:
+                            print(f"Transcript: {transcript}")
                             yield transcript
 
     async def close_transcription(self):
@@ -255,25 +260,30 @@ class TranscribeService:
             try:
                 # Send end streaming message
  
-                headers = {
-                    ":content-type": "application/octet-stream",
-                    ":event-type": "AudioEvent",
-                    ":message-type": "event"
-                }
-                body = b""  # Empty audio chunk
+                # headers = {
+                #     ":content-type": "application/octet-stream",
+                #     ":event-type": "AudioEvent",
+                #     ":message-type": "event"
+                # }
+                # body = b""  # Empty audio chunk
 
-                headers_json = json.dumps(headers)
-                headers_bytes = headers_json.encode('utf-8')
+                # # Convert headers to JSON and get bytes
+                # headers_json = json.dumps(headers)
+                # headers_bytes = headers_json.encode('utf-8')
 
-                # Create the prelude (total byte length and headers length)
-                total_length = len(headers_bytes) + len(body)
-                prelude = bytearray()
-                prelude.extend(total_length.to_bytes(4, byteorder='big'))
-                prelude.extend(len(headers_bytes).to_bytes(4, byteorder='big'))
+                # # Create the prelude (total byte length and headers length)
+                # total_length = len(headers_bytes) + len(body)
+                # prelude = bytearray()
+                # prelude.extend(total_length.to_bytes(4, byteorder='big'))
+                # prelude.extend(len(headers_bytes).to_bytes(4, byteorder='big'))
 
-                message = prelude + headers_bytes + body
+                # message = bytearray()
+                # message.extend(prelude)
+                # message.extend(headers_bytes)
+                # message.extend(body)
 
-                await self.websocket.send(message)
+                # await self.websocket.send(message)
+                await self.websocket.send(b"")
                 print("Sent end_transcription request")
                 
                 # Wait for final response

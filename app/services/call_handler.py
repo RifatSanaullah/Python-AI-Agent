@@ -20,14 +20,13 @@ class CallHandler:
     async def process_input(self, websocket):
         self.websocket = websocket  # Store websocket instance
         await websocket.accept()
-        # await self.start_background_task()  # Start the background task
         try:
             while True:
                 data = await websocket.receive_json()
                 if data["event"] in ("connected", "start"):
                     print(f"Media WS: Received event '{data['event']}'")
                     continue
-                if data["event"] == "media":
+                if data["event"] == "media" and data["media"]["track"] == "inbound":
                     media = data["media"]
                     chunk = media["payload"]
                     chunk_bytes = base64.b64decode(chunk)
@@ -42,12 +41,14 @@ class CallHandler:
                 if not self.twilio_service.audio_buffer.empty():
                     audio_data = await self.twilio_service.audio_buffer.get()
                     await self.transcribe_service.send_audio_chunk(audio_data)
+                    # self.google_speech_service.transcribe_ulaw_chunks(audio_data, self.handle_stream_callback)
+                    # if audio_sent:
                     async for transcript in self.transcribe_service.receive_transcriptions():
                         if transcript:
-                            response = await self.chatgpt_service.generate_response(transcript)
+                            # response = await self.chatgpt_service.generate_response(transcript)
                             print(f"Transcript: {transcript}")
-                            print(f"Response: {response}")
-                            await self.synthesize_response(response)
+                            # print(f"Response: {response}")
+                            # await self.synthesize_response(response)
 
         except ConnectionClosedError as e:
             print(f"Connection closed with error: {e.code} - {e.reason}")
@@ -59,6 +60,12 @@ class CallHandler:
             print("WebSocket connection closed.")
             await self.transcribe_service.close_transcription()
             await websocket.close()
+
+    async def handle_stream_callback(self, transcript):
+        print(f"Transcript: {transcript}")
+        # response = await self.chatgpt_service.generate_response(transcript)
+        # print(f"Response: {response}")
+        # await self.synthesize_response(response)
 
     async def synthesize_response(self, text: str):
         audio_stream = await self.polly_service.stream_text_to_speech(text)

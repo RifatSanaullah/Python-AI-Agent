@@ -1,9 +1,6 @@
-# app/services/polly_service.py
 import boto3
 from app.config import settings
-import tempfile
-import websockets
-import audioop  # Add this import for audio conversion
+import audioop
 
 class PollyService:
     def __init__(self):
