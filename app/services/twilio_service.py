@@ -20,7 +20,7 @@ class TwilioService:
     def initialize_call(self, call_sid):
         """Initialize the call state with required fields."""
         print("Initializing call...")
-        if call_sid not in self.active_calls:
+        if (call_sid not in self.active_calls):
             self.active_calls[call_sid] = {
                 "fields_needed": self.fields_needed.copy(),
                 "is_complete": False

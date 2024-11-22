@@ -11,3 +11,5 @@ requests
 httpx
 vosk
 audioop
+websockets
+assemblyai
