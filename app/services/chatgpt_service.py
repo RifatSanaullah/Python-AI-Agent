@@ -11,7 +11,9 @@ class ChatGPTService:
             model="gpt-4",
             messages=[
                 {"role": "system", "content": knowledge_base},
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "system", "content": "Keep your responses helpful and respectful and in under 2 senternces if possible."},
                 {"role": "user", "content": message},
             ],
         )
-        return response.choices[0].message['content']
+        return response.choices[0].message.content

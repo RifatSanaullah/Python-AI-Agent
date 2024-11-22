@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.services.twilio_service import TwilioService
 from app.services.chatgpt_service import ChatGPTService
 from app.services.polly_service import PollyService
-from app.services.transcribe_service import TranscribeService
+from app.services.vosk_transcribe_service import TranscribeService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 
 class CallHandler:
@@ -26,7 +26,7 @@ class CallHandler:
                 if data["event"] in ("connected", "start"):
                     print(f"Media WS: Received event '{data['event']}'")
                     continue
-                if data["event"] == "media" and data["media"]["track"] == "inbound":
+                if data["event"] == "media":
                     media = data["media"]
                     chunk = media["payload"]
                     chunk_bytes = base64.b64decode(chunk)
@@ -40,15 +40,30 @@ class CallHandler:
                 # Process audio buffer for transcription
                 if not self.twilio_service.audio_buffer.empty():
                     audio_data = await self.twilio_service.audio_buffer.get()
-                    await self.transcribe_service.send_audio_chunk(audio_data)
+                    transcript = await self.transcribe_service.transcribe(audio_data)
+                    if transcript not in (None, ""):
+                        print(f"Transcript: {transcript}")
+                        response = await self.chatgpt_service.generate_response(transcript)
+                        print(f"Response: {response}")
+                        await self.synthesize_response(response)
+                    # data_sent = await self.transcribe_service.send_audio_chunk(audio_data)
                     # self.google_speech_service.transcribe_ulaw_chunks(audio_data, self.handle_stream_callback)
-                    # if audio_sent:
-                    async for transcript in self.transcribe_service.receive_transcriptions():
-                        if transcript:
-                            # response = await self.chatgpt_service.generate_response(transcript)
-                            print(f"Transcript: {transcript}")
-                            # print(f"Response: {response}")
-                            # await self.synthesize_response(response)
+                    # if data_sent:
+                    #     transcript = await self.transcribe_service.receive_transcriptions()
+                    #     if transcript:
+                    #     #     response = await self.chatgpt_service.generate_response(transcript)
+                    #         print(f"Transcript: {transcript}")
+                    #     #     print(f"Response: {response}")
+                    #     #     await self.synthesize_response(response)
+                    #     else:
+                    #         print("No transcript received.")
+                    #         continue
+                        # async for transcript in self.transcribe_service.receive_transcriptions():
+                            # if transcript:
+                                # response = await self.chatgpt_service.generate_response(transcript)
+                                # print(f"Transcript: {transcript}")
+                                # print(f"Response: {response}")
+                                # await self.synthesize_response(response)
 
         except ConnectionClosedError as e:
             print(f"Connection closed with error: {e.code} - {e.reason}")
@@ -58,7 +73,7 @@ class CallHandler:
             print("Unexpected error:", e)
         finally:
             print("WebSocket connection closed.")
-            await self.transcribe_service.close_transcription()
+            # await self.transcribe_service.close_transcription()
             await websocket.close()
 
     async def handle_stream_callback(self, transcript):
@@ -75,7 +90,7 @@ class CallHandler:
         print("Handling call...")
         response = self.twilio_service.initialize_call(call_id)
         await self.synthesize_response("Hello and Welcome to BoomersHub!!")
-        await self.transcribe_service.start_transcription()
+        # await self.transcribe_service.start_transcription()
         return response
 
     # async def handle_incoming_call(self, call_id: str, client_message: str, required_info: dict = {"name": None, "phone_number": None, "email": None}):

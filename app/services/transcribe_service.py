@@ -1,4 +1,5 @@
 import audioop
+import base64
 import boto3
 import hashlib
 import hmac
@@ -76,7 +77,7 @@ class TranscribeService:
             "X-Amz-SignedHeaders": "host",
             "language-code": self.language_code,
             "media-encoding": "pcm",  # Changed from mulaw to pcm
-            "sample-rate": 8000    # Changed from 8000 to 16000
+            "sample-rate": 16000    # Changed from 8000 to 16000
         }
         canonical_querystring = urlencode(sorted(query_params.items()))
 
@@ -214,35 +215,59 @@ class TranscribeService:
                 wav_file.setsampwidth(2)  # 16-bit
                 wav_file.setframerate(sample_rate)
                 wav_file.writeframes(pcm_data)
-            print("PCM format is valid.")
             return True
         except Exception as e:
             print(f"PCM format verification failed: {e}")
             return False
 
-    async def send_audio_chunk(self, audio_chunk: bytes):
+    async def send_audio_chunk(self, audio_chunk: bytes) -> bool:
         """Buffer audio chunks and send to WebSocket when 250ms of audio is accumulated."""
+        if not self.websocket or not self.websocket.open:
+            print("WebSocket is closed, attempting to reopen...")
+            await self.start_transcription()
+
         if self.websocket and self.websocket.open:
-            pcm_chunk = audioop.ulaw2lin(audio_chunk, 2)
-            
-            if not self.is_blank_or_static(pcm_chunk):
-                if self.verify_pcm_format(pcm_chunk):
-                    self.audio_buffer.extend(pcm_chunk)
+            try:
+                pcm_chunk = audioop.ulaw2lin(audio_chunk, 2)
+                pcm_chunk = audioop.ratecv(pcm_chunk, 2, 1, 8000, 16000, None)[0]
+                # pcm_chunk = base64.b64encode(pcm_chunk).decode('utf-8')
+                await self.websocket.send(pcm_chunk)
+                
+                # Ensure little-endian format
+                # pcm_chunk = pcm_chunk[::-1] if pcm_chunk[0] > pcm_chunk[-1] else pcm_chunk
+                
+                # if not self.is_blank_or_static(pcm_chunk):
+                #     print("not blank or static")
+                #     if self.verify_pcm_format(pcm_chunk):
+                #         print("PCM format verified")
+                #         self.audio_buffer.extend(pcm_chunk)
+                #         print("Buffer length:", len(self.audio_buffer))
+                #         if len(self.audio_buffer) >= self.chunk_size:
+                #             chunk_to_send = self.audio_buffer[:self.chunk_size]
+                #             self.audio_buffer = self.audio_buffer[self.chunk_size:]
+                #             await self.websocket.send(chunk_to_send)
+                #             print("Sent audio chunk")
+                #             return True
+                #         else:
+                #             return False
+                #     else:
+                #         return False
+                # else:
+                #     return False
+            except Exception as e:
+                print(e)
+                return False
+        else:
+            print("Failed to reopen WebSocket connection")
+            return False
 
-                    if len(self.audio_buffer) >= self.chunk_size:
-                        chunk_to_send = self.audio_buffer[:self.chunk_size]
-                        self.audio_buffer = self.audio_buffer[self.chunk_size:]
-                        try:
-                            await self.websocket.send(chunk_to_send)
-                        except Exception as e:
-                            print(e)
-
-    async def receive_transcriptions(self) -> AsyncGenerator[str, None]:
-        """Receive transcriptions from the WebSocket in real-time."""
+    async def receive_transcriptions(self) -> str:
+        """Receive a single transcription from the WebSocket in real-time and return the transcription."""
         if not self.websocket or not self.websocket.open:
             raise RuntimeError("WebSocket connection is not open when receiving transcriptions")
 
-        async for message in self.websocket:
+        try:
+            message = await self.websocket.recv()
             print("Received message:", message)
             data = json.loads(message)
             print("Received data:", data)
@@ -252,7 +277,10 @@ class TranscribeService:
                         transcript = result['Alternatives'][0]['Transcript']
                         if transcript:
                             print(f"Transcript: {transcript}")
-                            yield transcript
+                            return transcript
+        except Exception as e:
+            print(f"Error receiving transcription: {str(e)}")
+            return None
 
     async def close_transcription(self):
         """Close the WebSocket connection."""

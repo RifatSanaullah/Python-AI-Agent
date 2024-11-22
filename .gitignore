@@ -1,3 +1,4 @@
 .env
 boomercaller
 *.db
+vosk-model-en-us-gigaspeech

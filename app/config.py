@@ -16,9 +16,6 @@ class Settings(BaseSettings):
     aws_region: str = os.getenv("AWS_REGION")
     aws_role_arn: str = os.getenv("AWS_ROLE_ARN")
     polly_voice_id: str = os.getenv("POLLY_VOICE_ID", "Joanna")
-    polly_voice_pitch: str = os.getenv("POLLY_VOICE_PITCH", "medium")
-    polly_voice_rate: str = os.getenv("POLLY_VOICE_RATE", "medium")
-    polly_voice_volume: str = os.getenv("POLLY_VOICE_VOLUME", "medium")
     domain: str = os.getenv("DOMAIN", "localhost")
     base_url: str = os.getenv("BASE_URL", "http://${domain}")
 
