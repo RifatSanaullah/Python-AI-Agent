@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.services.twilio_service import TwilioService
 from app.services.chatgpt_service import ChatGPTService
 from app.services.polly_service import PollyService
-from app.services.vosk_transcribe_service import TranscribeService
+from app.services.assembly_ai_transcribe_service import TranscribeService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 
 class CallHandler:
@@ -14,7 +14,7 @@ class CallHandler:
         self.twilio_service = TwilioService()
         self.chatgpt_service = ChatGPTService()
         self.polly_service = PollyService()
-        self.transcribe_service = TranscribeService()
+        self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.stream_sid = None
 
     async def process_input(self, websocket):
@@ -40,12 +40,13 @@ class CallHandler:
                 # Process audio buffer for transcription
                 if not self.twilio_service.audio_buffer.empty():
                     audio_data = await self.twilio_service.audio_buffer.get()
-                    transcript = await self.transcribe_service.transcribe(audio_data)
-                    if transcript not in (None, ""):
-                        print(f"Transcript: {transcript}")
-                        response = await self.chatgpt_service.generate_response(transcript)
-                        print(f"Response: {response}")
-                        await self.synthesize_response(response)
+                    # transcript = 
+                    await self.transcribe_service.transcribe(audio_data)
+                    # if transcript not in (None, ""):
+                    #     print(f"Transcript: {transcript}")
+                    #     response = await self.chatgpt_service.generate_response(transcript)
+                    #     print(f"Response: {response}")
+                    #     await self.synthesize_response(response)
                     # data_sent = await self.transcribe_service.send_audio_chunk(audio_data)
                     # self.google_speech_service.transcribe_ulaw_chunks(audio_data, self.handle_stream_callback)
                     # if data_sent:
@@ -76,11 +77,11 @@ class CallHandler:
             # await self.transcribe_service.close_transcription()
             await websocket.close()
 
-    async def handle_stream_callback(self, transcript):
+    async def handle_transcript(self, transcript):
         print(f"Transcript: {transcript}")
-        # response = await self.chatgpt_service.generate_response(transcript)
-        # print(f"Response: {response}")
-        # await self.synthesize_response(response)
+        response = await self.chatgpt_service.generate_response(transcript)
+        print(f"Response: {response}")
+        await self.synthesize_response(response)
 
     async def synthesize_response(self, text: str):
         audio_stream = await self.polly_service.stream_text_to_speech(text)
