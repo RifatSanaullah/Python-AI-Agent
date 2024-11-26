@@ -125,7 +125,6 @@ class TranscribeService:
                 await websocket.send(audio_bytes)  # Send raw audio bytes
                 while True:
                     response = await websocket.recv()
-                    return response
                     if response:
                         try:
                             decoded_response = response.decode('utf-8')

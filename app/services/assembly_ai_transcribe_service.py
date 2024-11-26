@@ -5,7 +5,7 @@ class TranscribeService:
     def __init__(self, on_transcript=None):
         self.api_key = "9576f4ea99e14b90a1c6ee4100b4536f"
         aai.settings.api_key = self.api_key
-        self.on_transcript = on_transcript  # Store the callback function
+        self.on_transcript = on_transcript
         self.transcriber = aai.RealtimeTranscriber(
             sample_rate=8000, 
             encoding=aai.AudioEncoding.pcm_mulaw,
@@ -14,10 +14,10 @@ class TranscribeService:
             on_open=self.on_open,
             on_close=self.on_close
         )
-        self.transcriber.connect()  
               
 
     async def transcribe(self, audio_chunk: bytes):
+        self.transcriber.connect()  
         self.transcriber.stream(audio_chunk)
     
     def on_open(self, session_opened: aai.RealtimeSessionOpened):
@@ -34,6 +34,7 @@ class TranscribeService:
             print(transcript.text, end="\r\n")
             if self.on_transcript:
                 asyncio.run(self.on_transcript(transcript.text))
+                self.transcriber.close()
         else:
             print(transcript.text, end="\r")
 

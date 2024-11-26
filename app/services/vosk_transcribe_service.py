@@ -6,7 +6,7 @@ from vosk import Model, KaldiRecognizer
 class TranscribeService:
     def __init__(self):
         self.sample_rate = 16000  # Ensure this matches the sample rate used in the service
-        model_path = os.path.join(os.path.dirname(__file__), '..', 'vosk-model-en-us-gigaspeech')
+        model_path = os.path.join(os.path.dirname(__file__), '..', 'vosk-model')
         self.model = Model(model_path)  # Updated path to the Vosk model
         self.recognizer = KaldiRecognizer(self.model, self.sample_rate)
 

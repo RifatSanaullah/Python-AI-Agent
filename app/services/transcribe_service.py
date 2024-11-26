@@ -1,5 +1,4 @@
 import audioop
-import base64
 import boto3
 import hashlib
 import hmac
@@ -10,7 +9,6 @@ import time
 import wave
 import websockets
 from datetime import datetime
-from typing import AsyncGenerator
 from urllib.parse import urlencode
 
 from app.config import settings

@@ -1,15 +1,10 @@
 # app/main.py
-import uuid
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Depends, Response, WebSocket
+from fastapi import FastAPI, Request, Depends, WebSocket
 from fastapi.responses import PlainTextResponse
-from sqlalchemy.orm import Session
-from twilio.twiml.voice_response import VoiceResponse, Gather
 from app.models.base import init_db
 from app.services.call_handler import CallHandler
 from app.utils.db_utils import get_db
-from app.services.transcribe_service import TranscribeService
-from app.services.twilio_service import TwilioService
 from app.routes import knowledge_base
 from contextlib import asynccontextmanager
 

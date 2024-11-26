@@ -1,5 +1,3 @@
-# import spacy
-# import re
 import base64
 from sqlalchemy.orm import Session
 from app.services.twilio_service import TwilioService
@@ -18,7 +16,7 @@ class CallHandler:
         self.stream_sid = None
 
     async def process_input(self, websocket):
-        self.websocket = websocket  # Store websocket instance
+        self.websocket = websocket
         await websocket.accept()
         try:
             while True:
@@ -37,34 +35,10 @@ class CallHandler:
                     response_audio = await self.twilio_service.response_buffer.get()
                     await self.twilio_service.send_audio_stream(self.websocket, self.stream_sid, response_audio)
 
-                # Process audio buffer for transcription
                 if not self.twilio_service.audio_buffer.empty():
                     audio_data = await self.twilio_service.audio_buffer.get()
-                    # transcript = 
                     await self.transcribe_service.transcribe(audio_data)
-                    # if transcript not in (None, ""):
-                    #     print(f"Transcript: {transcript}")
-                    #     response = await self.chatgpt_service.generate_response(transcript)
-                    #     print(f"Response: {response}")
-                    #     await self.synthesize_response(response)
-                    # data_sent = await self.transcribe_service.send_audio_chunk(audio_data)
-                    # self.google_speech_service.transcribe_ulaw_chunks(audio_data, self.handle_stream_callback)
-                    # if data_sent:
-                    #     transcript = await self.transcribe_service.receive_transcriptions()
-                    #     if transcript:
-                    #     #     response = await self.chatgpt_service.generate_response(transcript)
-                    #         print(f"Transcript: {transcript}")
-                    #     #     print(f"Response: {response}")
-                    #     #     await self.synthesize_response(response)
-                    #     else:
-                    #         print("No transcript received.")
-                    #         continue
-                        # async for transcript in self.transcribe_service.receive_transcriptions():
-                            # if transcript:
-                                # response = await self.chatgpt_service.generate_response(transcript)
-                                # print(f"Transcript: {transcript}")
-                                # print(f"Response: {response}")
-                                # await self.synthesize_response(response)
+                    
 
         except ConnectionClosedError as e:
             print(f"Connection closed with error: {e.code} - {e.reason}")
@@ -74,7 +48,6 @@ class CallHandler:
             print("Unexpected error:", e)
         finally:
             print("WebSocket connection closed.")
-            # await self.transcribe_service.close_transcription()
             await websocket.close()
 
     async def handle_transcript(self, transcript):
@@ -91,58 +64,7 @@ class CallHandler:
         print("Handling call...")
         response = self.twilio_service.initialize_call(call_id)
         await self.synthesize_response("Hello and Welcome to BoomersHub!!")
-        # await self.transcribe_service.start_transcription()
         return response
-
-    # async def handle_incoming_call(self, call_id: str, client_message: str, required_info: dict = {"name": None, "phone_number": None, "email": None}):
-    #     nlp = spacy.load("en_core_web_sm")
-    #     doc = nlp(client_message)
-    #     knowledge_base = list_knowledge_entries(self.db)
-    #     if not knowledge_base:
-    #         knowledge_string = "Knowledge Base is empty."
-    #     else:
-    #         knowledge_string = "Knowledge Base:\n"
-    #         for knowledge in knowledge_base:
-    #             knowledge_string += f"{knowledge.question}: {knowledge.answer}\n"
-    #     for entity in doc.ents:
-    #         if entity.label_ == "PERSON":
-    #             required_info["name"].append(entity.text)
-        
-    #     required_info["email"] = re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b", client_message)
-    #     required_info["phone_number"] = re.findall(r"\b(\+?\d{1,2}\s?\(?\d{3}\)?\s?\d{3}[-\s]?\d{4})", client_message)
-    #     response_message = await self.chatgpt_service.generate_response(client_message, knowledge_string)
-    #     save_conversation(self.db, call_id, "client", client_message)
-    #     save_conversation(self.db, call_id, "bot", response_message)
-    #     audio_stream_url = self.polly_service.stream_text_to_speech(response_message)
-    #     return audio_stream_url, required_info
-    
-    # async def process_call(self, call_sid, speech_result):
-    #     """Process the gathered speech result and update the fields needed."""
-    #     call_state = self.twilio_service.active_calls.get(call_sid)
-
-    #     print(call_state)
-        
-    #     if not call_state:
-    #         return None, False
-
-    #     field_status = call_state["fields_needed"]
-
-    #     if not field_status["name"]:
-    #         field_status["name"] = speech_result
-    #         message = "Thank you. Now, please tell me your email."
-    #     elif not field_status["email"]:
-    #         field_status["email"] = speech_result
-    #         message = "Thank you. Finally, please tell me your phone number."
-    #     elif not field_status["phone_number"]:
-    #         field_status["phone_number"] = speech_result
-    #         call_state["is_complete"] = True
-    #         self.twilio_service.hangup_call(call_sid)
-    #         return None, True
-        
-    #     if not call_state["is_complete"]:
-    #         response = await self.twilio_service.generate_voice_response(message)
-        
-    #     return response, call_state["is_complete"]
 
     async def make_outgoing_call(self, phone_number: str):
         call_sid = self.twilio_service.make_call(phone_number)
@@ -153,6 +75,5 @@ class CallHandler:
         stream_sid = data.get("StreamSid")
         call_sid = data.get("CallSid")
         print(f"Stream SID: {stream_sid}, Call SID: {call_sid}")
-        # Store the streamSid in the CallHandler instance
         self.stream_sid = stream_sid
         return "OK", 200
