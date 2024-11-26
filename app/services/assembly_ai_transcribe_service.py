@@ -14,7 +14,7 @@ class TranscribeService:
             on_open=self.on_open,
             on_close=self.on_close
         )
-        # self.transcriber.connect()  
+        self.transcriber.connect()  
               
 
     async def transcribe(self, audio_chunk: bytes):

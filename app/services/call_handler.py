@@ -48,7 +48,6 @@ class CallHandler:
             print("Unexpected error:", e)
         finally:
             print("WebSocket connection closed.")
-            self.transcribe_service.transcriber.close()
             await websocket.close()
 
     async def handle_transcript(self, transcript):
@@ -64,7 +63,6 @@ class CallHandler:
     async def handle_call(self, call_id: str):
         print("Handling call...")
         response = self.twilio_service.initialize_call(call_id)
-        self.transcribe_service.transcriber.connect()
         await self.synthesize_response("Hello and Welcome to BoomersHub!!")
         return response
 
