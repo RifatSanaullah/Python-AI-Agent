@@ -47,3 +47,4 @@ class TranscribeService:
     def on_close(self):
         "Called when the connection has been closed."
         print("Closing Session")
+        self.transcriber.connect()  # Reconnect the transcriber
