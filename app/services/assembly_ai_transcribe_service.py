@@ -16,6 +16,11 @@ class TranscribeService:
         )
         self.transcriber.connect()  
               
+    def connect(self):
+        self.transcriber.connect()
+
+    def close(self):
+        self.transcriber.close()
 
     async def transcribe(self, audio_chunk: bytes):
         self.transcriber.stream(audio_chunk)
