@@ -1,11 +1,14 @@
 import assemblyai as aai
-import asyncio  # Import asyncio
+import asyncio
 
 class TranscribeService:
     def __init__(self, on_transcript=None):
         self.api_key = "9576f4ea99e14b90a1c6ee4100b4536f"
         aai.settings.api_key = self.api_key
         self.on_transcript = on_transcript  # Store the callback function
+        self.transcriber = None
+              
+    def connect(self):
         self.transcriber = aai.RealtimeTranscriber(
             sample_rate=8000, 
             encoding=aai.AudioEncoding.pcm_mulaw,
@@ -14,12 +17,12 @@ class TranscribeService:
             on_open=self.on_open,
             on_close=self.on_close
         )
-              
-    def connect(self):
         self.transcriber.connect()
 
     def close(self):
-        self.transcriber.close()
+        if self.transcriber:
+            self.transcriber.close()
+            self.transcriber = None
 
     async def transcribe(self, audio_chunk: bytes):
         self.transcriber.stream(audio_chunk)
