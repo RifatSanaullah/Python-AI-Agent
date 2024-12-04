@@ -2,3 +2,4 @@
 boomercaller
 *.db
 vosk-model*
+*_pycache_*
