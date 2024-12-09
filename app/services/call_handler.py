@@ -22,7 +22,7 @@ class CallHandler:
         self.chatgpt_service = ChatGPTService()
         self.stream_sid = None
         self.polly_service = PollyService()
-        self.deepgram_transcribe_service = DeepgramService(on_transcript=self.handle_transcript, on_start=self.on_user_speech, stream_sid=self.stream_sid)
+        self.deepgram_transcribe_service = DeepgramService(on_transcript=self.handle_transcript, on_start=self.on_user_speech)
         self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.max_chunk_size = 200
         self.background_sound = False

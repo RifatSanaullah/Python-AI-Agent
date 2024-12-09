@@ -12,8 +12,7 @@ from app.config import settings
 
 
 class DeepgramService:
-    def __init__(self , on_transcript = None ,on_start=None, stream_sid = None):
-        self.stream_sid = stream_sid
+    def __init__(self , on_transcript = None ,on_start=None):
         self.config = DeepgramClientOptions(
             options={"keepalive": "true"} # Comment this out to see the effect of not using keepalive
         )
