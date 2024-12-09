@@ -1,9 +1,17 @@
 # app/services/twilio_service.py
-import asyncio
+import os, asyncio
 from twilio.rest import Client
 import base64  # Add this import
 from app.config import settings
 from twilio.twiml.voice_response import VoiceResponse, Gather, Connect
+import audioop
+import wave
+
+# # Path to your background sound file (WAV format)
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+BACKGROUND_SOUND_FILE =os.path.abspath(os.path.join(ROOT_DIR, '../' , 'keyboard.wav'))
+print(BACKGROUND_SOUND_FILE)
+
 
 class TwilioService:
     def __init__(self):
@@ -16,6 +24,7 @@ class TwilioService:
             "email": None,
             "phone_number": None,
         }
+        self.background_sound = None
 
     def initialize_call(self, call_sid):
         """Initialize the call state with required fields."""
@@ -35,8 +44,18 @@ class TwilioService:
             print("Call initialized.")
             response.append(connect)
             return response
-
-
+        
+    # Helper function to read the WAV file and loop it
+    async def get_background_sound(self):
+        def read_and_convert():
+            with wave.open(BACKGROUND_SOUND_FILE, "rb") as infile:
+                frames = infile.readframes(infile.getnframes())
+                # Convert to mu-law encoding
+                mu_law_data = audioop.lin2ulaw(frames, infile.getsampwidth())
+            return mu_law_data
+        mu_law_data = await asyncio.to_thread(read_and_convert)
+        return mu_law_data
+    
     async def generate_voice_response(self, text: str):
         response = VoiceResponse()
         response.say(text, voice="alice", language="en-US")
@@ -44,6 +63,13 @@ class TwilioService:
         response.append(gather)
         return response
     
+    async def stop_audio_stream(self, websocket, stream_sid):
+        print("Stopping audio stream...")
+        await websocket.send_json({
+            "event": "clear",
+            "streamSid": stream_sid
+        })
+
     async def send_audio_stream(self, websocket, stream_sid, audio_data):
         """Send audio stream as a websocket media event to Twilio."""
         print("Sending audio stream...")
@@ -56,7 +82,6 @@ class TwilioService:
                 "payload": encoded_audio_data
             }
         })
-    
     def hangup_call(self, call_sid):
         response = VoiceResponse()
         response.say("Thank you. We have gathered all required information. Goodbye!", voice="alice", language="en-US")

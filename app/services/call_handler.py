@@ -20,12 +20,13 @@ class CallHandler:
         self.db = db
         self.twilio_service = TwilioService()
         self.chatgpt_service = ChatGPTService()
-        self.polly_service = PollyService()
-        self.deepgram_transcribe_service = DeepgramService(on_transcript=self.handle_transcript,on_update=self.enable_background_sound)
-        self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.stream_sid = None
-        self.MAX_CHUNK_SIZE = 200
+        self.polly_service = PollyService()
+        self.deepgram_transcribe_service = DeepgramService(on_transcript=self.handle_transcript, on_start=self.on_user_speech, stream_sid=self.stream_sid)
+        self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
+        self.max_chunk_size = 200
         self.background_sound = False
+        self.ai_speaking = False
 
     async def process_input(self, websocket):
         self.websocket = websocket
@@ -47,6 +48,9 @@ class CallHandler:
                     print("Processing response buffers...")
                     response_audio = await self.twilio_service.response_buffer.get()
                     # await self.twilio_service.send_control_command(self.websocket, 'stop')
+                    if self.background_sound is True:
+                        await self.stop_stream()
+                    self.ai_speaking = True
                     await self.twilio_service.send_audio_stream(self.websocket, self.stream_sid, response_audio)
 
                 if not self.twilio_service.audio_buffer.empty():
@@ -65,9 +69,19 @@ class CallHandler:
         finally:
             print("WebSocket connection closed.")
             await websocket.close()
+            
+    async def stop_stream(self):
+        await self.twilio_service.stop_audio_stream(self.websocket, self.stream_sid)
+        self.background_sound = False
+
+    async def on_user_speech(self):
+        if self.ai_speaking:
+            await self.stop_stream()
+            self.ai_speaking = False
 
     async def handle_transcript(self, transcript):
         print(f"Transcript: {transcript}")
+        await self.enable_background_sound(True)
         response = await self.chatgpt_service.generate_response(transcript)
         print(f"Response: {response}")
         await self.synthesize_response(response)
@@ -88,7 +102,7 @@ class CallHandler:
     
     async def synthesize_response(self, text: str):
         # Chunk the text into smaller parts
-        text_chunks = self.chunk_text(text, self.MAX_CHUNK_SIZE)
+        text_chunks = self.chunk_text(text, self.max_chunk_size)
         
         # Synthesize audio for each chunk
         for i, chunk in enumerate(text_chunks):
@@ -100,22 +114,9 @@ class CallHandler:
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds() * 1000  # Calculate duration in milliseconds
             logging.info(f"Total Deepgram duration: {duration:.3f} ms")
-            self.background_sound = False
-
             await self.twilio_service.response_buffer.put(audio_stream)
 
-            # start_time = datetime.now()
-            # audio_stream = await self.polly_service.stream_text_to_speech(chunk)
-            # # audio_stream = await self.deepgram_transcribe_service.stream_text_to_speech(chunk)
-            # end_time = datetime.now()
-            # duration = (end_time - start_time).total_seconds() * 1000  # Calculate duration in milliseconds
-            # logging.info(f"Total Poly duration: {duration:.3f} ms")
-
-            # audio_stream = await self.chatgpt_service.stream_text_to_speech(chunk)
-
         print('audio streamed')
-        # await self.twilio_service.send_audio_stream(self.websocket, self.stream_sid, audio_stream)
-
         
     async def handle_call(self, call_id: str):
         print("Handling call...")
@@ -135,11 +136,14 @@ class CallHandler:
         self.stream_sid = stream_sid
         return "OK", 200
     
-    async def enable_background_sound(self ,status):
+    async def enable_background_sound(self ,status = False):
 
         self.background_sound = status
-        # if self.background_sound is True:
-        #     await self.twilio_service.send_audio_stream(self.websocket, self.stream_sid, self.twilio_service.background_sound)
+        if status is True:
+            if not self.twilio_service.background_sound:
+                audio_stream = await self.twilio_service.get_background_sound()
+                self.twilio_service.background_sound = audio_stream
+            await self.twilio_service.send_audio_stream(self.websocket, self.stream_sid, self.twilio_service.background_sound)
 
 
     

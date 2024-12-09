@@ -1,4 +1,4 @@
-import os ,asyncio
+import asyncio
 from deepgram.utils import verboselogs
 
 from deepgram import (
@@ -6,12 +6,18 @@ from deepgram import (
     SpeakOptions,
     LiveTranscriptionEvents,
     LiveOptions,
+    DeepgramClientOptions
 )
+from app.config import settings
 
 
 class DeepgramService:
-    def __init__(self ,on_transcript = None ,on_update=None):
-        self.deepgram = DeepgramClient('3ebb3fc8a4d20c9929cb4760848b3d95a23fd123')
+    def __init__(self , on_transcript = None ,on_start=None, stream_sid = None):
+        self.stream_sid = stream_sid
+        self.config = DeepgramClientOptions(
+            options={"keepalive": "true"} # Comment this out to see the effect of not using keepalive
+        )
+        self.deepgram = DeepgramClient(settings.deepgram_apikey, self.config)
         self.options = SpeakOptions(
             model="aura-asteria-en",
             encoding='mulaw',
@@ -19,19 +25,23 @@ class DeepgramService:
             container="none"
         )
 
+        self.transcribeQueue = None
+        self.emptySentence = 0
+
         self.on_transcript = on_transcript
-        self.on_update = on_update
+        self.on_start = on_start
         self.speaker = self.deepgram.speak.rest.v("1")
         # connect to websocket
         self.transcribeOptions = LiveOptions(
-            model="nova-2-conversationalai",
+            model="nova-2",
             encoding='mulaw', 
             sample_rate=8000,
             smart_format=True,
-            no_delay=True,
             # vad_events=True,
+            utterance_end_ms="1000",
+            interim_results=True,
+            endpointing=1200
             # Time in milliseconds of silence to wait for before finalizing speech
-            endpointing=1000
             )
 
         self.dg_connection = None
@@ -74,16 +84,17 @@ class DeepgramService:
 
     def on_data(self,res,**kwargs):
         "Called when a new transcript has been received."
-        # print(kwargs.result)
-
         result = kwargs['result']
+        is_final = result.is_final
         sentence = result.channel.alternatives[0].transcript
-        print(sentence)
-        if not sentence:
-            return
-            
-        if self.on_transcript:
-            asyncio.run(self.on_transcript(sentence))
+        if sentence and is_final : 
+            print('Final' , sentence)
+            if self.on_transcript:
+                asyncio.run(self.on_transcript(sentence))
+        
+        
+        elif sentence and not is_final : 
+            asyncio.run(self.on_start())
 
 
 
