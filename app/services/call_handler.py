@@ -69,6 +69,7 @@ class CallHandler:
         finally:
             print("WebSocket connection closed.")
             await websocket.close()
+            self.transcribe_service.close()  # Close the transcriber service
             
     async def stop_stream(self):
         await self.twilio_service.stop_audio_stream(self.websocket, self.stream_sid)
@@ -121,6 +122,7 @@ class CallHandler:
     async def handle_call(self, call_id: str):
         print("Handling call...")
         response = self.twilio_service.initialize_call(call_id)
+        self.transcribe_service.connect()  # Connect the transcriber service
         await self.synthesize_response("Hello and Welcome to BoomersHub!!")
         return response
 
