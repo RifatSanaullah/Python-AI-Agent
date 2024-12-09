@@ -10,6 +10,7 @@ pydantic-settings
 requests
 httpx
 vosk
-audioop
 websockets
 assemblyai
+botocore
+deepgram-sdk

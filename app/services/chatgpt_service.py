@@ -8,7 +8,7 @@ class ChatGPTService:
 
     async def generate_response(self, message: str, knowledge_base: str = ""):
         response = openai.chat.completions.create(
-            model="gpt-4",
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": knowledge_base},
                 {"role": "system", "content": "You are a helpful assistant."},
