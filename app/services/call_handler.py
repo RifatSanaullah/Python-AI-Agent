@@ -84,7 +84,7 @@ class CallHandler:
     async def handle_transcript(self, transcript):
         print(f"Transcript: {transcript}")
         await self.enable_background_sound(True)
-        knowledge = await list_knowledge_entries()[0]
+        knowledge = await list_knowledge_entries(self.db)[0]
         response = await self.chatgpt_service.generate_response(transcript, knowledge['answer'])
         print(f"Response: {response}")
         await self.synthesize_response(response)
