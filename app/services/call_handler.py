@@ -1,5 +1,6 @@
 import base64
 from sqlalchemy.orm import Session
+from app.services.knowledge_base_service import list_knowledge_entries
 from app.services.twilio_service import TwilioService
 from app.services.chatgpt_service import ChatGPTService
 from app.services.polly_service import PollyService
@@ -83,7 +84,8 @@ class CallHandler:
     async def handle_transcript(self, transcript):
         print(f"Transcript: {transcript}")
         await self.enable_background_sound(True)
-        response = await self.chatgpt_service.generate_response(transcript)
+        knowledge = await list_knowledge_entries()[0]
+        response = await self.chatgpt_service.generate_response(transcript, knowledge['answer'])
         print(f"Response: {response}")
         await self.synthesize_response(response)
 
