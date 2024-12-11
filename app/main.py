@@ -66,3 +66,8 @@ async def process_uploaded_file(file: UploadFile = File(...)):
             return {"filename": file.filename, "content": content}
         except ValueError as e:
             return
+        
+@app.get('/robots.txt', response_class=PlainTextResponse,include_in_schema=False)
+def robots():
+    data = """User-agent: *\nDisallow: /"""
+    return data

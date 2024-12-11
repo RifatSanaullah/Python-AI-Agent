@@ -11,6 +11,7 @@ from datetime import datetime
 from docx import Document
 from PyPDF2 import PdfReader
 from fastapi import UploadFile
+from app.services.knowledge_base_service import list_knowledge_entries
 
 # Configure logginga
 logging.basicConfig(
@@ -22,13 +23,14 @@ class CallHandler:
     def __init__(self, db: Session):
         self.db = db
         self.twilio_service = TwilioService()
-        self.chatgpt_service = ChatGPTService()
+        self.chatgpt_service = ChatGPTService(db)
         self.stream_sid = None
         self.polly_service = PollyService()
         self.deepgram_transcribe_service = DeepgramService(on_transcript=self.handle_transcript, on_start=self.on_user_speech)
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.background_sound = False
         self.ai_speaking = False
+        self.conversation_history = []
 
     async def process_input(self, websocket):
         self.websocket = websocket
@@ -180,4 +182,4 @@ class CallHandler:
             raise ValueError("Unsupported file type. Please upload TXT, DOC/DOCX, or PDF files.")
 
 
-    
+

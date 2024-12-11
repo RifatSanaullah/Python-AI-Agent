@@ -1,9 +1,11 @@
 # app/services/chatgpt_service.py
 import openai
+from requests import Session
 from app.config import settings
+from app.services.knowledge_base_service import list_knowledge_entries
 
 class ChatGPTService:
-    def __init__(self):
+    def __init__(self, db: Session):
         openai.api_key = settings.chatgpt_api_key
         self.conversations = {}
 
