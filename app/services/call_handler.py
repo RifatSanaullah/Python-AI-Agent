@@ -8,6 +8,7 @@ from app.services.assembly_ai_transcribe_service import TranscribeService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 import logging
 from datetime import datetime
+from app.services.knowledge_base_service import list_knowledge_entries
 
 # Configure logging
 logging.basicConfig(
@@ -19,7 +20,7 @@ class CallHandler:
     def __init__(self, db: Session):
         self.db = db
         self.twilio_service = TwilioService()
-        self.chatgpt_service = ChatGPTService()
+        self.chatgpt_service = ChatGPTService(db)
         self.stream_sid = None
         self.polly_service = PollyService()
         self.deepgram_transcribe_service = DeepgramService(on_transcript=self.handle_transcript, on_start=self.on_user_speech)
@@ -27,6 +28,7 @@ class CallHandler:
         self.max_chunk_size = 200
         self.background_sound = False
         self.ai_speaking = False
+        self.conversation_history = []
 
     async def process_input(self, websocket):
         self.websocket = websocket
@@ -83,7 +85,9 @@ class CallHandler:
     async def handle_transcript(self, transcript):
         print(f"Transcript: {transcript}")
         await self.enable_background_sound(True)
-        response = await self.chatgpt_service.generate_response(transcript, self.db)
+        self.conversation_history.append({"role": "user", "content": transcript})
+        response = await self.chatgpt_service.generate_response(self.conversation_history)
+        self.conversation_history.append({"role": "assistant", "content": response})
         print(f"Response: {response}")
         await self.synthesize_response(response)
 
@@ -123,6 +127,10 @@ class CallHandler:
         print("Handling call...")
         response = self.twilio_service.initialize_call(call_id)
         self.transcribe_service.connect()  # Connect the transcriber service
+        self.conversation_history = [
+            {"role": "system", "content": "Keep your responses helpful and respectful and in under 2 sentences if possible."},
+            {"role": "system", "content": self.chatgpt_service.knowledge},
+        ]
         await self.synthesize_response("Hello and Welcome to BoomersHub!!")
         return response
 
@@ -148,4 +156,4 @@ class CallHandler:
             await self.twilio_service.send_audio_stream(self.websocket, self.stream_sid, self.twilio_service.background_sound)
 
 
-    
+

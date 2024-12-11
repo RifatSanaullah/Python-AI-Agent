@@ -5,17 +5,13 @@ from app.config import settings
 from app.services.knowledge_base_service import list_knowledge_entries
 
 class ChatGPTService:
-    def __init__(self):
+    def __init__(self, db: Session):
         openai.api_key = settings.chatgpt_api_key
+        self.knowledge = list_knowledge_entries(db)[0].answer
 
-    async def generate_response(self, message: str, db: Session):
-        knowledge = list_knowledge_entries(db)[0].answer
-        response = openai.chat.completions.create(
+    async def generate_response(self, conversation_history):
+        response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Keep your responses helpful and respectful and in under 2 senternces if possible."},
-                {"role": "system", "content": knowledge},
-                {"role": "user", "content": message},
-            ],
+            messages=conversation_history,
         )
         return response.choices[0].message.content
