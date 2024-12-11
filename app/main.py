@@ -57,3 +57,8 @@ async def outgoing_call(phone_number: str, call_handler: CallHandler = Depends(g
 async def stream_callback(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
     data = await request.form()
     return await call_handler.handle_stream_callback(data)
+
+@app.get('/robots.txt', response_class=PlainTextResponse,include_in_schema=False)
+def robots():
+    data = """User-agent: *\nDisallow: /"""
+    return data
