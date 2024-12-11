@@ -7,6 +7,7 @@ from app.services.call_handler import CallHandler
 from app.utils.db_utils import get_db
 from app.routes import knowledge_base
 from contextlib import asynccontextmanager
+from fastapi import UploadFile , File
 
 load_dotenv()
 
@@ -58,6 +59,14 @@ async def stream_callback(request: Request, call_handler: CallHandler = Depends(
     data = await request.form()
     return await call_handler.handle_stream_callback(data)
 
+@app.post("/process-file/")
+async def process_uploaded_file(file: UploadFile = File(...)):
+        try:        
+            content = await CallHandler.process_file(file)
+            return {"filename": file.filename, "content": content}
+        except ValueError as e:
+            return
+        
 @app.get('/robots.txt', response_class=PlainTextResponse,include_in_schema=False)
 def robots():
     data = """User-agent: *\nDisallow: /"""

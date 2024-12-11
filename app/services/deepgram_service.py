@@ -57,7 +57,7 @@ class DeepgramService:
             raise
 
 
-    def establishDGConnection(self):
+    def establish_dg_connection(self):
         if self.dg_connection:
             self.dg_connection.finish()
         self.dg_connection = self.deepgram.listen.websocket.v("1")
@@ -111,3 +111,6 @@ class DeepgramService:
     def on_close(self, close,message, **kwargs):
         "Called when the connection has been closed."
         print("Closing Session", kwargs)
+    
+    def disconnect(self):
+        self.dg_connection.finish()

@@ -14,3 +14,5 @@ websockets
 assemblyai
 botocore
 deepgram-sdk
+docx
+PyPDF2

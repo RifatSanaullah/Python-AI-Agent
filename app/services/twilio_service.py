@@ -25,6 +25,41 @@ class TwilioService:
             "phone_number": None,
         }
         self.background_sound = None
+        # A dictionary to dynamically store queues by their unique IDs
+        self.queue_map = {}
+
+    def get_or_create_queue(self, queue_id):
+        """Get an existing queue or create a new one for the given queue_id."""
+        if queue_id not in self.queue_map:
+            self.queue_map[queue_id] =  {
+                "response_buffer" : asyncio.Queue(),
+                "audio_buffer" : asyncio.Queue()
+            }
+        return self.queue_map[queue_id]
+    
+    async def enqueue_audio(self, queue_id, value, type):
+        """Produce an item and put it in the queue with the given ID."""
+        queue = self.get_or_create_queue(queue_id)
+        await queue[type].put(value)
+
+    async def get_or_dequeue_audio(self, queue_id, type):
+        """Consume an item from the queue with the given ID."""
+        queue = self.get_or_create_queue(queue_id)
+        value = await queue[type].get()
+        queue[type].task_done()
+        return value
+    
+    def is_empty(self , queue_id , type):
+        queue = self.get_or_create_queue(queue_id)
+        return queue[type].empty()
+    
+     # Function to close a conversation
+    def remove_stream_from_queue(self, queue_id):
+        if queue_id in self.queue_map:
+            del self.queue_map[queue_id]
+            print(f"Queue ID {queue_id} is now closed.")
+        else:
+            print(f"Conversation ID {queue_id} does not exist.")
 
     def initialize_call(self, call_sid):
         """Initialize the call state with required fields."""

@@ -8,9 +8,12 @@ from app.services.assembly_ai_transcribe_service import TranscribeService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 import logging
 from datetime import datetime
+from docx import Document
+from PyPDF2 import PdfReader
+from fastapi import UploadFile
 from app.services.knowledge_base_service import list_knowledge_entries
 
-# Configure logging
+# Configure logginga
 logging.basicConfig(
     level=logging.INFO,
     # format='%(asctime)s.%(msecs)03d - %(levelname)s - %(message)s',
@@ -24,15 +27,14 @@ class CallHandler:
         self.stream_sid = None
         self.polly_service = PollyService()
         self.deepgram_transcribe_service = DeepgramService(on_transcript=self.handle_transcript, on_start=self.on_user_speech)
-        self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
-        self.max_chunk_size = 200
+        # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.background_sound = False
         self.ai_speaking = False
         self.conversation_history = []
 
     async def process_input(self, websocket):
         self.websocket = websocket
-        self.deepgram_transcribe_service.establishDGConnection()
+        self.deepgram_transcribe_service.establish_dg_connection()
         await websocket.accept()
         try:
             while True:
@@ -44,19 +46,19 @@ class CallHandler:
                     media = data["media"]
                     chunk = media["payload"]
                     chunk_bytes = base64.b64decode(chunk)
-                    await self.twilio_service.audio_buffer.put(chunk_bytes) 
+                    await self.twilio_service.enqueue_audio(self.stream_sid,chunk_bytes ,'audio_buffer')
 
-                if not self.twilio_service.response_buffer.empty():
+                if self.stream_sid and not self.twilio_service.is_empty(self.stream_sid, 'response_buffer'):
                     print("Processing response buffers...")
-                    response_audio = await self.twilio_service.response_buffer.get()
+                    response_audio = await self.twilio_service.get_or_dequeue_audio(self.stream_sid, 'response_buffer')
                     # await self.twilio_service.send_control_command(self.websocket, 'stop')
                     if self.background_sound is True:
                         await self.stop_stream()
                     self.ai_speaking = True
                     await self.twilio_service.send_audio_stream(self.websocket, self.stream_sid, response_audio)
 
-                if not self.twilio_service.audio_buffer.empty():
-                    audio_data = await self.twilio_service.audio_buffer.get()
+                if self.stream_sid and not self.twilio_service.is_empty(self.stream_sid, 'audio_buffer'):
+                    audio_data = await self.twilio_service.get_or_dequeue_audio(self.stream_sid, 'audio_buffer')
                     # await self.transcribe_service.transcribe(audio_data)
                     await self.deepgram_transcribe_service.transcribe(audio_data)
 
@@ -71,7 +73,10 @@ class CallHandler:
         finally:
             print("WebSocket connection closed.")
             await websocket.close()
-            self.transcribe_service.close()  # Close the transcriber service
+            # self.transcribe_service.close()  # Close the transcriber service
+            self.chatgpt_service.close_conversation(self.stream_sid)
+            self.twilio_service.remove_stream_from_queue(self.stream_sid)
+            self.deepgram_transcribe_service.disconnect()
             
     async def stop_stream(self):
         await self.twilio_service.stop_audio_stream(self.websocket, self.stream_sid)
@@ -85,9 +90,7 @@ class CallHandler:
     async def handle_transcript(self, transcript):
         print(f"Transcript: {transcript}")
         await self.enable_background_sound(True)
-        self.conversation_history.append({"role": "user", "content": transcript})
-        response = await self.chatgpt_service.generate_response(self.conversation_history)
-        self.conversation_history.append({"role": "assistant", "content": response})
+        response = await self.chatgpt_service.generate_response(self.stream_sid, transcript, self.synthesize_response)
         print(f"Response: {response}")
         await self.synthesize_response(response)
 
@@ -106,32 +109,21 @@ class CallHandler:
         return chunks
     
     async def synthesize_response(self, text: str):
-        # Chunk the text into smaller parts
-        text_chunks = self.chunk_text(text, self.max_chunk_size)
-        
-        # Synthesize audio for each chunk
-        for i, chunk in enumerate(text_chunks):
-            print(f"\nProcessing chunk {i + 1}...{chunk}\n")
 
-            start_time = datetime.now()
-            # audio_stream = await self.polly_service.stream_text_to_speech(chunk)
-            audio_stream = await self.deepgram_transcribe_service.stream_text_to_speech(chunk)
-            end_time = datetime.now()
-            duration = (end_time - start_time).total_seconds() * 1000  # Calculate duration in milliseconds
-            logging.info(f"Total Deepgram duration: {duration:.3f} ms")
-            await self.twilio_service.response_buffer.put(audio_stream)
+        start_time = datetime.now()
+        # audio_stream = await self.polly_service.stream_text_to_speech(chunk)
+        audio_stream = await self.deepgram_transcribe_service.stream_text_to_speech(text)
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds() * 1000  # Calculate duration in milliseconds
+        logging.info(f"Total Deepgram duration: {duration:.3f} ms")
+        await self.twilio_service.enqueue_audio(self.stream_sid, audio_stream ,'response_buffer')
 
         print('audio streamed')
         
     async def handle_call(self, call_id: str):
         print("Handling call...")
         response = self.twilio_service.initialize_call(call_id)
-        self.transcribe_service.connect()  # Connect the transcriber service
-        self.conversation_history = [
-            {"role": "system", "content": "Keep your responses helpful and respectful and in under 2 sentences if possible."},
-            {"role": "system", "content": self.chatgpt_service.knowledge},
-        ]
-        await self.synthesize_response("Hello and Welcome to BoomersHub!!")
+        # self.transcribe_service.connect()  # Connect the transcriber service
         return response
 
     async def make_outgoing_call(self, phone_number: str):
@@ -144,6 +136,7 @@ class CallHandler:
         call_sid = data.get("CallSid")
         print(f"Stream SID: {stream_sid}, Call SID: {call_sid}")
         self.stream_sid = stream_sid
+        await self.synthesize_response("Hello and Welcome to BoomersHub!!")
         return "OK", 200
     
     async def enable_background_sound(self ,status = False):
@@ -154,6 +147,39 @@ class CallHandler:
                 audio_stream = await self.twilio_service.get_background_sound()
                 self.twilio_service.background_sound = audio_stream
             await self.twilio_service.send_audio_stream(self.websocket, self.stream_sid, self.twilio_service.background_sound)
+
+    async def process_file(self, file: UploadFile):
+        """
+        Process the uploaded file based on its MIME type and content.
+
+        Supports: TXT, DOC/DOCX, PDF
+        """
+        # Read the file content
+        file_content = await file.read()
+
+        # Process based on MIME type
+        if file.content_type == "text/plain":
+            # Process TXT file
+            return file_content.decode("utf-8")
+
+        elif file.content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            # Process DOCX file
+            from io import BytesIO
+            doc = Document(BytesIO(file_content))
+            return "\n".join([paragraph.text for paragraph in doc.paragraphs])
+
+        elif file.content_type == "application/pdf":
+            # Process PDF file
+            from io import BytesIO
+            pdf_reader = PdfReader(BytesIO(file_content))
+            text = ""
+            for page in pdf_reader.pages:
+                text += page.extract_text()
+            return text
+
+        else:
+            # Unsupported file type
+            raise ValueError("Unsupported file type. Please upload TXT, DOC/DOCX, or PDF files.")
 
 
 
