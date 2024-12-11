@@ -9,6 +9,7 @@ class ChatGPTService:
         openai.api_key = settings.chatgpt_api_key
         self.conversations = {}
         self.knowledge = list_knowledge_entries(db)[0].answer
+        self.max_chunk_size = 200
 
     # Function to add messages to a conversation
     def add_message(self, conversation_id, role, content):
@@ -47,7 +48,7 @@ class ChatGPTService:
                     val = delta.content
                     print(val, end="", flush=True)  # Display the streamed text
                     assistant_reply += val  # Save the full assistant response
-                    if len(assistant_reply) > 200:
+                    if len(assistant_reply) > self.max_chunk_size:
                         await synthesize_response(assistant_reply)
                         assistant_reply=''
                     

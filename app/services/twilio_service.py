@@ -27,7 +27,6 @@ class TwilioService:
         self.background_sound = None
         # A dictionary to dynamically store queues by their unique IDs
         self.queue_map = {}
-        self.max_chunk_size = 200
 
     def get_or_create_queue(self, queue_id):
         """Get an existing queue or create a new one for the given queue_id."""
