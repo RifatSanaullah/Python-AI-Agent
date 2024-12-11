@@ -8,8 +8,11 @@ from app.services.assembly_ai_transcribe_service import TranscribeService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 import logging
 from datetime import datetime
+from docx import Document
+from PyPDF2 import PdfReader
+from fastapi import UploadFile
 
-# Configure logging
+# Configure logginga
 logging.basicConfig(
     level=logging.INFO,
     # format='%(asctime)s.%(msecs)03d - %(levelname)s - %(message)s',
@@ -142,6 +145,39 @@ class CallHandler:
                 audio_stream = await self.twilio_service.get_background_sound()
                 self.twilio_service.background_sound = audio_stream
             await self.twilio_service.send_audio_stream(self.websocket, self.stream_sid, self.twilio_service.background_sound)
+
+    async def process_file(self, file: UploadFile):
+        """
+        Process the uploaded file based on its MIME type and content.
+
+        Supports: TXT, DOC/DOCX, PDF
+        """
+        # Read the file content
+        file_content = await file.read()
+
+        # Process based on MIME type
+        if file.content_type == "text/plain":
+            # Process TXT file
+            return file_content.decode("utf-8")
+
+        elif file.content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            # Process DOCX file
+            from io import BytesIO
+            doc = Document(BytesIO(file_content))
+            return "\n".join([paragraph.text for paragraph in doc.paragraphs])
+
+        elif file.content_type == "application/pdf":
+            # Process PDF file
+            from io import BytesIO
+            pdf_reader = PdfReader(BytesIO(file_content))
+            text = ""
+            for page in pdf_reader.pages:
+                text += page.extract_text()
+            return text
+
+        else:
+            # Unsupported file type
+            raise ValueError("Unsupported file type. Please upload TXT, DOC/DOCX, or PDF files.")
 
 
     
