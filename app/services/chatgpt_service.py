@@ -8,6 +8,7 @@ class ChatGPTService:
     def __init__(self, db: Session):
         openai.api_key = settings.chatgpt_api_key
         self.conversations = {}
+        self.knowledge = list_knowledge_entries(db)[0].answer
 
     # Function to add messages to a conversation
     def add_message(self, conversation_id, role, content):
@@ -19,15 +20,14 @@ class ChatGPTService:
 
     def initial_message(self , conversation_id, knowledge_base: str = ""):
         self.conversations[conversation_id] = [
-                {"role": "system", "content": knowledge_base},
-                {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "system", "content": "Keep your responses helpful and respectful and in under 2 senternces if possible."},
+                {"role": "system", "content": knowledge_base},
         ]
 
-    async def generate_response(self, conversation_id, message: str, synthesize_response, knowledge_base: str = ""):
+    async def generate_response(self, conversation_id, message: str, synthesize_response):
 
         if conversation_id not in self.conversations:
-            self.initial_message(conversation_id ,knowledge_base)
+            self.initial_message(conversation_id , self.knowledge)
         
         # Add user input to conversation history
         self.add_message(conversation_id, "user", message)
