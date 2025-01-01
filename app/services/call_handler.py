@@ -100,7 +100,7 @@ class CallHandler:
             conversations = self.chatgpt_service.conversations[session['stream_sid']]
             agent_id = self.agents[call_id]['id']
             outputFile= f"recordings/{call_id}.wav"
-            self.raw_to_wav(f"recordings/{call_id}.raw", outputFile)
+            # self.raw_to_wav(f"recordings/{call_id}.raw", outputFile)
 
             data = {
                 "call_sid" : call_id,
