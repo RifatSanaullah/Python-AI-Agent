@@ -5,7 +5,6 @@ from fastapi.responses import PlainTextResponse
 from app.models.base import init_db
 from app.services.call_handler import CallHandler
 from app.utils.db_utils import get_db
-from app.routes import knowledge_base
 from contextlib import asynccontextmanager
 from fastapi import UploadFile , File
 
@@ -17,7 +16,6 @@ app = FastAPI(
     version="0.0.2",
 )
 
-app.include_router(knowledge_base.router, prefix="/api", tags=["knowledge_base"])
 
 # Initialize
 init_db()
@@ -38,15 +36,27 @@ app.router.lifespan_context = lifespan
 def get_call_handler():
     return call_handler_instance
 
-@app.websocket("/audio-stream")
-async def audio_stream(websocket: WebSocket, call_handler: CallHandler = Depends(get_call_handler)):
-    await call_handler.process_input(websocket)
+@app.websocket("/audio-stream/{call_id}")
+async def audio_stream(call_id : str, websocket: WebSocket, call_handler: CallHandler = Depends(get_call_handler)):
+    await call_handler.process_input(call_id, websocket)
 
 @app.post("/incoming_call")
 async def incoming_call(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
     data = await request.form()
+    application_sid = data.get('ApplicationSid')
+    direction = data.get('Direction')
+    fromNumber = data.get('From')
+    dialed_number = data.get("To")
     call_id = data.get("CallSid")
-    response = await call_handler.handle_call(call_id)
+
+    data = {
+        "call_sid" : call_id,
+        "from" : fromNumber,
+        "to" : dialed_number,
+        "application_sid" : application_sid,
+        "direction" : direction
+    }
+    response = await call_handler.handle_call(call_id, data)
     return PlainTextResponse(content=str(response), media_type="application/xml")
 
 @app.post("/outgoing_call")
@@ -71,3 +81,13 @@ async def process_uploaded_file(file: UploadFile = File(...)):
 def robots():
     data = """User-agent: *\nDisallow: /"""
     return data
+
+@app.post("/recording_status_callback")
+async def recording_status_callback(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
+    data = await request.form()
+    print(data)
+
+@app.post("/complete_status_callback")
+async def complete_status_callback(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
+    data = await request.form()
+    return await call_handler.complete_status_callback(data)

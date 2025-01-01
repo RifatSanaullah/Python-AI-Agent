@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     polly_voice_id: str = os.getenv("POLLY_VOICE_ID", "Joanna")
     domain: str = os.getenv("DOMAIN", "localhost")
     base_url: str = os.getenv("BASE_URL", "http://${domain}")
+    ai_backend_url: str = os.getenv("AI_BACKEND_URL", "http://localhost:4000/v1")
     deepgram_apikey: str = os.getenv("DEEPGRAM_API_KEY")
 
 settings = Settings()

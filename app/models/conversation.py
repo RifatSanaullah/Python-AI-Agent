@@ -6,7 +6,7 @@ from app.models.base import Base
 class Conversation(Base):
     __tablename__ = "conversations"
     id = Column(Integer, primary_key=True, index=True)
-    call_id = Column(String, index=True)
-    speaker = Column(String, nullable=False)
+    call_id = Column(String(255), index=True)
+    speaker = Column(String(255), nullable=False)
     message = Column(Text, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)

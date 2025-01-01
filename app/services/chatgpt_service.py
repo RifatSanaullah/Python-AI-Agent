@@ -2,13 +2,11 @@
 import openai
 from requests import Session
 from app.config import settings
-from app.services.knowledge_base_service import list_knowledge_entries
 
 class ChatGPTService:
     def __init__(self, db: Session):
         openai.api_key = settings.chatgpt_api_key
         self.conversations = {}
-        self.knowledge = list_knowledge_entries(db)[0].answer
         self.max_chunk_size = 200
 
     # Function to add messages to a conversation
@@ -19,16 +17,26 @@ class ChatGPTService:
         
         self.conversations[conversation_id].append({"role": role, "content": content})
 
-    def initial_message(self , conversation_id, knowledge_base: str = ""):
+    def initial_message(self , conversation_id, knowledge_base):
+
         self.conversations[conversation_id] = [
                 {"role": "system", "content": "Keep your responses helpful and respectful and in under 2 senternces if possible."},
-                {"role": "system", "content": knowledge_base},
         ]
 
-    async def generate_response(self, conversation_id, message: str, synthesize_response):
+        if not knowledge_base:
+            return
+        
+        for item in knowledge_base:
+            if item['type'] != 'GREETINGS':
+                self.conversations[conversation_id].append(
+                    {"role": "system", "content": item['content']}
+                )
+
+    async def generate_response(self, conversation_id, message: str, synthesize_response, get_agent_knowledge):
 
         if conversation_id not in self.conversations:
-            self.initial_message(conversation_id , self.knowledge)
+            knowledge = await get_agent_knowledge(conversation_id)
+            self.initial_message(conversation_id , knowledge)
         
         # Add user input to conversation history
         self.add_message(conversation_id, "user", message)
@@ -49,7 +57,7 @@ class ChatGPTService:
                     print(val, end="", flush=True)  # Display the streamed text
                     assistant_reply += val  # Save the full assistant response
                     if len(assistant_reply) > self.max_chunk_size:
-                        await synthesize_response(assistant_reply)
+                        await synthesize_response(assistant_reply, conversation_id)
                         assistant_reply=''
                     
         self.add_message(conversation_id, "assistant", assistant_reply)

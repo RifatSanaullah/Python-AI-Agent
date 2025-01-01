@@ -17,12 +17,6 @@ class DeepgramService:
             options={"keepalive": "true"} # Comment this out to see the effect of not using keepalive
         )
         self.deepgram = DeepgramClient(settings.deepgram_apikey, self.config)
-        self.options = SpeakOptions(
-            model="aura-asteria-en",
-            encoding='mulaw',
-            sample_rate=8000,
-            container="none"
-        )
 
         self.transcribeQueue = None
         self.emptySentence = 0
@@ -47,9 +41,15 @@ class DeepgramService:
         # self.lock_exit = threading.Lock()
         # self.exit = False
 
-    async def stream_text_to_speech(self, text: str):
+    async def stream_text_to_speech(self, text: str , model = "aura-asteria-en"):
         try:
-            response = self.speaker.stream({"text": text}, self.options)
+            options = SpeakOptions(
+                model= model,
+                encoding='mulaw',
+                sample_rate=8000,
+                container="none"
+            )
+            response = self.speaker.stream({"text": text}, options)
             return response.stream.getbuffer()
 
         except Exception as e:
@@ -58,6 +58,7 @@ class DeepgramService:
 
 
     def establish_dg_connection(self):
+        print("Establishing Deepgram Connection....")
         if self.dg_connection:
             self.dg_connection.finish()
         self.dg_connection = self.deepgram.listen.websocket.v("1")

@@ -3,10 +3,9 @@ import os, asyncio
 from twilio.rest import Client
 import base64  # Add this import
 from app.config import settings
-from twilio.twiml.voice_response import VoiceResponse, Gather, Connect
+from twilio.twiml.voice_response import VoiceResponse, Gather, Connect , Record
 import audioop
 import wave
-
 # # Path to your background sound file (WAV format)
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 BACKGROUND_SOUND_FILE =os.path.abspath(os.path.join(ROOT_DIR, '../' , 'keyboard.wav'))
@@ -70,14 +69,17 @@ class TwilioService:
                 "is_complete": False
             }
             response = VoiceResponse()
+            # response.record(recording_status_callback=f"{settings.base_url}/recording_status_callback")
             connect = Connect()
             connect.stream(
-                url=f"wss://{settings.domain}/audio-stream",
+                url=f"wss://{settings.domain}/audio-stream/{call_sid}",
                 status_callback=f"{settings.base_url}/stream_callback",
-                status_callback_method="POST"
+                status_callback_method="POST",
             )
+            
             print("Call initialized.")
             response.append(connect)
+
             return response
         
     # Helper function to read the WAV file and loop it
@@ -117,6 +119,7 @@ class TwilioService:
                 "payload": encoded_audio_data
             }
         })
+
     def hangup_call(self, call_sid):
         response = VoiceResponse()
         response.say("Thank you. We have gathered all required information. Goodbye!", voice="alice", language="en-US")
