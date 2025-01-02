@@ -14,7 +14,7 @@ class BackendHandler:
         try:
             url = f"{self.OTHER_BACKEND_URL}/agent/get-agent"
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, params={"phoneNumber": phoneNumber})
+                response = await client.get(url, params={"phoneNumber": phoneNumber}, timeout=10.0)
 
             response.raise_for_status()  # Raise an exception for HTTP errors
             return response.json()
@@ -29,7 +29,7 @@ class BackendHandler:
         try:
             url = f"{self.OTHER_BACKEND_URL}/call/create-call"
             async with httpx.AsyncClient() as client:
-                response = await client.post(url, json=data)
+                response = await client.post(url, json=data, timeout=20.0)
 
             response.raise_for_status()  # Raise an exception for HTTP errors
             return response.json()
@@ -45,7 +45,7 @@ class BackendHandler:
         try:
             url = f"{self.OTHER_BACKEND_URL}/call/update-call-info"
             async with httpx.AsyncClient() as client:
-                response = await client.post(url, json=data)
+                response = await client.post(url, json=data, timeout=20)
 
             response.raise_for_status()  # Raise an exception for HTTP errors
             return response.json()
@@ -60,7 +60,7 @@ class BackendHandler:
         try:
             url = f"{self.OTHER_BACKEND_URL}/call/update-conversation-info"
             async with httpx.AsyncClient() as client:
-                response = await client.post(url, json=data)
+                response = await client.post(url, json=data, timeout=20)
 
             response.raise_for_status()  # Raise an exception for HTTP errors
             return response.json()
