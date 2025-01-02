@@ -319,11 +319,13 @@ class CallHandler:
         call_direction = data.get("Direction")
         call_status = data.get("CallStatus")
         # self.sessions[call_sid]['stream_sid'] = stream_sid
+        agent_id = self.agents[call_sid]['id']
         data= {
             "duration" : call_duration,
             "direction": call_direction,
             "status": call_status,
-            "call_sid" : call_sid
+            "call_sid" : call_sid,
+            "agent_id" : agent_id
         }
         await self.backend_service.update_call_info(data) 
         return "OK", 200
