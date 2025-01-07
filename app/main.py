@@ -2,9 +2,7 @@
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Depends, WebSocket
 from fastapi.responses import PlainTextResponse
-from app.models.base import init_db
 from app.services.call_handler import CallHandler
-from app.utils.db_utils import get_db
 from contextlib import asynccontextmanager
 from fastapi import UploadFile , File
 
@@ -17,21 +15,10 @@ app = FastAPI(
 )
 
 
-# Initialize
-init_db()
 
 # Create a global CallHandler instance
-call_handler_instance = None
+call_handler_instance = CallHandler()
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global call_handler_instance
-    db = next(get_db())
-    call_handler_instance = CallHandler(db)
-    yield
-    # Cleanup code if needed
-
-app.router.lifespan_context = lifespan
 
 def get_call_handler():
     return call_handler_instance

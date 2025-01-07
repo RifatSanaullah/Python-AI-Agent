@@ -1,10 +1,9 @@
 # app/services/chatgpt_service.py
 import openai
-from requests import Session
 from app.config import settings
 
 class ChatGPTService:
-    def __init__(self, db: Session):
+    def __init__(self):
         openai.api_key = settings.chatgpt_api_key
         self.conversations = {}
         self.max_chunk_size = 200
@@ -21,13 +20,24 @@ class ChatGPTService:
 
         self.conversations[conversation_id] = [
                 {"role": "system", "content": "Keep your responses helpful and respectful and in under 2 senternces if possible."},
-                {"role": "system", "content": "This is a voice conversation, so keep it brief—don,t ramble!You need to take control of the conversation. Do a opening greeting also. Take initiative for the conversation and your directive. You are handling clients of the baby boomer generation. With that in mind you need to sound professional. Never mention you are an AI or Voice Assistant. Keep the responses small and encourage the client speech. Always refer to yourself using your name.."},
+                {"role": "system", "content": "This is a voice conversation, so keep it brief — don,t ramble! You need to take control of the conversation. Do a opening greeting also. Take initiative for the conversation and your directive. You are handling clients of the baby boomer generation. With that in mind you need to sound professional. Never mention you are an AI or Voice Assistant. Keep the responses small and encourage the client speech. Always refer to yourself using your name.."},
+                {"role": "system", "content": "Whenever you get any answer and if you left any query. Ask instantly don't wait for querying from user."},
+                {"role": "system", "content": "Before Ending the call you have to reclarify all the information you gather with user"},
+                {"role": "system", "content": "From the below knowledge data there will have a end call message. So you should finish the call when all the queries answered and deliver then end call message start with : End Call Message."},
         ]
 
         if not knowledge_base:
             return
         
-        for item in knowledge_base:
+        if knowledge_base['routingInfo']:
+            self.conversations[conversation_id].append(
+                    {"role": "system", "content": knowledge_base['routingInfo']['routingPrompt']}
+                )
+            
+        if not knowledge_base['knowledge']:
+            return
+        
+        for item in knowledge_base['knowledge']:
             if item['type'] != 'GREETINGS':
                 self.conversations[conversation_id].append(
                     {"role": "system", "content": item['content']}

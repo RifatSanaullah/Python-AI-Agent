@@ -16,3 +16,6 @@ botocore
 deepgram-sdk
 docx
 PyPDF2
+numpy
+python-docx
+pydub

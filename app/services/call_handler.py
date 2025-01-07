@@ -15,7 +15,8 @@ from fastapi import UploadFile
 import wave
 from app.config import settings
 from pydub import AudioSegment
-
+from threading import Timer
+import numpy as np
 # Configure logginga
 logging.basicConfig(
     level=logging.INFO,
@@ -23,11 +24,10 @@ logging.basicConfig(
     # datefmt='%Y-%m-%d %H:%M:%S'
 )
 class CallHandler:
-    def __init__(self, db: Session):
-        self.db = db
+    def __init__(self):
         self.twilio_service = TwilioService()
         self.backend_service = BackendHandler()
-        self.chatgpt_service = ChatGPTService(db)
+        self.chatgpt_service = ChatGPTService()
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.sessions = {}
         self.agents = {}
@@ -45,6 +45,7 @@ class CallHandler:
                 "ai_speaking": False,
                 "stream_sid": None,
                 "background_sound": None,
+                "end_call": False,
         }
         output_file = f"recordings/{call_id}.wav"
 
@@ -149,11 +150,28 @@ class CallHandler:
         print(f"Transcript: {transcript}")
         # await self.enable_background_sound(call_id, True)
         response = await self.chatgpt_service.generate_response(call_id, transcript, self.synthesize_response, self.get_agent_knowledge)
+        if 'End Call Message:' in response:
+            self.sessions[call_id]['end_call'] = True
+            response = response.replace('End Call Message:', '')
+            # Schedule the call to end after 2 seconds
+            timer = Timer(10, self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
+            timer.start()
+            
+        if 'Routing Message:' in response:
+            self.sessions[call_id]['route_call'] = True
+            response = response.replace('Routing Message:', '')
+            # Schedule the call to end after 2 seconds
+            timer = Timer(10, self.twilio_service.redirect_call, args=[self.sessions[call_id]['call_sid'] ,self.agents[self.sessions[call_id]['call_sid']]['routingInfo']['routingNumber']])
+            timer.start()
+
         print(f"Response: {response}")
         await self.synthesize_response(response, call_id)
 
     async def get_agent_knowledge(self, call_id):
-        return self.agents[self.sessions[call_id]['call_sid']]['knowledge']
+        return {        
+            "knowledge" : self.agents[self.sessions[call_id]['call_sid']]['knowledge'],
+            "routingInfo" : self.agents[self.sessions[call_id]['call_sid']]['routingInfo'],
+        }
 
     def chunk_text(self, text, chunk_size):
         chunks = []
@@ -193,7 +211,9 @@ class CallHandler:
                 "stream_sid": stream_sid,
                 "background_sound": None,
                 "websocket" : None,
-                "call_sid" : call_sid
+                "call_sid" : call_sid,
+                "end_call" : False,
+                "route_call" : False,
             }
         
     async def handle_call(self, call_id: str, data):
@@ -318,6 +338,7 @@ class CallHandler:
         call_duration = data.get("CallDuration")
         call_direction = data.get("Direction")
         call_status = data.get("CallStatus")
+        time_stamp = data.get("Timestamp")
         # self.sessions[call_sid]['stream_sid'] = stream_sid
         agent_id = self.agents[call_sid]['id']
         data= {
@@ -325,7 +346,9 @@ class CallHandler:
             "direction": call_direction,
             "status": call_status,
             "call_sid" : call_sid,
-            "agent_id" : agent_id
+            "agent_id" : agent_id,
+            "timestamp" : time_stamp,
+
         }
         await self.backend_service.update_call_info(data) 
         return "OK", 200
