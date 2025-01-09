@@ -31,9 +31,9 @@ class DeepgramService:
             sample_rate=8000,
             smart_format=True,
             # vad_events=True,
-            utterance_end_ms="1000",
+            utterance_end_ms="1500",
             interim_results=True,
-            endpointing=1200
+            endpointing=1000
             # Time in milliseconds of silence to wait for before finalizing speech
             )
 

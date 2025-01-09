@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     aws_secret_access_key: str = os.getenv("AWS_SECRET_ACCESS_KEY")
     aws_region: str = os.getenv("AWS_REGION")
     aws_role_arn: str = os.getenv("AWS_ROLE_ARN")
+    s3_bucket_name: str = os.getenv("S3_BUCKET_NAME", "ai-agent-boom")
     polly_voice_id: str = os.getenv("POLLY_VOICE_ID", "Joanna")
     domain: str = os.getenv("DOMAIN", "localhost")
     base_url: str = os.getenv("BASE_URL", "http://${domain}")

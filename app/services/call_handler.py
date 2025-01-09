@@ -2,6 +2,7 @@ import base64
 from sqlalchemy.orm import Session
 from app.services.twilio_service import TwilioService
 from app.services.chatgpt_service import ChatGPTService
+from app.services.s3_service import S3Service
 from app.services.backend_service import BackendHandler
 from app.services.polly_service import PollyService
 from app.services.deepgram_service import DeepgramService
@@ -17,6 +18,8 @@ from app.config import settings
 from pydub import AudioSegment
 from threading import Timer
 import numpy as np
+import audioop
+import os
 # Configure logginga
 logging.basicConfig(
     level=logging.INFO,
@@ -28,6 +31,7 @@ class CallHandler:
         self.twilio_service = TwilioService()
         self.backend_service = BackendHandler()
         self.chatgpt_service = ChatGPTService()
+        self.s3_service = S3Service()
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.sessions = {}
         self.agents = {}
@@ -47,76 +51,80 @@ class CallHandler:
                 "background_sound": None,
                 "end_call": False,
         }
-        output_file = f"recordings/{call_id}.wav"
+        output_file = f"recordings/{call_id}.mulaw"
+        # Open μ-law raw file for writing
+        with open(output_file, 'wb') as mulaw_fp:
+            pass  # Placeholder to ensure the file is created
+        # wav_file = wave.open(output_file, 'wb')
+        # wav_file.setnchannels(1)  # Mono audio
+        # wav_file.setsampwidth(2)  # 16-bit audio
+        # wav_file.setframerate(8000)  # 8kHz sampling rate (default for Twilio)
+        with open(output_file, "ab") as f:
+            try:
+                while True:
+                    data = await websocket.receive_json()
+                    if data["event"] in ("connected", "start"):
+                        print(f"Media WS: Received event '{data['event']}'")
+                        continue
+                    if data['streamSid'] and not self.sessions[data['streamSid']]['websocket']:
+                        self.sessions[data['streamSid']]['websocket'] = websocket
+                        self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
+                        session = self.sessions[data['streamSid']]
+                        session['deepgram_transcribe_service'].establish_dg_connection()
 
-        wav_file = wave.open(output_file, 'wb')
-        wav_file.setnchannels(1)  # Mono audio
-        wav_file.setsampwidth(2)  # 16-bit audio
-        wav_file.setframerate(8000)  # 8kHz sampling rate (default for Twilio)
-        # with open(output_file, "wb") as f:
-        try:
-            while True:
-                data = await websocket.receive_json()
-                if data["event"] in ("connected", "start"):
-                    print(f"Media WS: Received event '{data['event']}'")
-                    continue
-                if data['streamSid'] and not self.sessions[data['streamSid']]['websocket']:
-                    self.sessions[data['streamSid']]['websocket'] = websocket
-                    self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
-                    session = self.sessions[data['streamSid']]
-                    session['deepgram_transcribe_service'].establish_dg_connection()
+                    if data["event"] == "media":
+                        media = data["media"]
+                        chunk = media["payload"]
+                        chunk_bytes = base64.b64decode(chunk)
+                        f.write(chunk_bytes)
+                        await self.twilio_service.enqueue_audio(data['streamSid'], chunk_bytes ,'audio_buffer')
 
-                if data["event"] == "media":
-                    media = data["media"]
-                    chunk = media["payload"]
-                    chunk_bytes = base64.b64decode(chunk)
-                    wav_file.writeframes(chunk_bytes)
-                    await self.twilio_service.enqueue_audio(data['streamSid'], chunk_bytes ,'audio_buffer')
+                    if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'response_buffer'):
+                        print("Processing response buffers...")
+                        response_audio = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'response_buffer')
+                        # await self.twilio_service.send_control_command(session['websocket'], 'stop')
+                        if self.sessions[data['streamSid']]['background_sound'] is True:
+                            await self.stop_stream(data['streamSid'])
+                        session['ai_speaking'] = True
+                        f.write(response_audio)
+                        await self.twilio_service.send_audio_stream(session['websocket'], data['streamSid'], response_audio)
 
-                if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'response_buffer'):
-                    print("Processing response buffers...")
-                    response_audio = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'response_buffer')
-                    # await self.twilio_service.send_control_command(session['websocket'], 'stop')
-                    if self.sessions[data['streamSid']]['background_sound'] is True:
-                        await self.stop_stream(data['streamSid'])
-                    session['ai_speaking'] = True
-                    # f.write(base64.b64decode(response_audio))
-                    await self.twilio_service.send_audio_stream(session['websocket'], data['streamSid'], response_audio)
+                    if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'audio_buffer'):
+                        audio_data = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'audio_buffer')
+                        # await self.transcribe_service.transcribe(audio_data)
+                        await session['deepgram_transcribe_service'].transcribe(audio_data)
 
-                if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'audio_buffer'):
-                    audio_data = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'audio_buffer')
-                    # await self.transcribe_service.transcribe(audio_data)
-                    await session['deepgram_transcribe_service'].transcribe(audio_data)
+                        
 
-                    
+            except ConnectionClosedError as e:
+                print(f"Connection closed with error: {e.code} - {e.reason}")
+            except ConnectionClosedOK as e:
+                print(f"Connection closed normally: {e.code} - {e.reason}")
+            except Exception as e:
+                print("Unexpected error:", e)
+            finally:
+                print("WebSocket connection closed.")
+                conversations = self.chatgpt_service.conversations[session['stream_sid']]
+                agent_id = self.agents[call_id]['id']
+                outputFile= f"recordings/{call_id}.wav"
+                await self.convert_mulaw_to_wav(f"recordings/{call_id}.mulaw", outputFile)
+                # os.remove(output_file)
+                recordingUrl = await self.s3_service.uploadToS3(outputFile)
 
-        except ConnectionClosedError as e:
-            print(f"Connection closed with error: {e.code} - {e.reason}")
-        except ConnectionClosedOK as e:
-            print(f"Connection closed normally: {e.code} - {e.reason}")
-        except Exception as e:
-            print("Unexpected error:", e)
-        finally:
-            print("WebSocket connection closed.")
-            conversations = self.chatgpt_service.conversations[session['stream_sid']]
-            agent_id = self.agents[call_id]['id']
-            outputFile= f"recordings/{call_id}.wav"
-            # self.raw_to_wav(f"recordings/{call_id}.raw", outputFile)
+                data = {
+                    "call_sid" : call_id,
+                    "conversations": conversations,
+                    "recording_url" : recordingUrl,
+                    "agent_id" : agent_id
+                }
+                await self.backend_service.update_conversation_info(data)
+                await websocket.close()
+                # self.transcribe_service.close()  # Close the transcriber service
+        
 
-            data = {
-                "call_sid" : call_id,
-                "conversations": conversations,
-                "recording_url" : f"{settings.base_url}/{output_file}",
-                "agent_id" : agent_id
-            }
-            await self.backend_service.update_conversation_info(data)
-            await websocket.close()
-            # self.transcribe_service.close()  # Close the transcriber service
-    
-
-            self.chatgpt_service.close_conversation(session['stream_sid'])
-            self.twilio_service.remove_stream_from_queue(session['stream_sid'])
-            session['deepgram_transcribe_service'].disconnect()
+                self.chatgpt_service.close_conversation(session['stream_sid'])
+                self.twilio_service.remove_stream_from_queue(session['stream_sid'])
+                session['deepgram_transcribe_service'].disconnect()
 
     def initialize_transcriber(self, call_id: str):
         """Initialize transcriber with bound methods for handling transcripts and user speech."""
@@ -290,46 +298,29 @@ class CallHandler:
             raise ValueError("Unsupported file type. Please upload TXT, DOC/DOCX, or PDF files.")
         
 
-    def pcm_to_wav(self, input_file, output_file, sample_rate=8000, channels=1, sample_width=2):
-        """
-        Converts PCM audio to WAV format.
-        :param input_file: Path to the PCM file.
-        :param output_file: Path to save the WAV file.
-        :param sample_rate: Audio sample rate (default: 8000 for Twilio).
-        :param channels: Number of audio channels (default: 1 for mono).
-        :param sample_width: Bytes per sample (default: 2 for 16-bit audio).
-        """
-        with open(input_file, "rb") as pcm_file:
-            pcm_data = pcm_file.read()
+    async def convert_mulaw_to_wav(self, mulaw_file, wav_file):
+        # Define WAV file settings
+        wav_fp = wave.open(wav_file, 'wb')
+        wav_fp.setnchannels(1)  # Mono channel
+        wav_fp.setsampwidth(2)  # 16-bit samples
+        wav_fp.setframerate(8000)  # 8 kHz sampling rate
 
-        with wave.open(output_file, "wb") as wav_file:
-            wav_file.setnchannels(channels)
-            wav_file.setsampwidth(sample_width)
-            wav_file.setframerate(sample_rate)
-            wav_file.writeframes(pcm_data)
+        # Read the μ-law file
+        with open(mulaw_file, 'rb') as mulaw_fp:
+            while True:
+                chunk = mulaw_fp.read(1024)
+                if not chunk:
+                    break
 
-        print(f"Converted {input_file} to {output_file}")
+                # Convert μ-law to linear PCM
+                pcm_chunk = audioop.ulaw2lin(chunk, 2)
 
-    def raw_to_wav(self, input_file, output_file):
-        # Set parameters (modify based on your audio settings)
-        sample_rate = 8000  # Example: 8000 Hz for telephony audio
-        channels = 1        # Mono audio
-        sample_width = 2    # 16-bit PCM (2 bytes per sample)
+                # Write the PCM chunk to the WAV file
+                wav_fp.writeframes(pcm_chunk)
 
-        # Read and convert raw audio to WAV
-        with open(input_file, "rb") as raw_audio:
-            raw_data = raw_audio.read()
+        wav_fp.close()
 
-        audio_segment = AudioSegment(
-            data=raw_data,
-            sample_width=sample_width,
-            frame_rate=sample_rate,
-            channels=channels
-        )
 
-        # Export to WAV format
-        audio_segment.export(output_file, format="wav")
-        print(f"Audio converted and saved to {output_file}")
         
     async def complete_status_callback(self, data):
         """Handle the stream callback to get the streamSid."""
