@@ -249,7 +249,14 @@ class CallHandler:
             "stream_sid" : stream_sid,
             "call_sid" : call_sid
         }
-        await self.backend_service.update_call_info(data) 
+        await self.backend_service.update_call_info(data)
+        if (self.agents[call_sid]['isAvailable'] == False):
+            await self.synthesize_response('Currenty we are not available, Please contact us in our available time', stream_sid)
+            # Schedule the call to end after 2 seconds
+            timer = Timer(5, self.twilio_service.hangup_call, args=[call_sid])
+            timer.start()
+            return
+
         greetings = self.agents[call_sid]['greetings']
         await self.synthesize_response(greetings, stream_sid)
         

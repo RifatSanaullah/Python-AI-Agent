@@ -122,7 +122,7 @@ class TwilioService:
 
     def hangup_call(self, call_sid):
         response = VoiceResponse()
-        response.say("Thank you. We have gathered all required information. Goodbye!", voice="alice", language="en-US")
+        # response.say("Thank you. We have gathered all required information. Goodbye!", voice="alice", language="en-US")
         response.hangup()
         self.client.calls(call_sid).update(status="completed")
 
