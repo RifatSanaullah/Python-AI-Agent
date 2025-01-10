@@ -12,7 +12,7 @@ import logging
 from datetime import datetime
 from docx import Document
 from PyPDF2 import PdfReader
-from fastapi import UploadFile
+from fastapi import UploadFile, WebSocketDisconnect
 import wave
 from app.config import settings
 from pydub import AudioSegment
@@ -108,27 +108,37 @@ class CallHandler:
                 print("Unexpected error:", e)
             finally:
                 print("WebSocket connection closed.")
-                conversations = self.chatgpt_service.conversations[session['stream_sid']]
-                agent_id = self.agents[call_id]['id']
-                outputFile= f"recordings/{call_id}.wav"
-                await self.convert_mulaw_to_wav(f"recordings/{call_id}.mulaw", outputFile)
-                # os.remove(output_file)
-                recordingUrl = await self.s3_service.uploadToS3(outputFile)
+                if session['stream_sid'] in self.chatgpt_service.conversations:
+                    conversations = self.chatgpt_service.conversations[session['stream_sid']]
+                    agent_id = self.agents[call_id]['id']
+                    outputFile= f"recordings/{call_id}.wav"
+                    await self.convert_mulaw_to_wav(f"recordings/{call_id}.mulaw", outputFile)
+                    # os.remove(output_file)
+                    recordingUrl = await self.s3_service.uploadToS3(outputFile)
 
-                data = {
-                    "call_sid" : call_id,
-                    "conversations": conversations,
-                    "recording_url" : recordingUrl,
-                    "agent_id" : agent_id
-                }
-                await self.backend_service.update_conversation_info(data)
-                await websocket.close()
-                self.transcribe_service.close()  # Close the transcriber service
+                    data = {
+                        "call_sid" : call_id,
+                        "conversations": conversations,
+                        "recording_url" : recordingUrl,
+                        "agent_id" : agent_id
+                    }
+                    self.chatgpt_service.close_conversation(session['stream_sid'])
+                    self.twilio_service.remove_stream_from_queue(session['stream_sid'])
+                    try:
+                        await self.backend_service.update_conversation_info(data)
+                    except Exception as e:
+                        print(e)
+                    
+
+                # session['deepgram_transcribe_service'].disconnect()
+                session['transcribe_service'].close()  # Close the transcriber service
+                try:
+                     await websocket.close()
+                except Exception as e:
+                    print("--Websocket connection Closed--")
         
 
-                self.chatgpt_service.close_conversation(session['stream_sid'])
-                self.twilio_service.remove_stream_from_queue(session['stream_sid'])
-                session['deepgram_transcribe_service'].disconnect()
+
 
     def initialize_transcriber(self, call_id: str, Service : TranscribeService | DeepgramService):
         """Initialize transcriber with bound methods for handling transcripts and user speech."""
@@ -162,16 +172,16 @@ class CallHandler:
         print(f"Transcript: {transcript}")
         # await self.enable_background_sound(call_id, True)
         response = await self.chatgpt_service.generate_response(call_id, transcript, self.synthesize_response, self.get_agent_knowledge)
-        if 'End Call Message:' in response:
+        if 'End Call Message' in response:
             self.sessions[call_id]['end_call'] = True
-            response = response.replace('End Call Message:', '')
+            response = response.replace('End Call Message', '')
             # Schedule the call to end after 2 seconds
             timer = Timer(10, self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
             timer.start()
             
-        if 'Routing Message:' in response:
+        if 'Routing Message' in response:
             self.sessions[call_id]['route_call'] = True
-            response = response.replace('Routing Message:', '')
+            response = response.replace('Routing Message', '')
             # Schedule the call to end after 2 seconds
             timer = Timer(10, self.twilio_service.redirect_call, args=[self.sessions[call_id]['call_sid'] ,self.agents[self.sessions[call_id]['call_sid']]['routingInfo']['routingNumber']])
             timer.start()
