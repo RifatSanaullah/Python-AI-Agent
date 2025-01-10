@@ -2,11 +2,12 @@ import assemblyai as aai
 import asyncio
 
 class TranscribeService:
-    def __init__(self, on_transcript=None):
+    def __init__(self, on_transcript=None,on_start=None):
         self.api_key = "9576f4ea99e14b90a1c6ee4100b4536f"
         aai.settings.api_key = self.api_key
         self.on_transcript = on_transcript  # Store the callback function
         self.transcriber = None
+        self.on_start = on_start
               
     def connect(self):
         self.transcriber = aai.RealtimeTranscriber(
@@ -36,7 +37,7 @@ class TranscribeService:
         "Called when a new transcript has been received."
         if not transcript.text:
             return
-
+        asyncio.run(self.on_start())
         if isinstance(transcript, aai.RealtimeFinalTranscript):
             print(transcript.text, end="\r\n")
             if self.on_transcript:

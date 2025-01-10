@@ -46,11 +46,13 @@ class CallHandler:
         await websocket.accept()
         session = {
                 "deepgram_transcribe_service": None,
+                "transcribe_service": None,
                 "ai_speaking": False,
                 "stream_sid": None,
                 "background_sound": None,
                 "end_call": False,
         }
+
         output_file = f"recordings/{call_id}.mulaw"
         # Open μ-law raw file for writing
         with open(output_file, 'wb') as mulaw_fp:
@@ -70,7 +72,9 @@ class CallHandler:
                         self.sessions[data['streamSid']]['websocket'] = websocket
                         self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
                         session = self.sessions[data['streamSid']]
-                        session['deepgram_transcribe_service'].establish_dg_connection()
+                        # session['deepgram_transcribe_service'].establish_dg_connection()
+                        session['transcribe_service'].connect()
+
 
                     if data["event"] == "media":
                         media = data["media"]
@@ -92,7 +96,7 @@ class CallHandler:
                     if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'audio_buffer'):
                         audio_data = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'audio_buffer')
                         # await self.transcribe_service.transcribe(audio_data)
-                        await session['deepgram_transcribe_service'].transcribe(audio_data)
+                        await session['transcribe_service'].transcribe(audio_data)
 
                         
 
@@ -119,16 +123,16 @@ class CallHandler:
                 }
                 await self.backend_service.update_conversation_info(data)
                 await websocket.close()
-                # self.transcribe_service.close()  # Close the transcriber service
+                self.transcribe_service.close()  # Close the transcriber service
         
 
                 self.chatgpt_service.close_conversation(session['stream_sid'])
                 self.twilio_service.remove_stream_from_queue(session['stream_sid'])
                 session['deepgram_transcribe_service'].disconnect()
 
-    def initialize_transcriber(self, call_id: str):
+    def initialize_transcriber(self, call_id: str, Service : TranscribeService | DeepgramService):
         """Initialize transcriber with bound methods for handling transcripts and user speech."""
-        return DeepgramService(
+        return Service(
             on_transcript=self.create_on_transcript_handler(call_id),
             on_start=self.create_on_user_speech_handler(call_id),
         )
@@ -214,7 +218,8 @@ class CallHandler:
         # Initialize a session for this specific call
         if stream_sid not in self.sessions:
             self.sessions[stream_sid]={
-                "deepgram_transcribe_service": self.initialize_transcriber(stream_sid),
+                "deepgram_transcribe_service": self.initialize_transcriber(stream_sid, DeepgramService),
+                "transcribe_service" : self.initialize_transcriber(stream_sid, TranscribeService),
                 "ai_speaking": False,
                 "stream_sid": stream_sid,
                 "background_sound": None,
