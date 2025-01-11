@@ -124,6 +124,9 @@ class CallHandler:
                     }
                     self.chatgpt_service.close_conversation(session['stream_sid'])
                     self.twilio_service.remove_stream_from_queue(session['stream_sid'])
+                    del self.sessions[session['stream_sid']]
+                    del self.agents[call_id]
+
                     try:
                         await self.backend_service.update_conversation_info(data)
                     except Exception as e:
