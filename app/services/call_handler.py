@@ -171,11 +171,16 @@ class CallHandler:
             await self.stop_stream(call_id)
             self.sessions[call_id]['ai_speaking'] = False
 
+    def contains_any_word(self, text):
+        # Check if any word in the array exists in the text
+        word_list = ['Bye','bye','goodbye','Goodbye','Have a nice day','Have a great day']
+        return any(word in text for word in word_list)
+    
     async def handle_transcript(self, transcript, call_id):
         print(f"Transcript: {transcript}")
         # await self.enable_background_sound(call_id, True)
         response = await self.chatgpt_service.generate_response(call_id, transcript, self.synthesize_response, self.get_agent_knowledge)
-        if 'End Call Message' in response:
+        if 'End Call Message' in response or self.contains_any_word(transcript) or  self.contains_any_word(response):
             self.sessions[call_id]['end_call'] = True
             response = response.replace('End Call Message', '')
             # Schedule the call to end after 2 seconds

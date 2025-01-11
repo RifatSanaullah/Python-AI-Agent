@@ -13,7 +13,7 @@ class TranscribeService:
         self.transcriber = aai.RealtimeTranscriber(
             sample_rate=8000, 
             encoding=aai.AudioEncoding.pcm_mulaw,
-            end_utterance_silence_threshold=2000,
+            end_utterance_silence_threshold=1800,
             on_data=self.on_data,
             on_error=self.on_error,
             on_open=self.on_open,
