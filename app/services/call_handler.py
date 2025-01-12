@@ -179,6 +179,8 @@ class CallHandler:
     async def handle_transcript(self, transcript, call_id):
         print(f"Transcript: {transcript}")
         # await self.enable_background_sound(call_id, True)
+        if call_id not in self.sessions:
+            return
         response = await self.chatgpt_service.generate_response(call_id, transcript, self.synthesize_response, self.get_agent_knowledge)
         if 'End Call Message' in response or self.contains_any_word(transcript) or  self.contains_any_word(response):
             self.sessions[call_id]['end_call'] = True

@@ -1,7 +1,8 @@
 # app/services/chatgpt_service.py
 import openai
 from app.config import settings
-
+# Import date class from datetime module
+from datetime import date
 class ChatGPTService:
     def __init__(self):
         openai.api_key = settings.chatgpt_api_key
@@ -24,6 +25,7 @@ class ChatGPTService:
                 {"role": "system", "content": "Whenever you get any answer and if you left any query. Ask instantly don't wait for querying from user."},
                 {"role": "system", "content": "Before Ending the call you have to reclarify all the information you gather with user"},
                 {"role": "system", "content": "From the below knowledge data there will have a end call message. So you should finish the call when all the queries answered and deliver then end call message start with : End Call Message."},
+                {"role": "system", "content": f"Current Date is: {date.today()}. If you gather any input in tomorrow or yesterday then response any date information in this format : 01 january 1970 with the time and if input only time then use use the time with current date"},
         ]
 
         if not knowledge_base:
