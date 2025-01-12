@@ -167,14 +167,14 @@ class CallHandler:
         self.sessions[call_id]['background_sound'] = False
 
     async def on_user_speech(self, call_id):
-        if self.sessions[call_id]['ai_speaking']:
+        if call_id in self.sessions and self.sessions[call_id]['ai_speaking']:
             await self.stop_stream(call_id)
             self.sessions[call_id]['ai_speaking'] = False
 
-    def contains_any_word(self, text):
+    def contains_any_word(self, text:str):
         # Check if any word in the array exists in the text
-        word_list = ['Bye','bye','goodbye','Goodbye','Have a nice day','Have a great day']
-        return any(word in text for word in word_list)
+        word_list = ['Bye','Goodbye','Have a nice day','Have a great day','Have a wonderful day']
+        return any(word.lower() in text.lower() for word in word_list)
     
     async def handle_transcript(self, transcript, call_id):
         print(f"Transcript: {transcript}")
