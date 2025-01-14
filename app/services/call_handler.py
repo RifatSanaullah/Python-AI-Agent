@@ -125,7 +125,7 @@ class CallHandler:
                     self.chatgpt_service.close_conversation(session['stream_sid'])
                     self.twilio_service.remove_stream_from_queue(session['stream_sid'])
                     del self.sessions[session['stream_sid']]
-                    del self.agents[call_id]
+                    # del self.agents[call_id]
 
                     try:
                         await self.backend_service.update_conversation_info(data)
@@ -193,7 +193,13 @@ class CallHandler:
             self.sessions[call_id]['route_call'] = True
             response = response.replace('Routing Message', '')
             # Schedule the call to end after 2 seconds
-            timer = Timer(10, self.twilio_service.redirect_call, args=[self.sessions[call_id]['call_sid'] ,self.agents[self.sessions[call_id]['call_sid']]['routingInfo']['routingNumber']])
+            timer = Timer(10, self.twilio_service.redirect_call, 
+                          args=[
+                            self.sessions[call_id]['call_sid'],
+                            self.agents[self.sessions[call_id]['call_sid']]['routingInfo']['routingNumber'],
+                            self.agents[self.sessions[call_id]['call_sid']]['agentNumber']
+                            ]
+                        )
             timer.start()
 
         print(f"Response: {response}")
@@ -253,6 +259,8 @@ class CallHandler:
         print("Handling call...")
         api_response = await self.backend_service.create_call_info(data)
         self.agents[call_id] = api_response['data']['agent']
+        self.agents[call_id]['receipent'] = data['from']
+        self.agents[call_id]['agentNumber'] = data['to']
         response = self.twilio_service.initialize_call(call_id)
         # self.transcribe_service.connect()  # Connect the transcriber service
         # await self.initialize_session_info(call_id)
