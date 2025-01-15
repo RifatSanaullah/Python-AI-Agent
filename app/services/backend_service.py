@@ -1,4 +1,3 @@
-
 import httpx
 from app.config import settings
 from typing import Any, Dict
@@ -20,9 +19,9 @@ class BackendHandler:
             return response.json()
 
         except httpx.HTTPStatusError as e:
-            raise RuntimeError(f"HTTP error while calling backend: {e.response.status_code} {e.response.text}")
+            print(f"HTTP error while calling backend: {e.response.status_code} {e.response.text}")
         except httpx.RequestError as e:
-            raise RuntimeError(f"Request error while calling backend: {str(e)}")
+            print(f"Request error while calling backend: {str(e)}")
 
     async def create_call_info(self, data: Dict[str, Any]) -> Dict[str, Any]:
 
@@ -35,9 +34,9 @@ class BackendHandler:
             return response.json()
 
         except httpx.HTTPStatusError as e:
-            raise RuntimeError(f"HTTP error while calling backend: {e.response.status_code} {e.response.text}")
+            print(f"HTTP error while calling backend: {e.response.status_code} {e.response.text}")
         except httpx.RequestError as e:
-            raise RuntimeError(f"Request error while calling backend: {str(e)}")
+            print(f"Request error while calling backend: {str(e)}")
 
 
     async def update_call_info(self,data: Dict[str, Any]) -> Dict[str, Any]:
@@ -51,9 +50,9 @@ class BackendHandler:
             return response.json()
 
         except httpx.HTTPStatusError as e:
-            raise RuntimeError(f"HTTP error while calling backend: {e.response.status_code} {e.response.text}")
+            print(f"HTTP error while calling backend: {e.response.status_code} {e.response.text}")
         except httpx.RequestError as e:
-            raise RuntimeError(f"Request error while calling backend: {str(e)}")
+            print(f"Request error while calling backend: {str(e)}")
         
     async def update_conversation_info(self, data: Dict[str, Any]) -> Dict[str, Any]:
 
@@ -66,6 +65,6 @@ class BackendHandler:
             return response.json()
 
         except httpx.HTTPStatusError as e:
-            raise RuntimeError(f"HTTP error while calling backend: {e.response.status_code} {e.response.text}")
+            print(f"HTTP error while calling backend: {e.response.status_code} {e.response.text}")
         except httpx.RequestError as e:
-            raise RuntimeError(f"Request error while calling backend: {str(e)}")
+            print(f"Request error while calling backend: {str(e)}")

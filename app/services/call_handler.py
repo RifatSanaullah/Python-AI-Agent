@@ -337,7 +337,8 @@ class CallHandler:
 
         else:
             # Unsupported file type
-            raise ValueError("Unsupported file type. Please upload TXT, DOC/DOCX, or PDF files.")
+            print("Unsupported file type. Please upload TXT, DOC/DOCX, or PDF files.")
+            return None
         
 
     async def convert_mulaw_to_wav(self, mulaw_file, wav_file):
