@@ -209,6 +209,8 @@ class CallHandler:
         return {        
             "knowledge" : self.agents[self.sessions[call_id]['call_sid']]['knowledge'],
             "aiInstructions" : self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'],
+            "agentName" : self.agents[self.sessions[call_id]['call_sid']]['name'],
+            "gender" : self.agents[self.sessions[call_id]['call_sid']]['voice']['gender'],
         }
 
     def chunk_text(self, text, chunk_size):

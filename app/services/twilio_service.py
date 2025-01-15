@@ -138,9 +138,16 @@ class TwilioService:
     def redirect_call(self, call_sid, new_number, callerId):
         try:
             # Update the ongoing call to forward it
+            # call = self.client.calls(call_sid).update(
+            #     method='POST',
+            #     url=f"{settings.ai_backend_url}/call/forward-call?newNumber={new_number}&callerId={callerId}"
+            # )
             call = self.client.calls(call_sid).update(
-                method='POST',
-                url=f"{settings.ai_backend_url}/call/forward-call?newNumber={new_number}&callerId={callerId}"
+                twiml=f"""
+                <Response>
+                    <Dial callerId="{callerId}">{new_number}</Dial>
+                </Response>
+                """
             )
             print(f"Call redirected to {new_number}, Status: {call.status}")
         except Exception as e:
