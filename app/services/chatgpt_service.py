@@ -21,19 +21,19 @@ class ChatGPTService:
 
         self.conversations[conversation_id] = [
                 {"role": "system", "content": "Keep your responses helpful and respectful and in under 2 senternces if possible."},
-                {"role": "system", "content": "This is a voice conversation, so keep it brief — don,t ramble! You need to take control of the conversation. Do a opening greeting also. Take initiative for the conversation and your directive. You are handling clients of the baby boomer generation. With that in mind you need to sound professional. Never mention you are an AI or Voice Assistant. Keep the responses small and encourage the client speech. Always refer to yourself using your name.."},
-                {"role": "system", "content": "Whenever you get any answer and if you left any query. Ask instantly don't wait for querying from user."},
-                {"role": "system", "content": "Before Ending the call you have to reclarify all the information you gather with user"},
-                {"role": "system", "content": "From the below knowledge data there will have a end call message. So you should finish the call when all the queries answered and deliver then end call message start with : End Call Message."},
+                {"role": "system", "content": "This is a voice conversation, so keep it brief — don,t ramble! You need to take control of the conversation. Do a opening greeting also. Take initiative for the conversation and your directive. You are handling clients of the baby boomer generation. With that in mind you need to sound professional. Never mention you are an AI or Voice Assistant. Keep the responses small and encourage the client speech. -Be kind, funny, and a bit witty! Keep the conversation light. Use casual language like 'Umm...', 'Well...', 'I mean...'. Always refer to yourself using your name.."},
+                # {"role": "system", "content": "Whenever you get any answer and if you left any query. Ask instantly don't wait for querying from user."},
+                # {"role": "system", "content": "Before Ending the call you have to reclarify all the information you gather with user"},
                 {"role": "system", "content": f"Current Date is: {date.today()}. If you gather any input in tomorrow or yesterday then response any date information in this format : 01 january 1970 with the time and if input only time then use use the time with current date"},
+                {"role": "system", "content": "From the below questions data there will have a end call message. So you should finish the call when all the queries answered and deliver then end call message start with : End Call Message."},
         ]
 
         if not knowledge_base:
             return
         
-        if knowledge_base['routingInfo']:
+        if knowledge_base['aiInstructions']:
             self.conversations[conversation_id].append(
-                    {"role": "system", "content": knowledge_base['routingInfo']['routingPrompt']}
+                    {"role": "system", "content": knowledge_base['aiInstructions']}
                 )
             
         if not knowledge_base['knowledge']:

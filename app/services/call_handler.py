@@ -208,7 +208,7 @@ class CallHandler:
     async def get_agent_knowledge(self, call_id):
         return {        
             "knowledge" : self.agents[self.sessions[call_id]['call_sid']]['knowledge'],
-            "routingInfo" : self.agents[self.sessions[call_id]['call_sid']]['routingInfo'],
+            "aiInstructions" : self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'],
         }
 
     def chunk_text(self, text, chunk_size):
