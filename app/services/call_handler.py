@@ -110,12 +110,11 @@ class CallHandler:
                 print("WebSocket connection closed.")
                 if session['stream_sid'] in self.chatgpt_service.conversations:
                     conversations = self.chatgpt_service.conversations[session['stream_sid']]
-                    agent_id = self.agents[call_id]['id']
                     outputFile= f"recordings/{call_id}.wav"
                     await self.convert_mulaw_to_wav(f"recordings/{call_id}.mulaw", outputFile)
                     # os.remove(output_file)
                     recordingUrl = await self.s3_service.uploadToS3(outputFile)
-
+                    agent_id = self.agents[call_id]['id']
                     data = {
                         "call_sid" : call_id,
                         "conversations": conversations,
@@ -125,13 +124,14 @@ class CallHandler:
                     self.chatgpt_service.close_conversation(session['stream_sid'])
                     self.twilio_service.remove_stream_from_queue(session['stream_sid'])
                     del self.sessions[session['stream_sid']]
-                    # del self.agents[call_id]
 
                     try:
                         await self.backend_service.update_conversation_info(data)
                     except Exception as e:
                         print(e)
-                    
+                        
+                    self.agents[call_id]['websocket_closed'] = True
+                    self.flush_agent(call_id)
 
                 # session['deepgram_transcribe_service'].disconnect()
                 session['transcribe_service'].close()  # Close the transcriber service
@@ -183,27 +183,30 @@ class CallHandler:
             return
         response = await self.chatgpt_service.generate_response(call_id, transcript, self.synthesize_response, self.get_agent_knowledge)
         if 'End Call Message' in response or self.contains_any_word(transcript) or  self.contains_any_word(response):
-            self.sessions[call_id]['end_call'] = True
+            self.agents[self.sessions[call_id]['call_sid']]['end_call'] = True
             response = response.replace('End Call Message', '')
             # Schedule the call to end after 2 seconds
             timer = Timer(10, self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
             timer.start()
             
         if 'Routing Message' in response:
-            self.sessions[call_id]['route_call'] = True
             response = response.replace('Routing Message', '')
             # Schedule the call to end after 2 seconds
             timer = Timer(10, self.twilio_service.redirect_call, 
                           args=[
                             self.sessions[call_id]['call_sid'],
                             self.agents[self.sessions[call_id]['call_sid']]['routingInfo']['routingNumber'],
-                            self.agents[self.sessions[call_id]['call_sid']]['agentNumber']
+                            self.call_routed
                             ]
                         )
             timer.start()
 
         print(f"Response: {response}")
         await self.synthesize_response(response, call_id)
+
+    def call_routed(self, call_id):
+        self.agents[call_id]['route_call'] = True
+
 
     async def get_agent_knowledge(self, call_id):
         return {        
@@ -253,8 +256,6 @@ class CallHandler:
                 "background_sound": None,
                 "websocket" : None,
                 "call_sid" : call_sid,
-                "end_call" : False,
-                "route_call" : False,
             }
         
     async def handle_call(self, call_id: str, data):
@@ -262,7 +263,8 @@ class CallHandler:
         api_response = await self.backend_service.create_call_info(data)
         self.agents[call_id] = api_response['data']['agent']
         self.agents[call_id]['receipent'] = data['from']
-        self.agents[call_id]['agentNumber'] = data['to']
+        self.agents[call_id]['complete_call'] = False
+        self.agents[call_id]['websocket_closed'] = False
         response = self.twilio_service.initialize_call(call_id)
         # self.transcribe_service.connect()  # Connect the transcriber service
         # await self.initialize_session_info(call_id)
@@ -372,7 +374,38 @@ class CallHandler:
         call_direction = data.get("Direction")
         call_status = data.get("CallStatus")
         time_stamp = data.get("Timestamp")
+        resolution_status= 'RESOLVED'
         # self.sessions[call_sid]['stream_sid'] = stream_sid
+        agent_id = self.agents[call_sid]['id']
+        if call_sid in self.agents and "route_call" in self.agents[call_sid] and self.agents[call_sid]['route_call'] == True:
+            resolution_status = 'ROUTED'
+            
+        data= {
+            "duration" : call_duration,
+            "direction": call_direction,
+            "status": call_status,
+            "call_sid" : call_sid,
+            "agent_id" : agent_id,
+            "timestamp" : time_stamp,
+            "resolution_status": resolution_status
+
+        }
+        await self.backend_service.update_call_info(data)
+        self.agents[call_sid]['complete_call'] = True
+        self.flush_agent(call_sid)
+        return "OK", 200
+    
+    def flush_agent(self, call_sid):
+        if self.agents[call_sid]['complete_call'] == True and self.agents[call_sid]['websocket_closed'] == True:
+            del self.agents[call_sid]
+    
+    async def fallback_status_callback(self, data):
+        call_sid = data.get("CallSid")
+        call_duration = data.get("CallDuration")
+        call_direction = data.get("Direction")
+        call_status = 'FAILED'
+        time_stamp = data.get("Timestamp")
+        resolution_status= 'FAILED'
         agent_id = self.agents[call_sid]['id']
         data= {
             "duration" : call_duration,
@@ -381,10 +414,10 @@ class CallHandler:
             "call_sid" : call_sid,
             "agent_id" : agent_id,
             "timestamp" : time_stamp,
+            "resolution_status": resolution_status
 
         }
         await self.backend_service.update_call_info(data) 
-        return "OK", 200
 
 
 

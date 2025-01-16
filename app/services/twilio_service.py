@@ -135,7 +135,7 @@ class TwilioService:
         return call.sid
     
     # Function to redirect an ongoing call
-    def redirect_call(self, call_sid, new_number, callerId):
+    def redirect_call(self, call_sid, new_number, call_routed):
         try:
             # Update the ongoing call to forward it
             # call = self.client.calls(call_sid).update(
@@ -145,10 +145,11 @@ class TwilioService:
             call = self.client.calls(call_sid).update(
                 twiml=f"""
                 <Response>
-                    <Dial callerId="{callerId}">{new_number}</Dial>
+                    <Dial callerId="{new_number}">{new_number}</Dial>
                 </Response>
                 """
             )
+            call_routed(call_sid)
             print(f"Call redirected to {new_number}, Status: {call.status}")
         except Exception as e:
             print(f"Error redirecting call: {e}")

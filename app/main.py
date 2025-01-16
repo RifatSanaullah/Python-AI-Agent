@@ -83,4 +83,4 @@ async def complete_status_callback(request: Request, call_handler: CallHandler =
 @app.post("/fallback_status_callback")
 async def fallback_status_callback(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
     data = await request.form()
-    print(data)
+    return await call_handler.fallback_status_callback(data)
