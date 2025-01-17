@@ -17,12 +17,6 @@ class TwilioService:
         self.client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
         self.audio_buffer = asyncio.Queue()
         self.response_buffer = asyncio.Queue()
-        self.active_calls = {}
-        self.fields_needed = {
-            "name": None,
-            "email": None,
-            "phone_number": None,
-        }
         self.background_sound = None
         # A dictionary to dynamically store queues by their unique IDs
         self.queue_map = {}
@@ -63,24 +57,19 @@ class TwilioService:
     def initialize_call(self, call_sid):
         """Initialize the call state with required fields."""
         print("Initializing call...")
-        if (call_sid not in self.active_calls):
-            self.active_calls[call_sid] = {
-                "fields_needed": self.fields_needed.copy(),
-                "is_complete": False
-            }
-            response = VoiceResponse()
-            # response.record(recording_status_callback=f"{settings.base_url}/recording_status_callback")
-            connect = Connect()
-            connect.stream(
-                url=f"wss://{settings.domain}/audio-stream/{call_sid}",
-                status_callback=f"{settings.base_url}/stream_callback",
-                status_callback_method="POST",
-            )
-            
-            print("Call initialized.")
-            response.append(connect)
+        response = VoiceResponse()
+        # response.record(recording_status_callback=f"{settings.base_url}/recording_status_callback")
+        connect = Connect()
+        connect.stream(
+            url=f"wss://{settings.domain}/audio-stream/{call_sid}",
+            status_callback=f"{settings.base_url}/stream_callback",
+            status_callback_method="POST",
+        )
+        
+        print("Call initialized.")
+        response.append(connect)
 
-            return response
+        return response
         
     # Helper function to read the WAV file and loop it
     async def get_background_sound(self):
