@@ -81,7 +81,11 @@ class CallHandler:
                         chunk = media["payload"]
                         chunk_bytes = base64.b64decode(chunk)
                         f.write(chunk_bytes)
-                        await self.twilio_service.enqueue_audio(data['streamSid'], chunk_bytes ,'audio_buffer')
+                        if ('route_call' not in self.agents[call_id] 
+                            or self.agents[call_id]['route_call'] == False 
+                            or 'end_call' not in self.agents[call_id]
+                            or self.agents[call_id]['end_call'] == False ):
+                            await self.twilio_service.enqueue_audio(data['streamSid'], chunk_bytes ,'audio_buffer')
 
                     if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'response_buffer'):
                         print("Processing response buffers...")
@@ -209,12 +213,15 @@ class CallHandler:
 
 
     async def get_agent_knowledge(self, call_id):
-        return {        
+        data =  {        
             "knowledge" : self.agents[self.sessions[call_id]['call_sid']]['knowledge'],
             "aiInstructions" : self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'],
             "agentName" : self.agents[self.sessions[call_id]['call_sid']]['name'],
             "gender" : self.agents[self.sessions[call_id]['call_sid']]['voice']['gender'],
         }
+        self.agents[self.sessions[call_id]['call_sid']]['knowledge'] = None
+        self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'] = None
+        return data
 
     def chunk_text(self, text, chunk_size):
         chunks = []
