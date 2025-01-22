@@ -20,12 +20,14 @@ from threading import Timer
 import numpy as np
 import audioop
 import os
-# Configure logginga
+
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     # format='%(asctime)s.%(msecs)03d - %(levelname)s - %(message)s',
     # datefmt='%Y-%m-%d %H:%M:%S'
 )
+
 class CallHandler:
     def __init__(self):
         self.twilio_service = TwilioService()
@@ -39,28 +41,24 @@ class CallHandler:
 
     def get_business_agent(self, call_id: str):
         """Retrieve specific AI agent/business logic based on the dialed number."""
-
         return self.agents[call_id]
-    
+
     async def process_input(self, call_id, websocket):
         await websocket.accept()
         session = {
-                "deepgram_transcribe_service": None,
-                "transcribe_service": None,
-                "ai_speaking": False,
-                "stream_sid": None,
-                "background_sound": None,
-                "end_call": False,
+            "deepgram_transcribe_service": None,
+            "transcribe_service": None,
+            "ai_speaking": False,
+            "stream_sid": None,
+            "background_sound": None,
+            "end_call": False,
         }
 
         output_file = f"recordings/{call_id}.mulaw"
         # Open μ-law raw file for writing
         with open(output_file, 'wb') as mulaw_fp:
             pass  # Placeholder to ensure the file is created
-        # wav_file = wave.open(output_file, 'wb')
-        # wav_file.setnchannels(1)  # Mono audio
-        # wav_file.setsampwidth(2)  # 16-bit audio
-        # wav_file.setframerate(8000)  # 8kHz sampling rate (default for Twilio)
+
         with open(output_file, "ab") as f:
             try:
                 while True:
@@ -74,7 +72,6 @@ class CallHandler:
                         session = self.sessions[data['streamSid']]
                         # session['deepgram_transcribe_service'].establish_dg_connection()
                         session['transcribe_service'].connect()
-
 
                     if data["event"] == "media":
                         media = data["media"]
@@ -101,8 +98,6 @@ class CallHandler:
                         audio_data = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'audio_buffer')
                         # await self.transcribe_service.transcribe(audio_data)
                         await session['transcribe_service'].transcribe(audio_data)
-
-                        
 
             except ConnectionClosedError as e:
                 print(f"Connection closed with error: {e.code} - {e.reason}")
@@ -143,9 +138,6 @@ class CallHandler:
                     await websocket.close()
                 except Exception as e:
                     print("--Websocket connection Closed--")
-        
-
-
 
     def initialize_transcriber(self, call_id: str, Service : TranscribeService | DeepgramService):
         """Initialize transcriber with bound methods for handling transcripts and user speech."""
@@ -211,7 +203,6 @@ class CallHandler:
     def call_routed(self, call_id):
         self.agents[call_id]['route_call'] = True
 
-
     async def get_agent_knowledge(self, call_id):
         data =  {        
             "knowledge" : self.agents[self.sessions[call_id]['call_sid']]['knowledge'],
@@ -239,7 +230,7 @@ class CallHandler:
     
     async def synthesize_response(self, text: str, call_id):
         session = self.sessions.get(call_id)
-        if not session:
+        if not session or not text or text == '':
             return
         start_time = datetime.now()
         # audio_stream = await self.polly_service.stream_text_to_speech(chunk)
@@ -307,7 +298,6 @@ class CallHandler:
         return "OK", 200
     
     async def enable_background_sound(self ,call_id, status = False):
-
         self.sessions[call_id]['background_sound'] = status
         if status is True:
             if not self.twilio_service.background_sound:
@@ -348,7 +338,6 @@ class CallHandler:
             # Unsupported file type
             print("Unsupported file type. Please upload TXT, DOC/DOCX, or PDF files.")
             return None
-        
 
     async def convert_mulaw_to_wav(self, mulaw_file, wav_file):
         # Define WAV file settings
@@ -372,8 +361,6 @@ class CallHandler:
 
         wav_fp.close()
 
-
-        
     async def complete_status_callback(self, data):
         """Handle the stream callback to get the streamSid."""
         print(data)
@@ -387,7 +374,6 @@ class CallHandler:
         if call_status in ["completed", "failed", "busy"]:
             # Ensure the call is fully disconnected
             self.twilio_service.client.calls(call_sid).update(status='completed')
-            self.flush_agent(call_sid)
             print(f"Call {call_sid} cleaned up.")
 
         # self.sessions[call_sid]['stream_sid'] = stream_sid
@@ -413,6 +399,7 @@ class CallHandler:
     def flush_agent(self, call_sid):
         if self.agents[call_sid]['complete_call'] == True and self.agents[call_sid]['websocket_closed'] == True:
             del self.agents[call_sid]
+            del self
     
     async def fallback_status_callback(self, data):
         call_sid = data.get("CallSid")
@@ -432,7 +419,4 @@ class CallHandler:
             "resolution_status": resolution_status
 
         }
-        await self.backend_service.update_call_info(data) 
-
-
-
+        await self.backend_service.update_call_info(data)

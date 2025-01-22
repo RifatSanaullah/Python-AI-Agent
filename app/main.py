@@ -18,7 +18,16 @@ app = FastAPI(
 
 
 # Create a global CallHandler instance
-call_handler_instance = CallHandler()
+call_handler_instance = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global call_handler_instance
+    call_handler_instance = CallHandler()
+    yield
+    # Cleanup code if needed
+
+app.router.lifespan_context = lifespan
 
 
 def get_call_handler():
