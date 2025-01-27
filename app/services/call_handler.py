@@ -188,7 +188,7 @@ class CallHandler:
         if 'Routing Message' in response:
             response = response.replace('Routing Message', '')
             # Schedule the call to end after 2 seconds
-            timer = Timer(10, self.twilio_service.redirect_call, 
+            timer = Timer(10, self.twilio_service.redirect_call,
                           args=[
                             self.sessions[call_id]['call_sid'],
                             self.agents[self.sessions[call_id]['call_sid']]['routingInfo']['routingNumber'],
