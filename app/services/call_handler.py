@@ -371,7 +371,7 @@ class CallHandler:
         time_stamp = data.get("Timestamp")
         resolution_status= 'RESOLVED'
 
-        if call_status in ["completed", "failed", "busy"]:
+        if call_status in ["failed", "busy"]:
             # Ensure the call is fully disconnected
             self.twilio_service.client.calls(call_sid).update(status='completed')
             print(f"Call {call_sid} cleaned up.")
@@ -389,7 +389,6 @@ class CallHandler:
             "agent_id" : agent_id,
             "timestamp" : time_stamp,
             "resolution_status": resolution_status
-
         }
         await self.backend_service.update_call_info(data)
         self.agents[call_sid]['complete_call'] = True
@@ -418,4 +417,8 @@ class CallHandler:
             "resolution_status": resolution_status
 
         }
+
+        self.twilio_service.client.calls(call_sid).update(status='completed')
+        print(f"Call {call_sid} cleaned up.")
+
         await self.backend_service.update_call_info(data)
