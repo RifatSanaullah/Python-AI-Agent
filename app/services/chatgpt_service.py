@@ -74,6 +74,9 @@ class ChatGPTService:
                     if len(chunk_reply) > self.max_chunk_size:
                         await synthesize_response(chunk_reply, conversation_id)
                         chunk_reply=''
+                        
+        if chunk_reply and chunk_reply != '':
+            await synthesize_response(chunk_reply, conversation_id)
                     
         self.add_message(conversation_id, "assistant", assistant_reply)
         return assistant_reply

@@ -198,7 +198,7 @@ class CallHandler:
             timer.start()
 
         print(f"Response: {response}")
-        await self.synthesize_response(response, call_id)
+        # await self.synthesize_response(response, call_id)
 
     def call_routed(self, call_id):
         self.agents[call_id]['route_call'] = True
@@ -399,7 +399,6 @@ class CallHandler:
     def flush_agent(self, call_sid):
         if self.agents[call_sid]['complete_call'] == True and self.agents[call_sid]['websocket_closed'] == True:
             del self.agents[call_sid]
-            del self
     
     async def fallback_status_callback(self, data):
         call_sid = data.get("CallSid")
