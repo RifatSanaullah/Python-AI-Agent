@@ -73,6 +73,9 @@ class CallHandler:
                         # session['deepgram_transcribe_service'].establish_dg_connection()
                         session['transcribe_service'].connect()
 
+                    if data['streamSid'] not in self.sessions or 'call_sid' not in self.sessions[data['streamSid']]:
+                        continue
+
                     if data["event"] == "media":
                         media = data["media"]
                         chunk = media["payload"]
@@ -83,6 +86,7 @@ class CallHandler:
                             or 'end_call' not in self.agents[call_id]
                             or self.agents[call_id]['end_call'] == False ):
                             await self.twilio_service.enqueue_audio(data['streamSid'], chunk_bytes ,'audio_buffer')
+
 
                     if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'response_buffer'):
                         print("Processing response buffers...")
@@ -175,8 +179,9 @@ class CallHandler:
     async def handle_transcript(self, transcript, call_id):
         print(f"Transcript: {transcript}")
         # await self.enable_background_sound(call_id, True)
-        if call_id not in self.sessions:
+        if call_id not in self.sessions or 'call_sid' not in self.sessions[call_id]:
             return
+
         response = await self.chatgpt_service.generate_response(call_id, transcript, self.synthesize_response, self.get_agent_knowledge)
         if 'End Call Message' in response or self.contains_any_word(transcript) or  self.contains_any_word(response):
             self.agents[self.sessions[call_id]['call_sid']]['end_call'] = True
