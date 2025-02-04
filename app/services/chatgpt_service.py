@@ -21,7 +21,7 @@ class ChatGPTService:
 
         self.conversations[conversation_id] = [
                 {"role": "system", "content": "Keep your responses helpful and respectful and in under 2 senternces if possible."},
-                {"role": "system", "content": f"This is a voice conversation, so keep it brief — don,t ramble! You need to take control of the conversation. Do a opening greeting also. Take initiative for the conversation and your directive. You are handling clients of the baby boomer generation. With that in mind you need to sound professional. Never mention you are an AI or Voice Assistant. Keep the responses small and encourage the client speech. -Be kind, funny, and a bit witty! Keep the conversation light. Use casual language like 'Umm...', 'Well...', 'I mean...'. Always refer to yourself using your name: {knowledge_base['agentName']} and gender: {knowledge_base['gender']}"},
+                {"role": "system", "content": f"This is a voice conversation, so keep it brief — don,t ramble! You need to take control of the conversation. Do a opening greeting also. Take initiative for the conversation and your directive. You are handling clients of the baby boomer generation. With that in mind you need to sound professional. Never mention you are an AI or Voice Assistant or Virtual Assistant or Assistant. Always refer to yourself using your name: {knowledge_base['agentName']} and your gender is {knowledge_base['gender']}. Keep the responses small and encourage the client speech. -Be kind, funny, and a bit witty! Keep the conversation light. Use casual language like 'Umm...', 'Well...', 'I mean...'."},
                 # {"role": "system", "content": "Whenever you get any answer and if you left any query. Ask instantly don't wait for querying from user."},
                 # {"role": "system", "content": "Before Ending the call you have to reclarify all the information you gather with user"},
                 # {"role": "system", "content": f"Current Date is: {date.today()}. If you gather any input in tomorrow or yesterday then response any date information in this format : 01 january 1970 with the time and if input only time then use use the time with current date"},
@@ -39,6 +39,10 @@ class ChatGPTService:
         if not knowledge_base['knowledge']:
             return
         
+        self.conversations[conversation_id].append(
+                    {"role": "system", "content": "When the user asks about business or other information, respond only using the provided knowledge data and if the information is not available kindly notify the user. Do not ask for their details during this exchange. Once they have completed their query, you may resume asking for their details as needed."},
+        )
+                        
         for item in knowledge_base['knowledge']:
             if item['type'] != 'GREETINGS':
                 self.conversations[conversation_id].append(
