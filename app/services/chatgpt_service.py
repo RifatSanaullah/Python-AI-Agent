@@ -72,10 +72,12 @@ class ChatGPTService:
                     assistant_reply += val  # Save the full assistant response
                     chunk_reply += val  # Save the full assistant response
                     if len(chunk_reply) > self.max_chunk_size:
+                        chunk_reply = self.filter_message(chunk_reply)
                         await synthesize_response(chunk_reply, conversation_id)
                         chunk_reply=''
-                        
+        
         if chunk_reply and chunk_reply != '':
+            chunk_reply = self.filter_message(chunk_reply)
             await synthesize_response(chunk_reply, conversation_id)
                     
         self.add_message(conversation_id, "assistant", assistant_reply)
@@ -88,3 +90,9 @@ class ChatGPTService:
             print(f"Conversation ID {conversation_id} is now closed.")
         else:
             print(f"Conversation ID {conversation_id} does not exist.")
+    
+    def filter_message(self, message):
+        if 'End Call Message' in message or 'Routing Message' in message:
+            message = message.replace('End Call Message', '')
+            message = message.replace('Routing Message', '')
+        return message
