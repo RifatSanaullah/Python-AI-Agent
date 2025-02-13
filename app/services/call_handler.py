@@ -211,7 +211,7 @@ class CallHandler:
     async def get_agent_knowledge(self, call_id):
         data =  {        
             "knowledge" : self.agents[self.sessions[call_id]['call_sid']]['knowledge'],
-            "aiInstructions" : self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'],
+            # "aiInstructions" : self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'],
             "agentName" : self.agents[self.sessions[call_id]['call_sid']]['name'],
             "gender" : self.agents[self.sessions[call_id]['call_sid']]['voice']['gender'],
         }
