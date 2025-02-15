@@ -3,6 +3,57 @@ import openai
 from app.config import settings
 # Import date class from datetime module
 from datetime import date
+
+import re
+
+class StreamingChunker:
+    def __init__(self, max_length=200, onTTS=None, conversation_id=None):
+        self.buffer = ""  # Store incoming characters
+        self.max_length = max_length
+        self.send_to_tts= onTTS
+        self.conversation_id= conversation_id
+
+    async def add_stream_data(self, char):
+        self.buffer = char  # Append incoming characters
+        
+        # Check if we have a complete sentence AND at least 200 chars
+        if len(self.buffer) >= self.max_length:
+            chunk, remaining = self._split_at_sentence()
+            if chunk:
+                chunk = self.filter_message(chunk)
+                print("chunk : " ,chunk)
+                # self.buffer = remaining  # Keep the leftover text for the next chunk
+                await self.send_to_tts(chunk, self.conversation_id)  # Process the completed chunk
+                await self.add_stream_data(remaining)
+
+    async def flush(self):
+        """Force send any remaining text when stream ends."""
+        if self.buffer.strip():
+            chunk = self.filter_message(self.buffer)
+            print("chunk : ", chunk)
+            await self.send_to_tts(chunk, self.conversation_id)
+            self.buffer = ""
+
+    def _split_at_sentence(self):
+        """Find the nearest full sentence before max_length."""
+        # sentences = re.split(r'(?<=[.!?])\s+', self.buffer)  # Split at sentence end
+        sentences = re.findall(r'[^.!?]*[.!?]', self.buffer, re.DOTALL)
+        chunk, remaining = "", ""
+
+        for sentence in sentences:
+            if len(chunk) + len(sentence) <= self.max_length:
+                chunk += " " + sentence if chunk else sentence
+            else:
+                remaining = " ".join(sentences[sentences.index(sentence):])  # Save leftover
+                break
+        
+        return chunk.strip(), remaining.strip()  # Return cleanly formatted chunks
+
+    def filter_message(self, message):
+        if 'End Call Message' in message or 'Routing Message' in message:
+            message = message.replace('End Call Message', '')
+            message = message.replace('Routing Message', '')
+        return message
 class ChatGPTService:
     def __init__(self):
         openai.api_key = settings.chatgpt_api_key
@@ -61,29 +112,35 @@ class ChatGPTService:
         response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=self.conversations[conversation_id],
-            stream=True  # Enable streaming
+            # stream=True  # Enable streaming
         )
         print("Assistant: ", end="", flush=True)  # Print the assistant's response incrementally
         assistant_reply = ""
         chunk_reply = ""
-
+        chunker = StreamingChunker(max_length=200, onTTS=synthesize_response, conversation_id=conversation_id)
         # Process the streamed chunks
-        for chunk in response:
-            if chunk.choices and chunk.choices[0].delta:
-                delta = chunk.choices[0].delta
-                if delta.content:
-                    val = delta.content
-                    print(val, end="", flush=True)  # Display the streamed text
-                    assistant_reply += val  # Save the full assistant response
-                    chunk_reply += val  # Save the full assistant response
-                    if len(chunk_reply) > self.max_chunk_size:
-                        chunk_reply = self.filter_message(chunk_reply)
-                        await synthesize_response(chunk_reply, conversation_id)
-                        chunk_reply=''
-        
-        if chunk_reply and chunk_reply != '':
-            chunk_reply = self.filter_message(chunk_reply)
-            await synthesize_response(chunk_reply, conversation_id)
+
+        text = response.choices[0].message.content
+
+        await chunker.add_stream_data(text)  # Simulating stream input
+
+        # for chunk in response:
+        #     if chunk.choices and chunk.choices[0].delta:
+        #         delta = chunk.choices[0].delta
+        #         if delta.content:
+        #             val = delta.content
+        #             print(val, end="", flush=True)  # Display the streamed text
+        #             assistant_reply += val  # Save the full assistant response
+        #             await chunker.add_stream_data(val)
+        #             # chunk_reply += val  # Save the full assistant response
+        #             # if len(chunk_reply) > self.max_chunk_size:
+        #             #     chunk_reply = self.filter_message(chunk_reply)
+        #             #     await synthesize_response(chunk_reply, conversation_id)
+        #             #     chunk_reply=''
+        await chunker.flush()
+        # if chunk_reply and chunk_reply != '':
+        #     chunk_reply = self.filter_message(chunk_reply)
+        #     await synthesize_response(chunk_reply, conversation_id)
                     
         self.add_message(conversation_id, "assistant", assistant_reply)
         return assistant_reply
@@ -96,8 +153,3 @@ class ChatGPTService:
         else:
             print(f"Conversation ID {conversation_id} does not exist.")
     
-    def filter_message(self, message):
-        if 'End Call Message' in message or 'Routing Message' in message:
-            message = message.replace('End Call Message', '')
-            message = message.replace('Routing Message', '')
-        return message
