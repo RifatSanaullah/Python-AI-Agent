@@ -20,6 +20,7 @@ from threading import Timer
 import numpy as np
 import audioop
 import os
+import asyncio
 
 # Configure logging
 logging.basicConfig(
@@ -70,8 +71,8 @@ class CallHandler:
                         self.sessions[data['streamSid']]['websocket'] = websocket
                         self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
                         session = self.sessions[data['streamSid']]
-                        # session['deepgram_transcribe_service'].establish_dg_connection()
-                        session['transcribe_service'].connect()
+                        session['deepgram_transcribe_service'].establish_dg_connection()
+                        # session['transcribe_service'].connect()
 
                     if data['streamSid'] not in self.sessions or 'call_sid' not in self.sessions[data['streamSid']]:
                         continue
@@ -101,7 +102,8 @@ class CallHandler:
                     if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'audio_buffer'):
                         audio_data = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'audio_buffer')
                         # await self.transcribe_service.transcribe(audio_data)
-                        await session['transcribe_service'].transcribe(audio_data)
+                        await session['deepgram_transcribe_service'].transcribe(audio_data)
+                        # await session['transcribe_service'].transcribe(audio_data)
 
             except ConnectionClosedError as e:
                 print(f"Connection closed with error: {e.code} - {e.reason}")
@@ -136,8 +138,8 @@ class CallHandler:
                     self.agents[call_id]['websocket_closed'] = True
                     self.flush_agent(call_id)
 
-                # session['deepgram_transcribe_service'].disconnect()
-                session['transcribe_service'].close()  # Close the transcriber service
+                session['deepgram_transcribe_service'].disconnect()
+                # session['transcribe_service'].close()  # Close the transcriber service
                 try:
                     await websocket.close()
                 except Exception as e:
@@ -163,6 +165,7 @@ class CallHandler:
         return handler 
                
     async def stop_stream(self,call_id):
+        await asyncio.sleep(1)  # Wait for 1 second
         await self.twilio_service.stop_audio_stream(self.sessions[call_id]['websocket'], call_id)
         self.sessions[call_id]['background_sound'] = False
 
@@ -253,7 +256,7 @@ class CallHandler:
         if stream_sid not in self.sessions:
             self.sessions[stream_sid]={
                 "deepgram_transcribe_service": self.initialize_transcriber(stream_sid, DeepgramService),
-                "transcribe_service" : self.initialize_transcriber(stream_sid, TranscribeService),
+                # "transcribe_service" : self.initialize_transcriber(stream_sid, TranscribeService),
                 "ai_speaking": False,
                 "stream_sid": stream_sid,
                 "background_sound": None,

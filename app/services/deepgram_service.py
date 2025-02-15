@@ -10,7 +10,7 @@ from deepgram import (
 )
 from app.config import settings
 
-
+import re
 class DeepgramService:
     def __init__(self , on_transcript = None ,on_start=None):
         self.config = DeepgramClientOptions(
@@ -24,22 +24,26 @@ class DeepgramService:
         self.on_transcript = on_transcript
         self.on_start = on_start
         self.speaker = self.deepgram.speak.rest.v("1")
+        self.complete_sentence = ''
         # connect to websocket
         self.transcribeOptions = LiveOptions(
-            model="nova-2",
+            model="nova-3",
             encoding='mulaw', 
             sample_rate=8000,
             smart_format=True,
             # vad_events=True,
-            utterance_end_ms="1500",
+            utterance_end_ms="1000",
             interim_results=True,
-            endpointing=1000
+            endpointing=300,
             # Time in milliseconds of silence to wait for before finalizing speech
             )
 
         self.dg_connection = None
         # self.lock_exit = threading.Lock()
         # self.exit = False
+
+    def is_sentence_complete(self, sentence):
+        return bool(re.search(r'[.!?]$', sentence.strip()))
 
     async def stream_text_to_speech(self, text: str , model = "aura-asteria-en"):
         try:
@@ -87,10 +91,14 @@ class DeepgramService:
         result = kwargs['result']
         is_final = result.is_final
         sentence = result.channel.alternatives[0].transcript
-        if sentence and is_final : 
-            print('Final' , sentence)
-            if self.on_transcript:
-                asyncio.run(self.on_transcript(sentence))
+        if sentence and is_final and sentence !='':
+            self.complete_sentence += ' ' + sentence
+            if self.is_sentence_complete(sentence) and len(sentence) > 4:
+                if self.on_transcript:
+                    asyncio.run(self.on_transcript(self.complete_sentence))
+                    self.complete_sentence = ''
+
+            print('Final' , self.complete_sentence)
         
         
         elif sentence and not is_final : 
