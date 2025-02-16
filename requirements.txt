@@ -19,3 +19,5 @@ PyPDF2
 numpy
 python-docx
 pydub
+pyht
+soundfile
