@@ -1,5 +1,6 @@
 import base64
 from sqlalchemy.orm import Session
+from app.services.playht_service import PlayHT
 from app.services.twilio_service import TwilioService
 from app.services.chatgpt_service import ChatGPTService
 from app.services.s3_service import S3Service
@@ -21,7 +22,10 @@ import numpy as np
 import audioop
 import os
 import asyncio
-
+import random
+from io import BytesIO
+import numpy as np
+import soundfile as sf
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -35,6 +39,7 @@ class CallHandler:
         self.backend_service = BackendHandler()
         self.chatgpt_service = ChatGPTService()
         self.s3_service = S3Service()
+        self.playht_service = PlayHT()
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.sessions = {}
         self.agents = {}
@@ -43,7 +48,29 @@ class CallHandler:
     def get_business_agent(self, call_id: str):
         """Retrieve specific AI agent/business logic based on the dialed number."""
         return self.agents[call_id]
+    
+    def is_silent_or_empty_mulaw_numpy(self, audio_data):
+        try:
+            # Decode Base64
+            audio_stream = BytesIO(audio_data)
 
+            # Read audio using soundfile
+            audio, samplerate = sf.read(audio_stream, format="RAW", subtype="ULAW", channels=1, samplerate=8000)
+
+            # Check if empty
+            if len(audio) == 0:
+                return True  # Empty audio
+
+            # Compute RMS (Root Mean Square) to detect silence
+            rms = np.sqrt(np.mean(np.square(audio)))
+
+            silence_threshold = 0.10  # Adjust as needed
+            return rms < silence_threshold
+
+        except Exception as e:
+            print(f"Error processing audio: {e}")
+            return True  # Assume silent if processing fails
+        
     async def process_input(self, call_id, websocket):
         await websocket.accept()
         session = {
@@ -81,6 +108,13 @@ class CallHandler:
                         media = data["media"]
                         chunk = media["payload"]
                         chunk_bytes = base64.b64decode(chunk)
+                                              # Step 2: Check if the decoded data is empty
+                                              # Convert byte data to an AudioSegment instance
+                        is_audio_silent = self.is_silent_or_empty_mulaw_numpy(chunk_bytes)
+
+                        if not is_audio_silent:
+                            await self.on_user_speech(data['streamSid'])
+
                         f.write(chunk_bytes)
                         if ('route_call' not in self.agents[call_id] 
                             or self.agents[call_id]['route_call'] == False 
@@ -144,7 +178,9 @@ class CallHandler:
                     await websocket.close()
                 except Exception as e:
                     print("--Websocket connection Closed--")
-
+                    
+    def disable_ai_speaking(self, call_id):
+            self.sessions[call_id]['ai_speaking'] = False
     def initialize_transcriber(self, call_id: str, Service : TranscribeService | DeepgramService):
         """Initialize transcriber with bound methods for handling transcripts and user speech."""
         return Service(
@@ -165,12 +201,14 @@ class CallHandler:
         return handler 
                
     async def stop_stream(self,call_id):
-        await asyncio.sleep(1)  # Wait for 1 second
+        # await asyncio.sleep(1)  # Wait for 1 second
+        # message = self.get_interrupt_message()
+        # await self.synthesize_response(message, call_id)
         await self.twilio_service.stop_audio_stream(self.sessions[call_id]['websocket'], call_id)
         self.sessions[call_id]['background_sound'] = False
 
     async def on_user_speech(self, call_id):
-        if call_id in self.sessions and self.sessions[call_id]['ai_speaking']:
+        if call_id in self.sessions and self.sessions[call_id]['ai_speaking'] == True:
             await self.stop_stream(call_id)
             self.sessions[call_id]['ai_speaking'] = False
 
@@ -243,13 +281,32 @@ class CallHandler:
         start_time = datetime.now()
         # audio_stream = await self.polly_service.stream_text_to_speech(chunk)
         model = self.agents[self.sessions[call_id]['call_sid']]['voice']['model']
-        audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text, model)
+        # audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text, model)
+        audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds() * 1000  # Calculate duration in milliseconds
         logging.info(f"Total Deepgram duration: {duration:.3f} ms")
-        await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
+        # await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
 
         print('audio streamed')
+
+    async def queue_audio(self, call_id, audio_stream):
+        await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
+
+    def get_interrupt_message(self):
+        array = [
+            "Go ahead",
+            "Please, go ahead."
+            "Yes, do continue."
+            "Yes, please go on."
+            "I'm listening, please."
+            "Yes, please continue. "
+            "Of course, go ahead."
+            "Go ahead, I'm listening."
+            "Okay, I'm listening."
+            "Sure, please continue."
+        ]
+        return random.choice(array)
 
     def initialize_session_info(self, stream_sid, call_sid):
         # Initialize a session for this specific call
