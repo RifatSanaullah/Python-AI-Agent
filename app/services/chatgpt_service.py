@@ -110,7 +110,7 @@ class ChatGPTService:
         # Add user input to conversation history
         self.add_message(conversation_id, "user", message)
         response = openai.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4-turbo",
             messages=self.conversations[conversation_id],
             # stream=True  # Enable streaming
         )
