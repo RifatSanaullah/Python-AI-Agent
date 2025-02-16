@@ -281,12 +281,12 @@ class CallHandler:
         start_time = datetime.now()
         # audio_stream = await self.polly_service.stream_text_to_speech(chunk)
         model = self.agents[self.sessions[call_id]['call_sid']]['voice']['model']
-        # audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text, model)
-        audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
+        audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text, model)
+        # audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds() * 1000  # Calculate duration in milliseconds
         logging.info(f"Total Deepgram duration: {duration:.3f} ms")
-        # await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
+        await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
 
         print('audio streamed')
 
