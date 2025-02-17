@@ -4,7 +4,7 @@ from app.config import settings
 # Import date class from datetime module
 from datetime import date
 
-import re
+import re , time
 
 class StreamingChunker:
     def __init__(self, max_length=200, onTTS=None, conversation_id=None):
@@ -54,11 +54,29 @@ class StreamingChunker:
             message = message.replace('End Call Message', '')
             message = message.replace('Routing Message', '')
         return message
+    
+
 class ChatGPTService:
     def __init__(self):
         openai.api_key = settings.chatgpt_api_key
         self.conversations = {}
         self.max_chunk_size = 200
+        self.client = openai.OpenAI(api_key=settings.chatgpt_api_key)
+
+        self.assistant = None
+
+    # Function to wait for assistant response
+    def wait_for_completion(self, thread_id, run_id):
+        """Polls the API until the assistant has completed processing."""
+        while True:
+            run_status = self.client.beta.threads.runs.retrieve(
+                thread_id=thread_id, run_id=run_id
+            )
+            if run_status.status in ["completed", "failed", "cancelled"]:
+                return run_status  # Return immediately once completed
+            time.sleep(0.5)
+            
+
 
     # Function to add messages to a conversation
     def add_message(self, conversation_id, role, content):
@@ -94,33 +112,52 @@ class ChatGPTService:
         # self.conversations[conversation_id].append(
         #             {"role": "system", "content": "When the user asks about business or other information, respond only using the provided knowledge data and if the information is not available kindly notify the user. Do not ask for their details during this exchange. Once they have completed their query, you may resume asking for their details as needed."},
         # )
-                        
+        instructions = ''         
         for item in knowledge_base['knowledge']:
             if item['type'] != 'GREETINGS':
-                self.conversations[conversation_id].append(
-                    {"role": "system", "content": item['content']}
-                )
+                instructions += f"\n\n{item['content']}\n\n"
 
-    async def generate_response(self, conversation_id, message: str, synthesize_response, get_agent_knowledge):
+        self.assistant = self.client.beta.assistants.create(
+            name="Verbacall",
+            instructions = instructions,
+            model="gpt-4-turbo"
+        )
+
+        self.thread = self.client.beta.threads.create()
+
+    async def process_initial_message(self, conversation_id, get_agent_knowledge):
 
         if conversation_id not in self.conversations:
             knowledge = await get_agent_knowledge(conversation_id)
             self.initial_message(conversation_id , knowledge)
-        
+
+    async def generate_response(self, conversation_id, message: str, synthesize_response):
+
         # Add user input to conversation history
         self.add_message(conversation_id, "user", message)
-        response = openai.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=self.conversations[conversation_id],
-            # stream=True  # Enable streaming
+        # User asks about voice formats
+        message = self.client.beta.threads.messages.create(
+            thread_id=self.thread.id,
+            role="user",
+            content=message
         )
-        print("Assistant: ", end="", flush=True)  # Print the assistant's response incrementally
+
+        # Run the assistant to process the request
+        run = self.client.beta.threads.runs.create(
+            thread_id=self.thread.id,
+            assistant_id=self.assistant.id
+        )
+        # Wait for response dynamically (instead of fixed sleep)
+        self.wait_for_completion(self.thread.id, run.id)
+        messages = self.client.beta.threads.messages.list(thread_id=self.thread.id)
+
         assistant_reply = ""
         chunk_reply = ""
         chunker = StreamingChunker(max_length=200, onTTS=synthesize_response, conversation_id=conversation_id)
         # Process the streamed chunks
 
-        assistant_reply = response.choices[0].message.content
+        assistant_reply = messages.data[0].content[0].text.value
+        print(assistant_reply)
 
         await chunker.add_stream_data(assistant_reply)  # Simulating stream input
 

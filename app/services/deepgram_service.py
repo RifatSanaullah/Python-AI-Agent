@@ -34,7 +34,7 @@ class DeepgramService:
             # vad_events=True,
             utterance_end_ms="1000",
             interim_results=True,
-            endpointing=300,
+            endpointing=700,
             # Time in milliseconds of silence to wait for before finalizing speech
             )
 
@@ -93,7 +93,7 @@ class DeepgramService:
         sentence = result.channel.alternatives[0].transcript
         if sentence and is_final and sentence !='':
             self.complete_sentence += ' ' + sentence
-            if self.is_sentence_complete(sentence) and len(sentence) > 4:
+            if self.is_sentence_complete(sentence):
                 if self.on_transcript:
                     asyncio.run(self.on_transcript(self.complete_sentence))
                     self.complete_sentence = ''

@@ -2,7 +2,8 @@ import base64
 from sqlalchemy.orm import Session
 from app.services.playht_service import PlayHT
 from app.services.twilio_service import TwilioService
-from app.services.chatgpt_service import ChatGPTService
+# from app.services.chatgpt_service import ChatGPTService
+from app.services.chatgpt_service_v2 import ChatGPTService
 from app.services.s3_service import S3Service
 from app.services.backend_service import BackendHandler
 from app.services.polly_service import PollyService
@@ -223,7 +224,7 @@ class CallHandler:
         if call_id not in self.sessions or 'call_sid' not in self.sessions[call_id]:
             return
 
-        response = await self.chatgpt_service.generate_response(call_id, transcript, self.synthesize_response, self.get_agent_knowledge)
+        response = await self.chatgpt_service.generate_response(call_id, transcript, self.synthesize_response)
         if 'End Call Message' in response or self.contains_any_word(transcript) or  self.contains_any_word(response):
             self.agents[self.sessions[call_id]['call_sid']]['end_call'] = True
             response = response.replace('End Call Message', '')
@@ -357,8 +358,9 @@ class CallHandler:
             timer.start()
             return
 
-        greetings = self.agents[call_sid]['greetings']
-        await self.synthesize_response(greetings, stream_sid)
+        await self.chatgpt_service.process_initial_message(stream_sid, self.get_agent_knowledge)
+        # greetings = self.agents[call_sid]['greetings']
+        # await self.synthesize_response(greetings, stream_sid)
         
         return "OK", 200
     
