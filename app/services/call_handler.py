@@ -2,8 +2,8 @@ import base64
 from sqlalchemy.orm import Session
 from app.services.playht_service import PlayHT
 from app.services.twilio_service import TwilioService
-from app.services.chatgpt_service import ChatGPTService
-# from app.services.chatgpt_service_v2 import ChatGPTService
+# from app.services.chatgpt_service import ChatGPTService
+from app.services.chatgpt_service_v2 import ChatGPTService
 from app.services.s3_service import S3Service
 from app.services.backend_service import BackendHandler
 from app.services.polly_service import PollyService
@@ -229,13 +229,13 @@ class CallHandler:
             self.agents[self.sessions[call_id]['call_sid']]['end_call'] = True
             response = response.replace('End Call Message', '')
             # Schedule the call to end after 2 seconds
-            timer = Timer(10, self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
+            timer = Timer(11, self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
             timer.start()
             
         if 'Routing Message' in response:
             response = response.replace('Routing Message', '')
             # Schedule the call to end after 2 seconds
-            timer = Timer(10, self.twilio_service.redirect_call,
+            timer = Timer(11, self.twilio_service.redirect_call,
                           args=[
                             self.sessions[call_id]['call_sid'],
                             self.agents[self.sessions[call_id]['call_sid']]['routingInfo']['routingNumber'],
