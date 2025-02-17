@@ -117,11 +117,8 @@ class ChatGPTService:
             self.initial_message(conversation_id , knowledge)
 
 
-    async def generate_response(self, conversation_id, message: str, synthesize_response, get_agent_knowledge):
+    async def generate_response(self, conversation_id, message: str, synthesize_response):
 
-        if conversation_id not in self.conversations:
-            knowledge = await get_agent_knowledge(conversation_id)
-            self.initial_message(conversation_id , knowledge)
         
         # Add user input to conversation history
         self.add_message(conversation_id, "user", message)
