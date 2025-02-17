@@ -2,8 +2,8 @@ import base64
 from sqlalchemy.orm import Session
 from app.services.playht_service import PlayHT
 from app.services.twilio_service import TwilioService
-# from app.services.chatgpt_service import ChatGPTService
-from app.services.chatgpt_service_v2 import ChatGPTService
+from app.services.chatgpt_service import ChatGPTService
+# from app.services.chatgpt_service_v2 import ChatGPTService
 from app.services.s3_service import S3Service
 from app.services.backend_service import BackendHandler
 from app.services.polly_service import PollyService
@@ -359,8 +359,8 @@ class CallHandler:
             return
 
         await self.chatgpt_service.process_initial_message(stream_sid, self.get_agent_knowledge)
-        # greetings = self.agents[call_sid]['greetings']
-        # await self.synthesize_response(greetings, stream_sid)
+        greetings = self.agents[call_sid]['greetings']
+        await self.synthesize_response("Hello! Thank you for calling Summit Home Realty. My name is Sam. May I have your full name, please?" , stream_sid)
         
         return "OK", 200
     

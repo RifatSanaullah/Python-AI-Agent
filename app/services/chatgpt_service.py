@@ -59,6 +59,7 @@ class ChatGPTService:
         openai.api_key = settings.chatgpt_api_key
         self.conversations = {}
         self.max_chunk_size = 200
+        self.temp_convo ={}
 
     # Function to add messages to a conversation
     def add_message(self, conversation_id, role, content):
@@ -67,6 +68,14 @@ class ChatGPTService:
             return
         
         self.conversations[conversation_id].append({"role": role, "content": content})
+        # Function to add messages to a conversation
+
+    # def add_temp_message(self, conversation_id, role, content):
+    #     if conversation_id not in self.temp_convo:
+    #         print(f"Conversation ID {conversation_id} does not exist.")
+    #         return
+        
+    #     self.temp_convo[conversation_id].append({"role": role, "content": content})
 
     def initial_message(self , conversation_id, knowledge_base):
 
@@ -101,6 +110,13 @@ class ChatGPTService:
                     {"role": "system", "content": item['content']}
                 )
 
+    async def process_initial_message(self, conversation_id, get_agent_knowledge):
+
+        if conversation_id not in self.conversations:
+            knowledge = await get_agent_knowledge(conversation_id)
+            self.initial_message(conversation_id , knowledge)
+
+
     async def generate_response(self, conversation_id, message: str, synthesize_response, get_agent_knowledge):
 
         if conversation_id not in self.conversations:
@@ -109,8 +125,17 @@ class ChatGPTService:
         
         # Add user input to conversation history
         self.add_message(conversation_id, "user", message)
+        # self.add_temp_message(conversation_id, "user", message)
+
+        # if (len(self.temp_convo[conversation_id]) >= 6):
+        #     response = openai.chat.completions.create(
+        #         model="gpt-3.5-turbo",
+        #         messages=self.temp_convo[conversation_id],
+        #         # stream=True  # Enable streaming
+        # )
+
         response = openai.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4-turbo",
             messages=self.conversations[conversation_id],
             # stream=True  # Enable streaming
         )
