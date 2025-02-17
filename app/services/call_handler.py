@@ -2,8 +2,8 @@ import base64
 from sqlalchemy.orm import Session
 from app.services.playht_service import PlayHT
 from app.services.twilio_service import TwilioService
-# from app.services.chatgpt_service import ChatGPTService
-from app.services.chatgpt_service_v2 import ChatGPTService
+from app.services.chatgpt_service import ChatGPTService
+# from app.services.chatgpt_service_v2 import ChatGPTService
 from app.services.s3_service import S3Service
 from app.services.backend_service import BackendHandler
 from app.services.polly_service import PollyService
