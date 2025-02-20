@@ -42,6 +42,30 @@ class TwilioService:
         queue[type].task_done()
         return value
     
+    async def dequeue_all_except_next(self, queue_id, type):
+        """Remove all queued items except the next one in the queue."""
+        queue = self.get_or_create_queue(queue_id)[type]
+
+        # Get the size of the queue
+        queue_size = queue.qsize()
+
+        # If there are more than one items, remove all but the next one
+        if queue_size > 1:
+            temp_queue = asyncio.Queue()
+
+            # Keep the last item
+            for _ in range(queue_size - 1):
+                await queue.get()
+                queue.task_done()
+            
+            # Transfer the last item to a temporary queue
+            last_item = await queue.get()
+            queue.task_done()
+            await temp_queue.put(last_item)
+
+            # Replace the queue with the temporary queue
+            self.queue_map[queue_id][type] = temp_queue
+    
     def is_empty(self , queue_id , type):
         queue = self.get_or_create_queue(queue_id)
         return queue[type].empty()
