@@ -101,8 +101,8 @@ class DeepgramService:
             print('Final' , self.complete_sentence)
         
         
-        # elif sentence and not is_final : 
-        #     asyncio.run(self.on_start())
+        elif sentence and not is_final : 
+            asyncio.run(self.on_start())
 
 
 

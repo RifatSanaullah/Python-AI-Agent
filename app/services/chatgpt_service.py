@@ -59,8 +59,8 @@ class ChatGPTService:
         openai.api_key = settings.chatgpt_api_key
         self.conversations = {}
         self.max_chunk_size = 200
-        self.temp_convo ={}
-
+        self.system_convo ={}
+        self.convo_index = 0
     # Function to add messages to a conversation
     def add_message(self, conversation_id, role, content):
         if conversation_id not in self.conversations:
@@ -70,32 +70,26 @@ class ChatGPTService:
         self.conversations[conversation_id].append({"role": role, "content": content})
         # Function to add messages to a conversation
 
-    # def add_temp_message(self, conversation_id, role, content):
-    #     if conversation_id not in self.temp_convo:
-    #         print(f"Conversation ID {conversation_id} does not exist.")
-    #         return
+    def add_system_message(self, conversation_id, role, content):
+        if conversation_id not in self.system_convo:
+            print(f"Conversation ID {conversation_id} does not exist.")
+            return
         
-    #     self.temp_convo[conversation_id].append({"role": role, "content": content})
+        self.system_convo[conversation_id].append({"role": role, "content": content})
 
-    def initial_message(self , conversation_id, knowledge_base):
+    def initial_message(self , conversations, conversation_id, knowledge_base):
 
-        self.conversations[conversation_id] = [
-                # {"role": "system", "content": "Keep your responses helpful and respectful and in under 2 sentences if possible."},
-                # {"role": "system", "content": f"This is a voice conversation, so keep it brief — don,t ramble! You need to take control of the conversation. Do a opening greeting also. Take initiative for the conversation and your directive. You are handling clients of the baby boomer generation. With that in mind you need to sound professional. Never mention you are an AI or Voice Assistant or Virtual Assistant or Assistant. Always refer to yourself using your name: {knowledge_base['agentName']} and your gender is {knowledge_base['gender']}. Keep the responses small and encourage the client speech. -Be kind, funny, and a bit witty! Keep the conversation light. Use casual language like 'Umm...', 'Well...', 'I mean...'."},
-                # # {"role": "system", "content": "Whenever you get any answer and if you left any query. Ask instantly don't wait for querying from user."},
-                # # {"role": "system", "content": "Before Ending the call you have to reclarify all the information you gather with user"},
-                # # {"role": "system", "content": f"Current Date is: {date.today()}. If you gather any input in tomorrow or yesterday then response any date information in this format : 01 january 1970 with the time and if input only time then use use the time with current date"},
-                # {"role": "system", "content": "From the below questions data there will have a end call message. So you should finish the call when all the queries answered and deliver then end call message start with : End Call Message."},
-        
+        conversations[conversation_id] = [
+
+                {"role": "system", "content": f"Always ask only one question at a time. After each response, follow up with a single question. For example, if you need contact information, ask for the name first, then phone number, then email—one at a time. Do not ask for multiple pieces of information or offer multiple options in one message. Always provide responses that are suitable for phone conversations. Avoid lengthy explanations, long lists, or complex details. Limit responses to key points. Keep responses under 3 sentences to ensure they are concise and easy to digest.Always refer to yourself using your name: {knowledge_base['agentName']} and your gender is {knowledge_base['gender']}"},
+                 # {"role": "system", "content": "Whenever you get any answer and if you left any query. Ask instantly don't wait for querying from user."},
+                # {"role": "system", "content": "Before Ending the call you have to reclarify all the information you gather with user"},
+                # {"role": "system", "content": f"Current Date is: {date.today()}. If you gather any input in tomorrow or yesterday then response any date information in this format : 01 january 1970 with the time and if input only time then use use the time with current date"},
         ]
 
-        # if not knowledge_base:
-        #     return
+        if not knowledge_base:
+            return
         
-        # if knowledge_base['aiInstructions']:
-        #     self.conversations[conversation_id].append(
-        #             {"role": "system", "content": knowledge_base['aiInstructions']}
-        #         )
             
         if not knowledge_base['knowledge']:
             return
@@ -106,15 +100,24 @@ class ChatGPTService:
                         
         for item in knowledge_base['knowledge']:
             if item['type'] != 'GREETINGS':
-                self.conversations[conversation_id].append(
+                conversations[conversation_id].append(
                     {"role": "system", "content": item['content']}
+                )
+
+        if knowledge_base['aiInstructions']:
+            conversations[conversation_id].append(
+                    {"role": "system", "content": knowledge_base['aiInstructions']}
                 )
 
     async def process_initial_message(self, conversation_id, get_agent_knowledge):
 
         if conversation_id not in self.conversations:
             knowledge = await get_agent_knowledge(conversation_id)
-            self.initial_message(conversation_id , knowledge)
+            # self.initial_message(self.conversations, conversation_id, knowledge)
+            self.initial_message(self.system_convo, conversation_id, knowledge)
+            self.conversations[conversation_id] = []
+            self.convo_index = len(self.system_convo[conversation_id])
+
 
 
     async def generate_response(self, conversation_id, message: str, synthesize_response):
@@ -122,18 +125,13 @@ class ChatGPTService:
         
         # Add user input to conversation history
         self.add_message(conversation_id, "user", message)
-        # self.add_temp_message(conversation_id, "user", message)
 
-        # if (len(self.temp_convo[conversation_id]) >= 6):
-        #     response = openai.chat.completions.create(
-        #         model="gpt-3.5-turbo",
-        #         messages=self.temp_convo[conversation_id],
-        #         # stream=True  # Enable streaming
-        # )
+
+        self.add_system_message(conversation_id, "user", message)
 
         response = openai.chat.completions.create(
             model="gpt-4-turbo",
-            messages=self.conversations[conversation_id],
+            messages=self.system_convo[conversation_id],
             # stream=True  # Enable streaming
         )
         print("Assistant: ", end="", flush=True)  # Print the assistant's response incrementally
@@ -165,6 +163,26 @@ class ChatGPTService:
         #     await synthesize_response(chunk_reply, conversation_id)
                     
         self.add_message(conversation_id, "assistant", assistant_reply)
+        self.add_system_message(conversation_id, "assistant", assistant_reply)
+
+
+        if (len(self.system_convo[conversation_id]) >= 6 + self.convo_index):
+
+            allmessages = 'Get summary with every context of below conversations: '
+            for index in range(self.convo_index, len(self.system_convo[conversation_id])) :
+                item = self.system_convo[conversation_id][index]
+                allmessages +=  f"{item['role']}:  {item['content']}\n\n"
+            
+            response = openai.chat.completions.create(
+                model="gpt-4-turbo",
+                messages=[{"role" : "user" , "content" : allmessages}],
+            )
+            del self.system_convo[conversation_id][self.convo_index: len(self.system_convo[conversation_id])]
+
+            self.convo_index += 1
+            summary = response.choices[0].message.content
+            self.add_system_message(conversation_id, "assistant", summary)
+
         return assistant_reply
     
         # Function to close a conversation
