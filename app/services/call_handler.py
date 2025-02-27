@@ -393,7 +393,7 @@ class CallHandler:
 
         await self.chatgpt_service.process_initial_message(stream_sid, self.get_agent_knowledge)
         greetings = self.agents[call_sid]['greetings']
-        await self.synthesize_response("Hello! Thank you for calling Summit Home Realty. My name is Sam. May I have your full name, please?" , stream_sid)
+        await self.synthesize_response(greetings , stream_sid)
         
         return "OK", 200
     
