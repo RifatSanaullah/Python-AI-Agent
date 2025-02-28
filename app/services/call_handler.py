@@ -249,14 +249,14 @@ class CallHandler:
             response = response.replace('End Call Message', '')
             # Schedule the call to end after 2 seconds
             self.clear_timer()
-            self.timer = Timer(self.sessions[call_id]['speaking_duration'], self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
+            self.timer = Timer(12, self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
             self.timer.start()
             
         if 'Routing Message' in response or 'I am forwarding the call' in response:
             response = response.replace('Routing Message', '')
             # Schedule the call to end after 2 seconds
             self.clear_timer()
-            self.timer = Timer(self.sessions[call_id]['speaking_duration'], self.twilio_service.redirect_call,
+            self.timer = Timer(12, self.twilio_service.redirect_call,
                           args=[
                             self.sessions[call_id]['call_sid'],
                             self.agents[self.sessions[call_id]['call_sid']]['routingInfo']['routingNumber'],
@@ -311,8 +311,8 @@ class CallHandler:
         audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text, model)
         # audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
 
-        result = self.is_silent_or_empty_mulaw_numpy(audio_stream)
-        session['speaking_duration'] = result['duration']
+        # result = self.is_silent_or_empty_mulaw_numpy(audio_stream)
+        # session['speaking_duration'] = result['duration']
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds() * 1000  # Calculate duration in milliseconds
