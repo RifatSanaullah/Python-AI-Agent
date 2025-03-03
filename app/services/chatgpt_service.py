@@ -166,22 +166,22 @@ class ChatGPTService:
         self.add_system_message(conversation_id, "assistant", assistant_reply)
 
 
-        if (len(self.system_convo[conversation_id]) >= 6 + self.convo_index):
+        # if (len(self.system_convo[conversation_id]) >= 6 + self.convo_index):
 
-            allmessages = 'Get summary with every context of below conversations: '
-            for index in range(self.convo_index, len(self.system_convo[conversation_id])) :
-                item = self.system_convo[conversation_id][index]
-                allmessages +=  f"{item['role']}:  {item['content']}\n\n"
+        #     allmessages = 'Get summary with every context of below conversations: '
+        #     for index in range(self.convo_index, len(self.system_convo[conversation_id])) :
+        #         item = self.system_convo[conversation_id][index]
+        #         allmessages +=  f"{item['role']}:  {item['content']}\n\n"
             
-            response = openai.chat.completions.create(
-                model="gpt-4-turbo",
-                messages=[{"role" : "user" , "content" : allmessages}],
-            )
-            del self.system_convo[conversation_id][self.convo_index: len(self.system_convo[conversation_id])]
+        #     response = openai.chat.completions.create(
+        #         model="gpt-3.5-turbo",
+        #         messages=[{"role" : "user" , "content" : allmessages}],
+        #     )
+        #     del self.system_convo[conversation_id][self.convo_index: len(self.system_convo[conversation_id])]
 
-            self.convo_index += 1
-            summary = response.choices[0].message.content
-            self.add_system_message(conversation_id, "assistant", summary)
+        #     self.convo_index += 1
+        #     summary = response.choices[0].message.content
+        #     self.add_system_message(conversation_id, "assistant", summary)
 
         return assistant_reply
     
