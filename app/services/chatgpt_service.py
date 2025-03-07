@@ -174,7 +174,7 @@ class ChatGPTService:
                 allmessages +=  f"{item['role']}:  {item['content']}\n\n"
             
             response = openai.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4-turbo",
                 messages=[{"role" : "user" , "content" : allmessages}],
             )
             del self.system_convo[conversation_id][self.convo_index: len(self.system_convo[conversation_id])]
