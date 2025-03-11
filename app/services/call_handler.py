@@ -124,10 +124,10 @@ class CallHandler:
                         #     await self.on_user_speech(data['streamSid'])
 
                         f.write(chunk_bytes)
-                        if ('route_call' not in self.agents[call_id] 
-                            or self.agents[call_id]['route_call'] == False 
-                            or 'end_call' not in self.agents[call_id]
-                            or self.agents[call_id]['end_call'] == False ):
+                        if (('route_call' not in self.agents[call_id] 
+                            or self.agents[call_id]['route_call'] == False ) and
+                            ( 'end_call' not in self.agents[call_id]
+                            or self.agents[call_id]['end_call'] == False) ):
                             await self.twilio_service.enqueue_audio(data['streamSid'], chunk_bytes ,'audio_buffer')
 
 
@@ -249,14 +249,14 @@ class CallHandler:
             response = response.replace('End Call Message', '')
             # Schedule the call to end after 2 seconds
             self.clear_timer()
-            self.timer = Timer(12, self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
+            self.timer = Timer(11, self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
             self.timer.start()
             
         if 'Routing Message' in response or 'I am forwarding the call' in response:
             response = response.replace('Routing Message', '')
             # Schedule the call to end after 2 seconds
             self.clear_timer()
-            self.timer = Timer(12, self.twilio_service.redirect_call,
+            self.timer = Timer(11, self.twilio_service.redirect_call,
                           args=[
                             self.sessions[call_id]['call_sid'],
                             self.agents[self.sessions[call_id]['call_sid']]['routingInfo']['routingNumber'],
@@ -361,6 +361,8 @@ class CallHandler:
         self.agents[call_id]['receipent'] = data['from']
         self.agents[call_id]['complete_call'] = False
         self.agents[call_id]['websocket_closed'] = False
+        self.agents[call_id]['end_call'] = False
+        self.agents[call_id]['route_call'] = False
         response = self.twilio_service.initialize_call(call_id)
         # self.transcribe_service.connect()  # Connect the transcriber service
         # await self.initialize_session_info(call_id)
@@ -391,9 +393,11 @@ class CallHandler:
             self.timer.start()
             return
 
-        await self.chatgpt_service.process_initial_message(stream_sid, self.get_agent_knowledge)
         greetings = self.agents[call_sid]['greetings']
         await self.synthesize_response(greetings , stream_sid)
+        await self.chatgpt_service.process_initial_message(stream_sid, self.get_agent_knowledge)
+        self.chatgpt_service.add_message(stream_sid, "assistant", greetings)
+        self.chatgpt_service.add_system_message(stream_sid, "assistant", greetings)
         
         return "OK", 200
     

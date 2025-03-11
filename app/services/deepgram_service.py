@@ -28,7 +28,7 @@ class DeepgramService:
         # connect to websocket
         self.transcribeOptions = LiveOptions(
             model="nova-3",
-            encoding='mulaw', 
+            encoding='mulaw',
             sample_rate=8000,
             smart_format=True,
             # vad_events=True,
