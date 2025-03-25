@@ -106,7 +106,7 @@ class CallHandler:
                     self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
                     session = self.sessions[data['streamSid']]
                     session['deepgram_transcribe_service'].establish_dg_connection()
-                    # session['transcribe_service'].connect()
+                    session['transcribe_service'].connect()
 
                 if data['streamSid'] not in self.sessions or 'call_sid' not in self.sessions[data['streamSid']]:
                     continue
@@ -145,8 +145,8 @@ class CallHandler:
                 if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'audio_buffer'):
                     audio_data = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'audio_buffer')
                     # await self.transcribe_service.transcribe(audio_data)
-                    await session['deepgram_transcribe_service'].transcribe(audio_data)
-                    # await session['transcribe_service'].transcribe(audio_data)
+                    # await session['deepgram_transcribe_service'].transcribe(audio_data)
+                    await session['transcribe_service'].transcribe(audio_data)
 
         except ConnectionClosedError as e:
             print(f"Connection closed with error: {e.code} - {e.reason}")
@@ -182,7 +182,7 @@ class CallHandler:
                 self.flush_agent(call_id)
 
             session['deepgram_transcribe_service'].disconnect()
-            # session['transcribe_service'].close()  # Close the transcriber service
+            session['transcribe_service'].close()  # Close the transcriber service
             try:
                 await websocket.close()
             except Exception as e:
@@ -345,7 +345,7 @@ class CallHandler:
         if stream_sid not in self.sessions:
             self.sessions[stream_sid]={
                 "deepgram_transcribe_service": self.initialize_transcriber(stream_sid, DeepgramService),
-                # "transcribe_service" : self.initialize_transcriber(stream_sid, TranscribeService),
+                "transcribe_service" : self.initialize_transcriber(stream_sid, TranscribeService),
                 "ai_speaking": False,
                 "ai_interrupt": False,
                 "speaking_duration": 0,
