@@ -94,98 +94,99 @@ class CallHandler:
         with open(output_file, 'wb') as mulaw_fp:
             pass  # Placeholder to ensure the file is created
 
-        with open(output_file, "ab") as f:
-            try:
-                while True:
-                    data = await websocket.receive_json()
-                    if data["event"] in ("connected", "start"):
-                        print(f"Media WS: Received event '{data['event']}'")
-                        continue
-                    if data['streamSid'] and not self.sessions[data['streamSid']]['websocket']:
-                        self.sessions[data['streamSid']]['websocket'] = websocket
-                        self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
-                        session = self.sessions[data['streamSid']]
-                        session['deepgram_transcribe_service'].establish_dg_connection()
-                        # session['transcribe_service'].connect()
+        # with open(output_file, "ab") as f:
+        try:
+            while True:
+                data = await websocket.receive_json()
+                if data["event"] in ("connected", "start"):
+                    print(f"Media WS: Received event '{data['event']}'")
+                    continue
+                if data['streamSid'] and not self.sessions[data['streamSid']]['websocket']:
+                    self.sessions[data['streamSid']]['websocket'] = websocket
+                    self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
+                    session = self.sessions[data['streamSid']]
+                    session['deepgram_transcribe_service'].establish_dg_connection()
+                    # session['transcribe_service'].connect()
 
-                    if data['streamSid'] not in self.sessions or 'call_sid' not in self.sessions[data['streamSid']]:
-                        continue
+                if data['streamSid'] not in self.sessions or 'call_sid' not in self.sessions[data['streamSid']]:
+                    continue
 
-                    if data["event"] == "media":
-                        media = data["media"]
-                        chunk = media["payload"]
-                        chunk_bytes = base64.b64decode(chunk)
-                                              # Step 2: Check if the decoded data is empty
-                                              # Convert byte data to an AudioSegment instance
-                        # result = self.is_silent_or_empty_mulaw_numpy(chunk_bytes)
-                        # is_audio_silent = result['is_silent']
+                if data["event"] == "media":
+                    media = data["media"]
+                    chunk = media["payload"]
+                    chunk_bytes = base64.b64decode(chunk)
+                                            # Step 2: Check if the decoded data is empty
+                                            # Convert byte data to an AudioSegment instance
+                    # result = self.is_silent_or_empty_mulaw_numpy(chunk_bytes)
+                    # is_audio_silent = result['is_silent']
 
-                        # if not is_audio_silent:
-                        #     await self.on_user_speech(data['streamSid'])
-
+                    # if not is_audio_silent:
+                    #     await self.on_user_speech(data['streamSid'])
+                    with open(output_file, "ab") as f:
                         f.write(chunk_bytes)
-                        if (('route_call' not in self.agents[call_id] 
-                            or self.agents[call_id]['route_call'] == False ) and
-                            ( 'end_call' not in self.agents[call_id]
-                            or self.agents[call_id]['end_call'] == False) ):
-                            await self.twilio_service.enqueue_audio(data['streamSid'], chunk_bytes ,'audio_buffer')
+                    if (('route_call' not in self.agents[call_id] 
+                        or self.agents[call_id]['route_call'] == False ) and
+                        ( 'end_call' not in self.agents[call_id]
+                        or self.agents[call_id]['end_call'] == False) ):
+                        await self.twilio_service.enqueue_audio(data['streamSid'], chunk_bytes ,'audio_buffer')
 
 
-                    if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'response_buffer'):
-                        print("Processing response buffers...")
-                        response_audio = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'response_buffer')
-                        # await self.twilio_service.send_control_command(session['websocket'], 'stop')
-                        if self.sessions[data['streamSid']]['background_sound'] is True:
-                            await self.stop_stream(data['streamSid'])
-                        session['ai_speaking'] = True
+                if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'response_buffer'):
+                    print("Processing response buffers...")
+                    response_audio = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'response_buffer')
+                    # await self.twilio_service.send_control_command(session['websocket'], 'stop')
+                    if self.sessions[data['streamSid']]['background_sound'] is True:
+                        await self.stop_stream(data['streamSid'])
+                    session['ai_speaking'] = True
+                    with open(output_file, "ab") as f:
                         f.write(response_audio)
-                        await self.twilio_service.send_audio_stream(session['websocket'], data['streamSid'], response_audio)
+                    await self.twilio_service.send_audio_stream(session['websocket'], data['streamSid'], response_audio)
 
-                    if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'audio_buffer'):
-                        audio_data = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'audio_buffer')
-                        # await self.transcribe_service.transcribe(audio_data)
-                        await session['deepgram_transcribe_service'].transcribe(audio_data)
-                        # await session['transcribe_service'].transcribe(audio_data)
+                if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'audio_buffer'):
+                    audio_data = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'audio_buffer')
+                    # await self.transcribe_service.transcribe(audio_data)
+                    await session['deepgram_transcribe_service'].transcribe(audio_data)
+                    # await session['transcribe_service'].transcribe(audio_data)
 
-            except ConnectionClosedError as e:
-                print(f"Connection closed with error: {e.code} - {e.reason}")
-            except ConnectionClosedOK as e:
-                print(f"Connection closed normally: {e.code} - {e.reason}")
-            except Exception as e:
-                print("Unexpected error:", e)
-            finally:
-                print("WebSocket connection closed.")
-                if session['stream_sid'] in self.chatgpt_service.conversations:
-                    conversations = self.chatgpt_service.conversations[session['stream_sid']]
-                    outputFile= f"recordings/{call_id}.wav"
-                    await self.convert_mulaw_to_wav(f"recordings/{call_id}.mulaw", outputFile)
-                    # os.remove(output_file)
-                    recordingUrl = await self.s3_service.uploadToS3(outputFile)
-                    agent_id = self.agents[call_id]['id']
-                    data = {
-                        "call_sid" : call_id,
-                        "conversations": conversations,
-                        "recording_url" : recordingUrl,
-                        "agent_id" : agent_id
-                    }
-                    self.chatgpt_service.close_conversation(session['stream_sid'])
-                    self.twilio_service.remove_stream_from_queue(session['stream_sid'])
-                    del self.sessions[session['stream_sid']]
+        except ConnectionClosedError as e:
+            print(f"Connection closed with error: {e.code} - {e.reason}")
+        except ConnectionClosedOK as e:
+            print(f"Connection closed normally: {e.code} - {e.reason}")
+        except Exception as e:
+            print("Unexpected error:", e)
+        finally:
+            print("WebSocket connection closed.")
+            if session['stream_sid'] in self.chatgpt_service.conversations:
+                conversations = self.chatgpt_service.conversations[session['stream_sid']]
+                outputFile= f"recordings/{call_id}.wav"
+                await self.convert_mulaw_to_wav(f"recordings/{call_id}.mulaw", outputFile)
+                # os.remove(output_file)
+                recordingUrl = await self.s3_service.uploadToS3(outputFile)
+                agent_id = self.agents[call_id]['id']
+                data = {
+                    "call_sid" : call_id,
+                    "conversations": conversations,
+                    "recording_url" : recordingUrl,
+                    "agent_id" : agent_id
+                }
+                self.chatgpt_service.close_conversation(session['stream_sid'])
+                self.twilio_service.remove_stream_from_queue(session['stream_sid'])
+                del self.sessions[session['stream_sid']]
 
-                    try:
-                        await self.backend_service.update_conversation_info(data)
-                    except Exception as e:
-                        print(e)
-                        
-                    self.agents[call_id]['websocket_closed'] = True
-                    self.flush_agent(call_id)
-
-                session['deepgram_transcribe_service'].disconnect()
-                # session['transcribe_service'].close()  # Close the transcriber service
                 try:
-                    await websocket.close()
+                    await self.backend_service.update_conversation_info(data)
                 except Exception as e:
-                    print("--Websocket connection Closed--")
+                    print(e)
+                    
+                self.agents[call_id]['websocket_closed'] = True
+                self.flush_agent(call_id)
+
+            session['deepgram_transcribe_service'].disconnect()
+            # session['transcribe_service'].close()  # Close the transcriber service
+            try:
+                await websocket.close()
+            except Exception as e:
+                print("--Websocket connection Closed--")
                     
     def disable_ai_speaking(self, call_id):
             self.sessions[call_id]['ai_speaking'] = False
