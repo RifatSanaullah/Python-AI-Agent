@@ -187,9 +187,17 @@ class ChatGPTService:
     
         # Function to close a conversation
     def close_conversation(self, conversation_id):
+        self.convo_index = 0
         if conversation_id in self.conversations:
             del self.conversations[conversation_id]
             print(f"Conversation ID {conversation_id} is now closed.")
         else:
             print(f"Conversation ID {conversation_id} does not exist.")
+
+        if conversation_id in self.system_convo:
+            del self.system_convo[conversation_id]
+            print(f"Conversation ID {conversation_id} is now closed.")
+        else:
+            print(f"Conversation ID {conversation_id} does not exist.")
+
     
