@@ -2,7 +2,7 @@
 import openai
 from app.config import settings
 # Import date class from datetime module
-from datetime import date
+from datetime import date, datetime
 
 import re
 
@@ -62,12 +62,20 @@ class ChatGPTService:
         self.system_convo ={}
         self.convo_index = 0
     # Function to add messages to a conversation
+
+    def json_serial(self, obj):
+        """JSON serializer for objects not serializable by default json code"""
+
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        raise TypeError ("Type %s not serializable" % type(obj))
+    
     def add_message(self, conversation_id, role, content):
         if conversation_id not in self.conversations:
             print(f"Conversation ID {conversation_id} does not exist.")
             return
         
-        self.conversations[conversation_id].append({"role": role, "content": content})
+        self.conversations[conversation_id].append({"role": role, "content": content , "timestamp" : self.json_serial(datetime.now())})
         # Function to add messages to a conversation
 
     def add_system_message(self, conversation_id, role, content):

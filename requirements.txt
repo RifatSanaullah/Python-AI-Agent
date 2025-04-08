@@ -21,3 +21,4 @@ python-docx
 pydub
 pyht
 soundfile
+python-multipart
