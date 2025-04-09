@@ -27,6 +27,7 @@ import random
 from io import BytesIO
 import numpy as np
 import soundfile as sf
+import time
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -51,7 +52,7 @@ class CallHandler:
         """Retrieve specific AI agent/business logic based on the dialed number."""
         return self.agents[call_id]
     
-    def is_silent_or_empty_mulaw_numpy(self, audio_data):
+    async def is_silent_or_empty_mulaw_numpy(self, audio_data):
         try:
             # Decode Base64
             audio_stream = BytesIO(audio_data)
@@ -83,7 +84,7 @@ class CallHandler:
             "transcribe_service": None,
             "ai_interrupt": False,
             "ai_speaking": False,
-            "speaking_duration": 0,
+            "wait_duration": 10,
             "stream_sid": None,
             "background_sound": None,
             "end_call": False,
@@ -111,17 +112,40 @@ class CallHandler:
                 if data['streamSid'] not in self.sessions or 'call_sid' not in self.sessions[data['streamSid']]:
                     continue
 
+                if (data['streamSid'] 
+                and self.sessions[data['streamSid']]['last_user_audio_time'] 
+                and time.time() - self.sessions[data['streamSid']]['last_user_audio_time'] > self.sessions[data['streamSid']]['wait_duration']):
+
+                    if data['streamSid'] and self.sessions[data['streamSid']]['wait_counter'] >= 2:
+                        self.sessions[data['streamSid']]['wait_counter'] = 0
+                        message = self.get_interrupt_message('end_call')
+                        self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
+                        await self.synthesize_response(message, data['streamSid'])
+                        # Schedule the call to end after 2 seconds
+                        self.clear_timer()
+                        self.timer = Timer(5, self.twilio_service.hangup_call, args=[self.sessions[data['streamSid']]['call_sid']])
+                        self.timer.start()
+                        return
+                    
+                    message = self.get_interrupt_message()
+                    self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
+                    await self.synthesize_response(message, data['streamSid'])
+                    self.sessions[data['streamSid']]['wait_counter'] += 1
+
                 if data["event"] == "media":
                     media = data["media"]
                     chunk = media["payload"]
                     chunk_bytes = base64.b64decode(chunk)
                                             # Step 2: Check if the decoded data is empty
                                             # Convert byte data to an AudioSegment instance
-                    # result = self.is_silent_or_empty_mulaw_numpy(chunk_bytes)
-                    # is_audio_silent = result['is_silent']
+                    result = await self.is_silent_or_empty_mulaw_numpy(chunk_bytes)
+                    is_audio_silent = result['is_silent']
 
-                    # if not is_audio_silent:
-                    #     await self.on_user_speech(data['streamSid'])
+                    if not is_audio_silent:
+                        # await self.on_user_speech(data['streamSid'])
+                        self.sessions[data['streamSid']]['last_user_audio_time'] =  None
+                        self.sessions[data['streamSid']]['wait_counter'] = 0
+
                     with open(output_file, "ab") as f:
                         f.write(chunk_bytes)
                     if (('route_call' not in self.agents[call_id] 
@@ -190,7 +214,7 @@ class CallHandler:
                     
     def disable_ai_speaking(self, call_id):
             self.sessions[call_id]['ai_speaking'] = False
-            self.sessions[call_id]['speaking_duration'] = 0
+            self.sessions[call_id]['wait_duration'] = 10
             self.sessions[call_id]['ai_interrupt'] = False
 
     def initialize_transcriber(self, call_id: str, Service : TranscribeService | DeepgramService):
@@ -222,7 +246,7 @@ class CallHandler:
         # if(self.timer):
         #     self.timer.cancel()
         #     self.timer = None
-        # self.timer = Timer(self.sessions[call_id]['speaking_duration'] - 1, self.disable_ai_speaking, args=[call_id])
+        # self.timer = Timer(self.sessions[call_id]['wait_duration'] - 1, self.disable_ai_speaking, args=[call_id])
         # self.timer.start()
 
         # await self.twilio_service.dequeue_all_except_next(call_id, 'response_buffer')
@@ -312,33 +336,61 @@ class CallHandler:
         audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text, model)
         # audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
 
-        # result = self.is_silent_or_empty_mulaw_numpy(audio_stream)
-        # session['speaking_duration'] = result['duration']
+        result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
+        session['wait_duration'] = result['duration'] + 3
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds() * 1000  # Calculate duration in milliseconds
         logging.info(f"Total Deepgram duration: {duration:.3f} ms")
         await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
-
-        print('audio streamed')
+        session['last_user_audio_time'] = time.time()
+        print('audio streamed', session['last_user_audio_time'])
 
     async def queue_audio(self, call_id, audio_stream):
         await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
 
-    def get_interrupt_message(self):
-        array = [
-            "Go ahead",
-            "Please, go ahead."
-            "Yes, do continue."
-            "Yes, please go on."
-            "I'm listening, please."
-            "Yes, please continue. "
-            "Of course, go ahead."
-            "Go ahead, I'm listening."
-            "Okay, I'm listening."
-            "Sure, please continue."
-        ]
-        return random.choice(array)
+    def get_interrupt_message(self , type = 'check_availability'):
+        arrayObj = {
+            'interrupt': [
+                "Go ahead",
+                "Please, go ahead."
+                "Yes, do continue."
+                "Yes, please go on."
+                "I'm listening, please."
+                "Yes, please continue. "
+                "Of course, go ahead."
+                "Go ahead, I'm listening."
+                "Okay, I'm listening."
+                "Sure, please continue."
+            ],
+            'check_availability': [
+                "Are you around?",
+                "Still with me?",
+                "You there?",
+                "Did I lose you?",
+                "Are you gone?",
+                "Can you hear me?",
+                "Are you still online?",
+                "Just checking if you're still here.",
+                "Are you still listening?",
+                "Hello? Still there?"
+            ],
+            'end_call': [
+                "I understand you might be tied up. Feel free to message me when you're available. Wishing you a great day!",
+                "No worries if you're busy. Just reach out when you have a moment. Take care!",
+                "You may be caught up with something. Ping me whenever you're free. Have a wonderful day!",
+                "Totally fine if you're busy. Let's connect when you get a chance. Hope your day is going well!",
+                "If you're occupied, that's okay. Reach out anytime you're free. Have an awesome day!",
+                "I get that things can get hectic. Connect with me whenever you're free. Take it easy!",
+                "It seems like you might be busy. Just drop a message when you’re free. Enjoy your day!",
+                "All good if you’re swamped. Let’s talk whenever you have time. Wishing you a nice day!",
+                "You might have your hands full. Reach out whenever it works for you. Hope your day’s great!",
+                "Understandable if you're unavailable right now. Let's chat when you're free. Have a great one!"
+                ]
+        } 
+
+
+        return random.choice(arrayObj[type])
 
     def initialize_session_info(self, stream_sid, call_sid):
         # Initialize a session for this specific call
@@ -348,11 +400,13 @@ class CallHandler:
                 "transcribe_service" : self.initialize_transcriber(stream_sid, TranscribeService),
                 "ai_speaking": False,
                 "ai_interrupt": False,
-                "speaking_duration": 0,
+                "wait_counter": 0,
+                "wait_duration": 10,
                 "stream_sid": stream_sid,
                 "background_sound": None,
                 "websocket" : None,
                 "call_sid" : call_sid,
+                "last_user_audio_time" : None
             }
         
     async def handle_call(self, call_id: str, data):
