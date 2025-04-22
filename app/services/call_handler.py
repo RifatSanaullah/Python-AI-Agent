@@ -9,6 +9,7 @@ from app.services.backend_service import BackendHandler
 from app.services.polly_service import PollyService
 from app.services.deepgram_service import DeepgramService
 from app.services.assembly_ai_transcribe_service import TranscribeService
+from app.services.elevenlabs_service import ElevenLabsService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 import logging
 from datetime import datetime
@@ -42,6 +43,7 @@ class CallHandler:
         self.chatgpt_service = ChatGPTService()
         self.s3_service = S3Service()
         self.playht_service = PlayHT()
+        self.elevenlabs_service = ElevenLabsService()
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.sessions = {}
         self.agents = {}
@@ -333,8 +335,9 @@ class CallHandler:
         start_time = datetime.now()
         # audio_stream = await self.polly_service.stream_text_to_speech(chunk)
         model = self.agents[self.sessions[call_id]['call_sid']]['voice']['model']
-        audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text, model)
+        # audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text, model)
         # audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
+        audio_stream = await self.elevenlabs_service.stream_text_to_speech(text)
 
         result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
         session['wait_duration'] = result['duration'] + 3

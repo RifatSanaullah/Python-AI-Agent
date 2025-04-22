@@ -23,5 +23,7 @@ class Settings(BaseSettings):
     deepgram_apikey: str = os.getenv("DEEPGRAM_API_KEY")
     playht_id: str = os.getenv("PLAY_HT_USER_ID")
     playht_apikey: str = os.getenv("PLAY_HT_API_KEY")
+    elevenlabs_apikey: str = os.getenv("ELEVENLABS_API_KEY")
+    elevenlabs_voice_id: str = os.getenv("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")  # Default voice ID
 
 settings = Settings()
