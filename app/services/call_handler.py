@@ -9,6 +9,7 @@ from app.services.backend_service import BackendHandler
 from app.services.polly_service import PollyService
 from app.services.deepgram_service import DeepgramService
 from app.services.assembly_ai_transcribe_service import TranscribeService
+from app.services.zoho_service import ZohoService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 import logging
 from datetime import datetime
@@ -42,6 +43,7 @@ class CallHandler:
         self.chatgpt_service = ChatGPTService()
         self.s3_service = S3Service()
         self.playht_service = PlayHT()
+        self.zoho_service = ZohoService()
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.sessions = {}
         self.agents = {}
@@ -418,6 +420,17 @@ class CallHandler:
         self.agents[call_id]['websocket_closed'] = False
         self.agents[call_id]['end_call'] = False
         self.agents[call_id]['route_call'] = False
+        
+        # Check if this user/business has a Zoho connection
+        # In a real implementation, you would fetch this from your user database
+        # For now, we'll check if it's in the agent data
+        if 'zoho_connection_id' in self.agents[call_id]:
+            print(f"Found Zoho connection ID for call {call_id}")
+            # We'll set this up in the stream callback when we have the stream_sid
+            self.agents[call_id]['has_zoho'] = True
+        else:
+            self.agents[call_id]['has_zoho'] = False
+            
         response = self.twilio_service.initialize_call(call_id)
         # self.transcribe_service.connect()  # Connect the transcriber service
         # await self.initialize_session_info(call_id)
@@ -447,6 +460,14 @@ class CallHandler:
             self.timer = Timer(5, self.twilio_service.hangup_call, args=[call_sid])
             self.timer.start()
             return
+            
+        # Set up Zoho connection if available for this user/business
+        if self.agents[call_sid].get('has_zoho', False):
+            zoho_connection_id = self.agents[call_sid].get('zoho_connection_id')
+            if zoho_connection_id:
+                print(f"Setting up Zoho connection {zoho_connection_id} for stream {stream_sid}")
+                # Set the Zoho connection in the ChatGPT service
+                self.chatgpt_service.set_zoho_connection(stream_sid, zoho_connection_id)
 
         greetings = self.agents[call_sid]['greetings']
         await self.synthesize_response(greetings , stream_sid)

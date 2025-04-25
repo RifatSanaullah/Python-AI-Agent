@@ -3,6 +3,8 @@ import openai
 from app.config import settings
 # Import date class from datetime module
 from datetime import date, datetime
+from app.services.nango_openai_service import NangoOpenAIService
+from app.services.zoho_service import ZohoService
 
 import re
 
@@ -61,6 +63,9 @@ class ChatGPTService:
         self.max_chunk_size = 200
         self.system_convo ={}
         self.convo_index = 0
+        self.nango_openai_service = NangoOpenAIService()
+        self.zoho_service = ZohoService()
+        self.user_connections = {}  # Store user's Zoho connection IDs
     # Function to add messages to a conversation
 
     def json_serial(self, obj):
@@ -94,6 +99,12 @@ class ChatGPTService:
                 # {"role": "system", "content": "Before Ending the call you have to reclarify all the information you gather with user"},
                 # {"role": "system", "content": f"Current Date is: {date.today()}. If you gather any input in tomorrow or yesterday then response any date information in this format : 01 january 1970 with the time and if input only time then use use the time with current date"},
         ]
+        
+        # Check if this user has a Zoho connection ID
+        if conversation_id in self.user_connections:
+            conversations[conversation_id].append(
+                {"role": "system", "content": "You have access to Zoho CRM data. When the caller mentions a name, company, or other identifying information, you can use this to provide personalized responses based on their CRM data. If they ask about their account, deals, or other business information, you can reference this data to provide accurate answers."}
+            )
 
         if not knowledge_base:
             return
@@ -125,6 +136,16 @@ class ChatGPTService:
             self.initial_message(self.system_convo, conversation_id, knowledge)
             self.conversations[conversation_id] = []
             self.convo_index = len(self.system_convo[conversation_id])
+            
+            # Check if this user has a Zoho connection ID
+            # In a real implementation, you would fetch this from your user database
+            # For now, we'll check if it's in our local dictionary
+            if conversation_id in self.user_connections:
+                connection_id = self.user_connections[conversation_id]
+                # Add Zoho capability to the system message
+                self.add_system_message(conversation_id, "system", 
+                    "You have access to Zoho CRM data. You can retrieve information about contacts, accounts, leads, deals, and more. "
+                    "Use this information to provide more personalized and helpful responses.")
 
 
 
@@ -133,23 +154,46 @@ class ChatGPTService:
         
         # Add user input to conversation history
         self.add_message(conversation_id, "user", message)
-
-
         self.add_system_message(conversation_id, "user", message)
-
-        response = openai.chat.completions.create(
-            model="gpt-4-turbo",
-            messages=self.system_convo[conversation_id],
-            # stream=True  # Enable streaming
-        )
-        print("Assistant: ", end="", flush=True)  # Print the assistant's response incrementally
-        assistant_reply = ""
+        
+        # Check if this user has a Zoho connection
+        has_zoho_connection = conversation_id in self.user_connections
+        
+        if has_zoho_connection:
+            # Use NangoOpenAIService to enhance the response with Zoho data
+            try:
+                # Process the message with Zoho integration
+                connection_id = self.user_connections[conversation_id]
+                
+                # Create a modified message that includes context about available Zoho data
+                zoho_enhanced_message = f"The following is a user message in a phone conversation. Use Zoho CRM data with connection ID {connection_id} if relevant: {message}"
+                
+                # Get enhanced response from NangoOpenAIService
+                enhanced_response = await self.nango_openai_service.process_conversation(zoho_enhanced_message)
+                
+                # Use the enhanced response
+                assistant_reply = enhanced_response
+                print("Using Zoho-enhanced response")
+            except Exception as e:
+                print(f"Error using Zoho integration: {str(e)}")
+                # Fall back to standard response if Zoho integration fails
+                response = openai.chat.completions.create(
+                    model="gpt-4-turbo",
+                    messages=self.system_convo[conversation_id]
+                )
+                assistant_reply = response.choices[0].message.content
+        else:
+            # Standard response without Zoho integration
+            response = openai.chat.completions.create(
+                model="gpt-4-turbo",
+                messages=self.system_convo[conversation_id]
+            )
+            print("Assistant: ", end="", flush=True)  # Print the assistant's response incrementally
+            assistant_reply = response.choices[0].message.content
+        
+        # Process the response for speech synthesis
         chunk_reply = ""
         chunker = StreamingChunker(max_length=200, onTTS=synthesize_response, conversation_id=conversation_id)
-        # Process the streamed chunks
-
-        assistant_reply = response.choices[0].message.content
-
         await chunker.add_stream_data(assistant_reply)  # Simulating stream input
 
         # for chunk in response:
@@ -207,5 +251,23 @@ class ChatGPTService:
             print(f"Conversation ID {conversation_id} is now closed.")
         else:
             print(f"Conversation ID {conversation_id} does not exist.")
+            
+        # Clean up Zoho connection if it exists
+        if conversation_id in self.user_connections:
+            del self.user_connections[conversation_id]
+            print(f"Zoho connection for conversation ID {conversation_id} is now removed.")
+    
+    def set_zoho_connection(self, conversation_id, connection_id):
+        """Set a Zoho connection ID for a specific conversation/user"""
+        self.user_connections[conversation_id] = connection_id
+        print(f"Zoho connection ID {connection_id} set for conversation {conversation_id}")
+        
+        # If the conversation already exists, add the Zoho capability message
+        if conversation_id in self.system_convo:
+            self.add_system_message(conversation_id, "system", 
+                "You have access to Zoho CRM data. You can retrieve information about contacts, accounts, leads, deals, and more. "
+                "Use this information to provide more personalized and helpful responses.")
+        
+        return True
 
     
