@@ -174,7 +174,7 @@ class ChatGPTService:
         self.add_system_message(conversation_id, "assistant", assistant_reply)
 
 
-        if (len(self.system_convo[conversation_id]) >= 6 + self.convo_index):
+        if (conversation_id in self.system_convo and len(self.system_convo[conversation_id]) >= 6 + self.convo_index):
 
             allmessages = 'Get summary with every context of below conversations: '
             for index in range(self.convo_index, len(self.system_convo[conversation_id])) :
