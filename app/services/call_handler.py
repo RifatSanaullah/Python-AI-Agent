@@ -112,25 +112,25 @@ class CallHandler:
                 if data['streamSid'] not in self.sessions or 'call_sid' not in self.sessions[data['streamSid']]:
                     continue
 
-                if (data['streamSid'] 
-                and self.sessions[data['streamSid']]['last_user_audio_time'] 
-                and time.time() - self.sessions[data['streamSid']]['last_user_audio_time'] > self.sessions[data['streamSid']]['wait_duration']):
+                # if (data['streamSid'] 
+                # and self.sessions[data['streamSid']]['last_user_audio_time'] 
+                # and time.time() - self.sessions[data['streamSid']]['last_user_audio_time'] > self.sessions[data['streamSid']]['wait_duration']):
 
-                    if data['streamSid'] and self.sessions[data['streamSid']]['wait_counter'] >= 2:
-                        self.sessions[data['streamSid']]['wait_counter'] = 0
-                        message = self.get_interrupt_message('end_call')
-                        self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
-                        await self.synthesize_response(message, data['streamSid'])
-                        # Schedule the call to end after 2 seconds
-                        self.clear_timer()
-                        self.timer = Timer(5, self.twilio_service.hangup_call, args=[self.sessions[data['streamSid']]['call_sid']])
-                        self.timer.start()
-                        return
+                #     if data['streamSid'] and self.sessions[data['streamSid']]['wait_counter'] >= 2:
+                #         self.sessions[data['streamSid']]['wait_counter'] = 0
+                #         message = self.get_interrupt_message('end_call')
+                #         self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
+                #         await self.synthesize_response(message, data['streamSid'])
+                #         # Schedule the call to end after 2 seconds
+                #         self.clear_timer()
+                #         self.timer = Timer(5, self.twilio_service.hangup_call, args=[self.sessions[data['streamSid']]['call_sid']])
+                #         self.timer.start()
+                #         return
                     
-                    message = self.get_interrupt_message()
-                    self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
-                    await self.synthesize_response(message, data['streamSid'])
-                    self.sessions[data['streamSid']]['wait_counter'] += 1
+                #     message = self.get_interrupt_message()
+                #     self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
+                #     await self.synthesize_response(message, data['streamSid'])
+                #     self.sessions[data['streamSid']]['wait_counter'] += 1
 
                 if data["event"] == "media":
                     media = data["media"]
