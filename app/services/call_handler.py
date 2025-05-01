@@ -139,9 +139,9 @@ class CallHandler:
                                             # Step 2: Check if the decoded data is empty
                                             # Convert byte data to an AudioSegment instance
 
-                    # result = await self.is_silent_or_empty_mulaw_numpy(chunk_bytes)
-                    # is_audio_silent = result['is_silent']
-                    is_audio_silent = await self.is_mulaw_stream_silent_base64(chunk_bytes)
+                    result = await self.is_silent_or_empty_mulaw_numpy(chunk_bytes)
+                    is_audio_silent = result['is_silent']
+                    # is_audio_silent = await self.is_mulaw_stream_silent_base64(chunk_bytes)
                     # is_audio_silent = result['is_silent']
 
                     if not is_audio_silent:
