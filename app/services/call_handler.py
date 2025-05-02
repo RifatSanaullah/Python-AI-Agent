@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from app.services.playht_service import PlayHT
 from app.services.twilio_service import TwilioService
 from app.services.chatgpt_service import ChatGPTService
-# from app.services.chatgpt_service_v2 import ChatGPTService
 from app.services.s3_service import S3Service
 from app.services.backend_service import BackendHandler
 from app.services.polly_service import PollyService
@@ -421,12 +420,8 @@ class CallHandler:
         self.agents[call_id]['end_call'] = False
         self.agents[call_id]['route_call'] = False
         
-        # Check if this user/business has a Zoho connection
-        # In a real implementation, you would fetch this from your user database
-        # For now, we'll check if it's in the agent data
         if 'zoho_connection_id' in self.agents[call_id]:
             print(f"Found Zoho connection ID for call {call_id}")
-            # We'll set this up in the stream callback when we have the stream_sid
             self.agents[call_id]['has_zoho'] = True
         else:
             self.agents[call_id]['has_zoho'] = False
@@ -467,7 +462,7 @@ class CallHandler:
             if zoho_connection_id:
                 print(f"Setting up Zoho connection {zoho_connection_id} for stream {stream_sid}")
                 # Set the Zoho connection in the ChatGPT service
-                self.chatgpt_service.set_zoho_connection(stream_sid, zoho_connection_id)
+                await self.chatgpt_service.set_zoho_connection(stream_sid, zoho_connection_id)
 
         greetings = self.agents[call_sid]['greetings']
         await self.synthesize_response(greetings , stream_sid)

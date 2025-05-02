@@ -5,6 +5,7 @@ from app.config import settings
 from datetime import date, datetime
 from app.services.nango_openai_service import NangoOpenAIService
 from app.services.zoho_service import ZohoService
+from app.services.backend_service import BackendHandler
 
 import re
 
@@ -61,11 +62,11 @@ class ChatGPTService:
         openai.api_key = settings.chatgpt_api_key
         self.conversations = {}
         self.max_chunk_size = 200
-        self.system_convo ={}
+        self.system_convo = {}
         self.convo_index = 0
         self.nango_openai_service = NangoOpenAIService()
         self.zoho_service = ZohoService()
-        self.user_connections = {}  # Store user's Zoho connection IDs
+        self.backend_service = BackendHandler()
     # Function to add messages to a conversation
 
     def json_serial(self, obj):
@@ -91,17 +92,25 @@ class ChatGPTService:
         self.system_convo[conversation_id].append({"role": role, "content": content})
 
     def initial_message(self , conversations, conversation_id, knowledge_base):
+        # Initialize conversation with metadata
+        if conversation_id not in conversations:
+            conversations[conversation_id] = []
+        
+        # Initialize metadata if not exists
+        if 'metadata' not in conversations:
+            conversations['metadata'] = {}
+        if conversation_id not in conversations['metadata']:
+            conversations['metadata'][conversation_id] = {}
 
         conversations[conversation_id] = [
-
                 {"role": "system", "content": f"Always ask only one question at a time. After each response, follow up with a single question. For example, if you need contact information, ask for the name first, then phone number, then email—one at a time. Do not ask for multiple pieces of information or offer multiple options in one message. Always provide responses that are suitable for phone conversations. Avoid lengthy explanations, long lists, or complex details. Limit responses to key points. Keep responses under 3 sentences to ensure they are concise and easy to digest.Always refer to yourself using your name: {knowledge_base['agentName']} and your gender is {knowledge_base['gender']}"},
                  # {"role": "system", "content": "Whenever you get any answer and if you left any query. Ask instantly don't wait for querying from user."},
                 # {"role": "system", "content": "Before Ending the call you have to reclarify all the information you gather with user"},
                 # {"role": "system", "content": f"Current Date is: {date.today()}. If you gather any input in tomorrow or yesterday then response any date information in this format : 01 january 1970 with the time and if input only time then use use the time with current date"},
         ]
         
-        # Check if this user has a Zoho connection ID
-        if conversation_id in self.user_connections:
+        # Check if this conversation has a Zoho connection ID stored in metadata
+        if 'zoho_connection_id' in conversations['metadata'].get(conversation_id, {}):
             conversations[conversation_id].append(
                 {"role": "system", "content": "You have access to Zoho CRM data. When the caller mentions a name, company, or other identifying information, you can use this to provide personalized responses based on their CRM data. If they ask about their account, deals, or other business information, you can reference this data to provide accurate answers."}
             )
@@ -137,11 +146,30 @@ class ChatGPTService:
             self.conversations[conversation_id] = []
             self.convo_index = len(self.system_convo[conversation_id])
             
-            # Check if this user has a Zoho connection ID
-            # In a real implementation, you would fetch this from your user database
-            # For now, we'll check if it's in our local dictionary
-            if conversation_id in self.user_connections:
-                connection_id = self.user_connections[conversation_id]
+            # Check if this conversation has a Zoho connection ID in the database
+            has_zoho_connection = False
+            try:
+                data = {
+                    "stream_sid": conversation_id
+                }
+                
+                result = await self.backend_service.update_conversation_info(data)
+                if result and 'data' in result and result['data'] and 'zoho_connection_id' in result['data']:
+                    connection_id = result['data']['zoho_connection_id']
+                    # Store in conversation metadata
+                    if 'metadata' not in self.system_convo:
+                        self.system_convo['metadata'] = {}
+                    if conversation_id not in self.system_convo['metadata']:
+                        self.system_convo['metadata'][conversation_id] = {}
+                    
+                    self.system_convo['metadata'][conversation_id]['zoho_connection_id'] = connection_id
+                    has_zoho_connection = True
+                    print(f"Retrieved Zoho connection ID {connection_id} from database for conversation {conversation_id}")
+            except Exception as e:
+                print(f"Error retrieving Zoho connection ID from database: {str(e)}")
+            
+            # If we have a Zoho connection, add the capability message
+            if has_zoho_connection:
                 # Add Zoho capability to the system message
                 self.add_system_message(conversation_id, "system", 
                     "You have access to Zoho CRM data. You can retrieve information about contacts, accounts, leads, deals, and more. "
@@ -156,15 +184,17 @@ class ChatGPTService:
         self.add_message(conversation_id, "user", message)
         self.add_system_message(conversation_id, "user", message)
         
-        # Check if this user has a Zoho connection
-        has_zoho_connection = conversation_id in self.user_connections
+        # Check if this conversation has a Zoho connection ID
+        has_zoho_connection = False
+        connection_id = None
+        if 'metadata' in self.system_convo and conversation_id in self.system_convo['metadata']:
+            if 'zoho_connection_id' in self.system_convo['metadata'][conversation_id]:
+                has_zoho_connection = True
+                connection_id = self.system_convo['metadata'][conversation_id]['zoho_connection_id']
         
         if has_zoho_connection:
             # Use NangoOpenAIService to enhance the response with Zoho data
             try:
-                # Process the message with Zoho integration
-                connection_id = self.user_connections[conversation_id]
-                
                 # Create a modified message that includes context about available Zoho data
                 zoho_enhanced_message = f"The following is a user message in a phone conversation. Use Zoho CRM data with connection ID {connection_id} if relevant: {message}"
                 
@@ -238,7 +268,7 @@ class ChatGPTService:
         return assistant_reply
     
         # Function to close a conversation
-    def close_conversation(self, conversation_id):
+    async def close_conversation(self, conversation_id):
         self.convo_index = 0
         if conversation_id in self.conversations:
             del self.conversations[conversation_id]
@@ -252,15 +282,35 @@ class ChatGPTService:
         else:
             print(f"Conversation ID {conversation_id} does not exist.")
             
-        # Clean up Zoho connection if it exists
-        if conversation_id in self.user_connections:
-            del self.user_connections[conversation_id]
-            print(f"Zoho connection for conversation ID {conversation_id} is now removed.")
+        # Clean up Zoho connection if it exists in metadata
+        if 'metadata' in self.system_convo and conversation_id in self.system_convo['metadata']:
+            del self.system_convo['metadata'][conversation_id]
+            print(f"Zoho connection for conversation ID {conversation_id} removed from metadata.")
     
-    def set_zoho_connection(self, conversation_id, connection_id):
+    async def set_zoho_connection(self, conversation_id, connection_id):
         """Set a Zoho connection ID for a specific conversation/user"""
-        self.user_connections[conversation_id] = connection_id
+        # Store in conversation metadata
+        if 'metadata' not in self.system_convo:
+            self.system_convo['metadata'] = {}
+        if conversation_id not in self.system_convo['metadata']:
+            self.system_convo['metadata'][conversation_id] = {}
+        
+        self.system_convo['metadata'][conversation_id]['zoho_connection_id'] = connection_id
         print(f"Zoho connection ID {connection_id} set for conversation {conversation_id}")
+        
+        # Send to backend for persistent storage
+        try:
+            # In the call_handler.py, conversation_id is the stream_sid and we need to send
+            # the connection_id to be stored with the conversation in the database
+            data = {
+                "stream_sid": conversation_id,
+                "zoho_connection_id": connection_id
+            }
+            # Send to backend service
+            await self.backend_service.update_conversation_info(data)
+            print(f"Zoho connection ID {connection_id} sent to database for stream {conversation_id}")
+        except Exception as e:
+            print(f"Error storing Zoho connection ID in database: {str(e)}")
         
         # If the conversation already exists, add the Zoho capability message
         if conversation_id in self.system_convo:
