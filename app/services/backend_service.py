@@ -1,7 +1,7 @@
 import httpx
 from app.config import settings
 from typing import Any, Dict
-
+from fastapi import FastAPI, Response
 
 class BackendHandler:
     def __init__(self):
@@ -14,6 +14,51 @@ class BackendHandler:
             url = f"{self.OTHER_BACKEND_URL}/agent/get-agent"
             async with httpx.AsyncClient() as client:
                 response = await client.get(url, params={"phoneNumber": phoneNumber}, timeout=10.0)
+
+            response.raise_for_status()  # Raise an exception for HTTP errors
+            return response.json()
+
+        except httpx.HTTPStatusError as e:
+            print(f"HTTP error while calling backend: {e.response.status_code} {e.response.text}")
+        except httpx.RequestError as e:
+            print(f"Request error while calling backend: {str(e)}")
+
+    async def connectCA(data: Dict[str, Any]) -> Dict[str, Any]:
+
+        try:
+            url = f"{settings.boom_backend_url}/call/connectCA"
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=data, timeout=20.0)
+
+            # Return the same XML response with correct content-type
+            return response.text
+
+        except httpx.HTTPStatusError as e:
+            print(f"HTTP error while calling backend: {e.response.status_code} {e.response.text}")
+        except httpx.RequestError as e:
+            print(f"Request error while calling backend: {str(e)}")
+
+    async def complete_status_callback(data: Dict[str, Any]) -> Dict[str, Any]:
+
+        try:
+            url = f"{settings.boom_backend_url}/call/completeStatusCallBack"
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=data, timeout=20.0)
+
+            response.raise_for_status()  # Raise an exception for HTTP errors
+            return response.json()
+
+        except httpx.HTTPStatusError as e:
+            print(f"HTTP error while calling backend: {e.response.status_code} {e.response.text}")
+        except httpx.RequestError as e:
+            print(f"Request error while calling backend: {str(e)}")
+
+    async def fallback_status_callback(data: Dict[str, Any]) -> Dict[str, Any]:
+
+        try:
+            url = f"{settings.boom_backend_url}/call/callFallback"
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=data, timeout=20.0)
 
             response.raise_for_status()  # Raise an exception for HTTP errors
             return response.json()

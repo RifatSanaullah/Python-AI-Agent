@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     domain: str = os.getenv("DOMAIN", "localhost")
     base_url: str = os.getenv("BASE_URL", "http://${domain}")
     ai_backend_url: str = os.getenv("AI_BACKEND_URL", "http://localhost:4000/v1")
+    boom_backend_url: str = os.getenv("BOOM_BACKEND_URL", "http://localhost:3567")
+    boom_number: str = os.getenv("BOOM_NUMBER", "+18774090666")
     deepgram_apikey: str = os.getenv("DEEPGRAM_API_KEY")
     playht_id: str = os.getenv("PLAY_HT_USER_ID")
     playht_apikey: str = os.getenv("PLAY_HT_API_KEY")
