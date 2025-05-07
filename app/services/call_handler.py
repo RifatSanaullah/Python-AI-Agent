@@ -199,6 +199,9 @@ class CallHandler:
 
                 try:
                     await self.backend_service.update_conversation_info(data)
+                    isBoom = self.agents[call_id]['isBoom']
+                    if isBoom == True:
+                        await self.backend_service.update_conversation_bh({"conversations": data['conversations'],})
                 except Exception as e:
                     print(e)
                     
@@ -413,7 +416,7 @@ class CallHandler:
         print("Handling call...")
         api_response = await self.backend_service.create_call_info(data)
         self.agents[call_id] = api_response['data']['agent']
-        self.agents[call_id]['receipent'] = data['from']
+        self.agents[call_id]['isBoom'] = data['isBoom']
         self.agents[call_id]['complete_call'] = False
         self.agents[call_id]['websocket_closed'] = False
         self.agents[call_id]['end_call'] = False

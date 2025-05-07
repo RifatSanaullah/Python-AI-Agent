@@ -53,7 +53,8 @@ async def incoming_call(request: Request, call_handler: CallHandler = Depends(ge
         "from" : fromNumber,
         "to" : dialed_number,
         "application_sid" : application_sid,
-        "direction" : direction
+        "direction" : direction,
+        "isBoom": data.get("IsBoom"),
     }
     response = await call_handler.handle_call(call_id, data)
     return PlainTextResponse(content=str(response), media_type="application/xml")
