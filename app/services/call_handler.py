@@ -200,7 +200,8 @@ class CallHandler:
                 try:
                     await self.backend_service.update_conversation_info(data)
                     isBoom = self.agents[call_id]['isBoom']
-                    if isBoom == True:
+                    print(isBoom)
+                    if isBoom is not None or isBoom == True or isBoom == 'true' or isBoom != 'false':
                         await self.backend_service.update_conversation_bh({"conversations": data['conversations'],})
                 except Exception as e:
                     print(e)

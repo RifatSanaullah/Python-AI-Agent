@@ -47,7 +47,7 @@ async def incoming_call(request: Request, call_handler: CallHandler = Depends(ge
     fromNumber = data.get('From')
     dialed_number = data.get("To")
     call_id = data.get("CallSid")
-
+    print(data.get("IsBoom"))
     data = {
         "call_sid" : call_id,
         "from" : fromNumber,
