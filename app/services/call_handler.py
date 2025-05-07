@@ -107,30 +107,30 @@ class CallHandler:
                     self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
                     session = self.sessions[data['streamSid']]
                     session['deepgram_transcribe_service'].establish_dg_connection()
-                    session['transcribe_service'].connect()
+                    # session['transcribe_service'].connect()
 
                 if data['streamSid'] not in self.sessions or 'call_sid' not in self.sessions[data['streamSid']]:
                     continue
 
-                if (data['streamSid'] 
-                and self.sessions[data['streamSid']]['last_user_audio_time'] 
-                and time.time() - self.sessions[data['streamSid']]['last_user_audio_time'] > self.sessions[data['streamSid']]['wait_duration']):
+                # if (data['streamSid'] 
+                # and self.sessions[data['streamSid']]['last_user_audio_time'] 
+                # and time.time() - self.sessions[data['streamSid']]['last_user_audio_time'] > self.sessions[data['streamSid']]['wait_duration']):
 
-                    if data['streamSid'] and self.sessions[data['streamSid']]['wait_counter'] >= 2:
-                        self.sessions[data['streamSid']]['wait_counter'] = 0
-                        message = self.get_interrupt_message('end_call')
-                        self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
-                        await self.synthesize_response(message, data['streamSid'])
-                        # Schedule the call to end after 2 seconds
-                        self.clear_timer()
-                        self.timer = Timer(5, self.twilio_service.hangup_call, args=[self.sessions[data['streamSid']]['call_sid']])
-                        self.timer.start()
-                        return
+                #     if data['streamSid'] and self.sessions[data['streamSid']]['wait_counter'] >= 2:
+                #         self.sessions[data['streamSid']]['wait_counter'] = 0
+                #         message = self.get_interrupt_message('end_call')
+                #         self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
+                #         await self.synthesize_response(message, data['streamSid'])
+                #         # Schedule the call to end after 2 seconds
+                #         self.clear_timer()
+                #         self.timer = Timer(5, self.twilio_service.hangup_call, args=[self.sessions[data['streamSid']]['call_sid']])
+                #         self.timer.start()
+                #         return
                     
-                    message = self.get_interrupt_message()
-                    self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
-                    await self.synthesize_response(message, data['streamSid'])
-                    self.sessions[data['streamSid']]['wait_counter'] += 1
+                #     message = self.get_interrupt_message()
+                #     self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
+                #     await self.synthesize_response(message, data['streamSid'])
+                #     self.sessions[data['streamSid']]['wait_counter'] += 1
 
                 if data["event"] == "media":
                     media = data["media"]
@@ -138,8 +138,11 @@ class CallHandler:
                     chunk_bytes = base64.b64decode(chunk)
                                             # Step 2: Check if the decoded data is empty
                                             # Convert byte data to an AudioSegment instance
+
                     result = await self.is_silent_or_empty_mulaw_numpy(chunk_bytes)
                     is_audio_silent = result['is_silent']
+                    # is_audio_silent = await self.is_mulaw_stream_silent_base64(chunk_bytes)
+                    # is_audio_silent = result['is_silent']
 
                     if not is_audio_silent:
                         # await self.on_user_speech(data['streamSid'])
@@ -169,8 +172,8 @@ class CallHandler:
                 if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'audio_buffer'):
                     audio_data = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'audio_buffer')
                     # await self.transcribe_service.transcribe(audio_data)
-                    # await session['deepgram_transcribe_service'].transcribe(audio_data)
-                    await session['transcribe_service'].transcribe(audio_data)
+                    await session['deepgram_transcribe_service'].transcribe(audio_data)
+                    # await session['transcribe_service'].transcribe(audio_data)
 
         except ConnectionClosedError as e:
             print(f"Connection closed with error: {e.code} - {e.reason}")
@@ -210,11 +213,28 @@ class CallHandler:
                 self.flush_agent(call_id)
 
             session['deepgram_transcribe_service'].disconnect()
-            session['transcribe_service'].close()  # Close the transcriber service
+            # session['transcribe_service'].close()  # Close the transcriber service
             try:
                 await websocket.close()
             except Exception as e:
                 print("--Websocket connection Closed--")
+
+    def is_mulaw_stream_silent_base64(mulaw_bytes: bytes, silence_threshold: int = 500) -> bool:
+        """
+        Takes a base64-encoded µ-law audio chunk and returns True if it's silent.
+        """
+        # Convert µ-law to linear PCM (16-bit)
+        pcm_data = audioop.ulaw2lin(mulaw_bytes, 2)
+
+        # Convert to numpy array for analysis
+        pcm_array = np.frombuffer(pcm_data, dtype=np.int16)
+
+        # Measure maximum amplitude
+        max_amplitude = np.max(np.abs(pcm_array)) if pcm_array.size > 0 else 0
+
+        print(f"Max amplitude: {max_amplitude}")
+
+        return max_amplitude < silence_threshold
                     
     def disable_ai_speaking(self, call_id):
             self.sessions[call_id]['ai_speaking'] = False
