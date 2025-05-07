@@ -53,7 +53,7 @@ class BackendHandler:
         except httpx.RequestError as e:
             print(f"Request error while calling backend: {str(e)}")
             
-    async def update_conversation_bh(data: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_conversation_bh(self, data: Dict[str, Any]) -> Dict[str, Any]:
 
         try:
             url = f"{settings.boom_backend_url}/lead/updateConversation"
