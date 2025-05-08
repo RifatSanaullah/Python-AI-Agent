@@ -1,12 +1,27 @@
 import json
+import logging
 from typing import Dict, Any, Optional, List
 from app.services.nango_service import NangoService
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("zoho_service")
+
 class ZohoService(NangoService):
+    def __init__(self):
+        super().__init__()
+        logger.info("ZohoService initialized")
+        
     
     async def get_contacts(self, connection_id: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-       
-        return await self.fetch_data(connection_id, "get-contacts", params)
+        logger.info(f"Fetching Zoho contacts with connection_id: {connection_id}")
+        try:
+            result = await self.fetch_data(connection_id, "get-contacts", params)
+            logger.info(f"Successfully fetched {len(result.get('data', []))} Zoho contacts")
+            return result
+        except Exception as e:
+            logger.error(f"Error fetching Zoho contacts: {str(e)}")
+            raise
     
     async def get_contact_by_id(self, connection_id: str, contact_id: str) -> Dict[str, Any]:
         params = {"id": contact_id}

@@ -1,11 +1,12 @@
 # app/main.py
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Depends, WebSocket, HTTPException
-from fastapi.responses import PlainTextResponse , FileResponse
+from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse
 from app.services.call_handler import CallHandler
 from contextlib import asynccontextmanager
-from fastapi import UploadFile , File
+from fastapi import UploadFile, File
 from pathlib import Path
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
@@ -15,9 +16,18 @@ app = FastAPI(
     version="0.0.2",
 )
 
+# Add CORS middleware to allow requests from frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
-# Create a global CallHandler instance
+
+# Create global service instance
 call_handler_instance = None
 
 @asynccontextmanager
@@ -93,6 +103,31 @@ async def complete_status_callback(request: Request, call_handler: CallHandler =
 async def fallback_status_callback(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
     data = await request.form()
     return await call_handler.fallback_status_callback(data)
+
+
+
+@app.post("/nango/session-token")
+async def get_nango_session_token(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
+    data = await request.json()
+    user_id = data.get('userId', 'default-user')  # Use a default user ID if not provided
+    integration_id = data.get('integrationId')
+    
+    # Get allowed integrations (optional)
+    allowed_integrations = data.get('allowed_integrations')
+    
+    # If integrationId is provided, use it as the only allowed integration
+    if integration_id:
+        allowed_integrations = [integration_id]
+    
+    # Use the ChatGPT service to get a Nango session token
+    try:
+        session_data = await call_handler.chatgpt_service.get_nango_session_token(
+            user_id=user_id,
+            allowed_integrations=allowed_integrations
+        )
+        return session_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     from pyngrok import ngrok
