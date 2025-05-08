@@ -111,10 +111,10 @@ async def get_nango_session_token(request: Request, call_handler: CallHandler = 
     data = await request.json()
     user_id = data.get('userId', 'default-user')  # Use a default user ID if not provided
     integration_id = data.get('integrationId')
-    
+    print(data)
     # Get allowed integrations (optional)
     allowed_integrations = data.get('allowed_integrations')
-    
+    print(allowed_integrations)
     # If integrationId is provided, use it as the only allowed integration
     if integration_id:
         allowed_integrations = [integration_id]
@@ -125,6 +125,7 @@ async def get_nango_session_token(request: Request, call_handler: CallHandler = 
             user_id=user_id,
             allowed_integrations=allowed_integrations
         )
+        print("checking if session data available",session_data)
         return session_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

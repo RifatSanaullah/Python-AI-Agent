@@ -27,12 +27,13 @@ class NangoService:
         Create a Nango connect session to get a session token for frontend integration.
         This token allows users to connect to third-party services through Nango.
         """
-        url = f"{self.base_url}/v1/connect/session"
+        # Using the correct API endpoint according to documentation
+        url = f"{self.base_url.rstrip('/')}/connect/sessions"
         
-        # Prepare the request payload
+        # Prepare the request payload according to documentation
         payload = {
             "end_user": {
-                "id": end_user_id
+                "id": str(end_user_id)  # Ensure ID is a string as shown in docs
             },
             "allowed_integrations": allowed_integrations
         }
@@ -46,18 +47,20 @@ class NangoService:
         if org_id or org_display_name:
             payload["organization"] = {}
             if org_id:
-                payload["organization"]["id"] = org_id
+                payload["organization"]["id"] = str(org_id)  # Ensure ID is a string
             if org_display_name:
                 payload["organization"]["display_name"] = org_display_name
         
         logger.info(f"Creating Nango connect session for user {end_user_id} with integrations {allowed_integrations}")
+        logger.info(f"Using endpoint: {url}")
+        logger.info(f"Payload: {json.dumps(payload, indent=2)}")
         
         try:
             response = requests.post(url, headers=self.headers, json=payload)
             response.raise_for_status()
             result = response.json()
             logger.info(f"Successfully created Nango connect session")
-            return {"sessionToken": result.get("token")}
+            return {"sessionToken": result.get("data", {}).get("token")}
         except requests.exceptions.RequestException as e:
             error_msg = f"Error creating Nango connect session: {str(e)}"
             if hasattr(e, 'response') and e.response is not None:

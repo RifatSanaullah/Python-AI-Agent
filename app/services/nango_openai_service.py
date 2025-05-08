@@ -199,6 +199,8 @@ class NangoOpenAIService:
         Returns:
             Dictionary containing the session token
         """
+
+        print(f"Getting Nango session token for user {user_id} with allowed integrations: {allowed_integrations}")
         try:
             # Use the NangoService to create a connect session and get a token
             session_data = await self.nango_service.create_connect_session(
