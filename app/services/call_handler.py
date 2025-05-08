@@ -576,7 +576,7 @@ class CallHandler:
             print(f"Call {call_sid} cleaned up.")
             
         self.agents[call_sid]['complete_call'] = True
-        self.flush_agent(call_sid)
+        # self.flush_agent(call_sid)
         return "OK", 200
     
     def flush_agent(self, call_sid):
