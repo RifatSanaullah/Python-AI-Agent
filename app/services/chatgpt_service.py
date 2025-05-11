@@ -6,6 +6,7 @@ from datetime import date, datetime
 from app.services.nango_openai_service import NangoOpenAIService
 from app.services.zoho_service import ZohoService
 from app.services.hubspot_service import HubSpotService
+from app.services.salesforce_service import SalesforceService
 from app.services.backend_service import BackendHandler
 
 import re
@@ -68,6 +69,7 @@ class ChatGPTService:
         self.nango_openai_service = NangoOpenAIService()
         self.zoho_service = ZohoService()
         self.hubspot_service = HubSpotService()
+        self.salesforce_service = SalesforceService()
         self.backend_service = BackendHandler()
     # Function to add messages to a conversation
 
@@ -153,9 +155,10 @@ class ChatGPTService:
             self.conversations[conversation_id] = []
             self.convo_index = len(self.system_convo[conversation_id])
             
-            # Check if this conversation has a Zoho or HubSpot connection ID in the database
+            # Check if this conversation has a CRM connection ID in the database
             has_zoho_connection = False
             has_hubspot_connection = False
+            has_salesforce_connection = False
             try:
                 data = {
                     "stream_sid": conversation_id
@@ -182,6 +185,13 @@ class ChatGPTService:
                         self.system_convo['metadata'][conversation_id]['hubspot_connection_id'] = connection_id
                         has_hubspot_connection = True
                         print(f"Retrieved HubSpot connection ID {connection_id} from database for conversation {conversation_id}")
+                    
+                    # Check for Salesforce connection
+                    if 'salesforce_connection_id' in result['data']:
+                        connection_id = result['data']['salesforce_connection_id']
+                        self.system_convo['metadata'][conversation_id]['salesforce_connection_id'] = connection_id
+                        has_salesforce_connection = True
+                        print(f"Retrieved Salesforce connection ID {connection_id} from database for conversation {conversation_id}")
             except Exception as e:
                 print(f"Error retrieving CRM connection IDs from database: {str(e)}")
             
@@ -197,8 +207,12 @@ class ChatGPTService:
                 self.add_system_message(conversation_id, "system", 
                     "You have access to HubSpot CRM data. You can retrieve information about contacts, companies, deals, tickets, and more. "
                     "Use this information to provide more personalized and helpful responses.")
-
-
+                    
+            if has_salesforce_connection:
+                # Add Salesforce capability to the system message
+                self.add_system_message(conversation_id, "system", 
+                    "You have access to Salesforce CRM data. You can retrieve information about accounts, contacts, leads, opportunities, cases, and more. "
+                    "Use this information to provide more personalized and helpful responses.")
 
     async def generate_response(self, conversation_id, message: str, synthesize_response):
 
@@ -207,11 +221,13 @@ class ChatGPTService:
         self.add_message(conversation_id, "user", message)
         self.add_system_message(conversation_id, "user", message)
         
-        # Check if this conversation has a Zoho or HubSpot connection ID
+        # Check if this conversation has a CRM connection ID
         has_zoho_connection = False
         has_hubspot_connection = False
+        has_salesforce_connection = False
         zoho_connection_id = None
         hubspot_connection_id = None
+        salesforce_connection_id = None
         
         if 'metadata' in self.system_convo and conversation_id in self.system_convo['metadata']:
             if 'zoho_connection_id' in self.system_convo['metadata'][conversation_id]:
@@ -220,9 +236,34 @@ class ChatGPTService:
             if 'hubspot_connection_id' in self.system_convo['metadata'][conversation_id]:
                 has_hubspot_connection = True
                 hubspot_connection_id = self.system_convo['metadata'][conversation_id]['hubspot_connection_id']
+            if 'salesforce_connection_id' in self.system_convo['metadata'][conversation_id]:
+                has_salesforce_connection = True
+                salesforce_connection_id = self.system_convo['metadata'][conversation_id]['salesforce_connection_id']
         
-        # Prioritize HubSpot if both are available, or use whichever is available
-        if has_hubspot_connection:
+        # Prioritize available CRM integrations
+        if has_salesforce_connection:
+            # Use NangoOpenAIService to enhance the response with Salesforce data
+            try:
+                # Set integration type to Salesforce
+                self.nango_openai_service.integration_type = "salesforce"
+                # Create a modified message that includes context about available Salesforce data
+                enhanced_message = f"The following is a user message in a phone conversation. Use Salesforce CRM data with connection ID {salesforce_connection_id} if relevant: {message}"
+                
+                # Get enhanced response from NangoOpenAIService
+                enhanced_response = await self.nango_openai_service.process_conversation(enhanced_message)
+                
+                # Use the enhanced response
+                assistant_reply = enhanced_response
+                print("Using Salesforce-enhanced response")
+            except Exception as e:
+                print(f"Error using Salesforce integration: {str(e)}")
+                # Fall back to standard response if Salesforce integration fails
+                response = openai.chat.completions.create(
+                    model="gpt-4-turbo",
+                    messages=self.system_convo[conversation_id]
+                )
+                assistant_reply = response.choices[0].message.content
+        elif has_hubspot_connection:
             # Use NangoOpenAIService to enhance the response with HubSpot data
             try:
                 # Set integration type to HubSpot
@@ -267,7 +308,7 @@ class ChatGPTService:
                 )
                 assistant_reply = response.choices[0].message.content
         else:
-            # Standard response without Zoho integration
+            # Standard response without CRM integration
             response = openai.chat.completions.create(
                 model="gpt-4-turbo",
                 messages=self.system_convo[conversation_id]
@@ -397,6 +438,38 @@ class ChatGPTService:
         except Exception as e:
             print(f"Error storing HubSpot connection ID in database: {str(e)}")
         
+    async def set_salesforce_connection(self, conversation_id, connection_id):
+        """Set a Salesforce connection ID for a specific conversation/user"""
+        # Store in conversation metadata
+        if 'metadata' not in self.system_convo:
+            self.system_convo['metadata'] = {}
+        if conversation_id not in self.system_convo['metadata']:
+            self.system_convo['metadata'][conversation_id] = {}
+        
+        self.system_convo['metadata'][conversation_id]['salesforce_connection_id'] = connection_id
+        print(f"Salesforce connection ID {connection_id} set for conversation {conversation_id}")
+        
+        # Send to backend for persistent storage
+        try:
+           
+            data = {
+                "stream_sid": conversation_id,
+                "salesforce_connection_id": connection_id
+            }
+            # Send to backend service
+            await self.backend_service.update_conversation_info(data)
+            print(f"Salesforce connection ID {connection_id} sent to database for stream {conversation_id}")
+        except Exception as e:
+            print(f"Error storing Salesforce connection ID in database: {str(e)}")
+        
+        # If the conversation already exists, add the Salesforce capability message
+        if conversation_id in self.system_convo:
+            self.add_system_message(conversation_id, "system", 
+                "You have access to Salesforce CRM data. You can retrieve information about accounts, contacts, leads, opportunities, cases, and more. "
+                "Use this information to provide more personalized and helpful responses.")
+        
+        return True
+    
     async def get_nango_session_token(self, user_id, allowed_integrations=None, connection_config=None):
         """Get a Nango session token for the frontend to use when connecting to third-party services"""
         if allowed_integrations is None:
@@ -438,4 +511,4 @@ class ChatGPTService:
         
         return True
 
-    
+

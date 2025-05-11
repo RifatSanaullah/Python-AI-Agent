@@ -10,6 +10,7 @@ from app.services.deepgram_service import DeepgramService
 from app.services.assembly_ai_transcribe_service import TranscribeService
 from app.services.zoho_service import ZohoService
 from app.services.hubspot_service import HubSpotService
+from app.services.salesforce_service import SalesforceService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 import logging
 from datetime import datetime
@@ -45,6 +46,7 @@ class CallHandler:
         self.playht_service = PlayHT()
         self.zoho_service = ZohoService()
         self.hubspot_service = HubSpotService()
+        self.salesforce_service = SalesforceService()
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.sessions = {}
         self.agents = {}
@@ -215,6 +217,9 @@ class CallHandler:
                         data['hubspot_connection_id'] = self.agents[call_id].get('hubspot_connection_id')
                         print(f"Including HubSpot connection ID {data['hubspot_connection_id']} in conversation update")
                     
+                    if 'has_salesforce' in self.agents[call_id] and self.agents[call_id]['has_salesforce']:
+                        data['salesforce_connection_id'] = self.agents[call_id].get('salesforce_connection_id')
+                        print(f"Including Salesforce connection ID {data['salesforce_connection_id']} in conversation update")
                     
                     print(f"Sending conversation update with data: {data}")
                     
@@ -456,6 +461,12 @@ class CallHandler:
         else:
             self.agents[call_id]['has_hubspot'] = False
             
+        if 'salesforce_connection_id' in self.agents[call_id]:
+            print(f"Found Salesforce connection ID for call {call_id}")
+            self.agents[call_id]['has_salesforce'] = True
+        else:
+            self.agents[call_id]['has_salesforce'] = False
+            
         response = self.twilio_service.initialize_call(call_id)
         # self.transcribe_service.connect()  # Connect the transcriber service
         # await self.initialize_session_info(call_id)
@@ -500,6 +511,13 @@ class CallHandler:
                 print(f"Setting up HubSpot connection {hubspot_connection_id} for stream {stream_sid}")
                 # Set the HubSpot connection in the ChatGPT service
                 await self.chatgpt_service.set_hubspot_connection(stream_sid, hubspot_connection_id)
+                
+        if self.agents[call_sid].get('has_salesforce', False):
+            salesforce_connection_id = self.agents[call_sid].get('salesforce_connection_id')
+            if salesforce_connection_id:
+                print(f"Setting up Salesforce connection {salesforce_connection_id} for stream {stream_sid}")
+                # Set the Salesforce connection in the ChatGPT service
+                await self.chatgpt_service.set_salesforce_connection(stream_sid, salesforce_connection_id)
 
         greetings = self.agents[call_sid]['greetings']
         await self.synthesize_response(greetings , stream_sid)
@@ -597,6 +615,17 @@ class CallHandler:
             "timestamp" : time_stamp,
             "resolution_status": resolution_status
         }
+        
+        # Include CRM connection IDs if they exist
+        if 'has_zoho' in self.agents[call_sid] and self.agents[call_sid]['has_zoho']:
+            data['zoho_connection_id'] = self.agents[call_sid].get('zoho_connection_id')
+            
+        if 'has_hubspot' in self.agents[call_sid] and self.agents[call_sid]['has_hubspot']:
+            data['hubspot_connection_id'] = self.agents[call_sid].get('hubspot_connection_id')
+            
+        if 'has_salesforce' in self.agents[call_sid] and self.agents[call_sid]['has_salesforce']:
+            data['salesforce_connection_id'] = self.agents[call_sid].get('salesforce_connection_id')
+            
         await self.backend_service.update_call_info(data)
 
         if call_status in ["failed", "busy"]:
