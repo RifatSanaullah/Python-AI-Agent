@@ -397,17 +397,31 @@ class ChatGPTService:
         except Exception as e:
             print(f"Error storing HubSpot connection ID in database: {str(e)}")
         
-    async def get_nango_session_token(self, user_id, allowed_integrations=None):
+    async def get_nango_session_token(self, user_id, allowed_integrations=None, connection_config=None):
         """Get a Nango session token for the frontend to use when connecting to third-party services"""
         if allowed_integrations is None:
             # Default to both Zoho and HubSpot if not specified
             allowed_integrations = await self.nango_openai_service.get_available_integrations()
         
+        # Handle Zoho CRM configuration
+        # If we're connecting to Zoho and no config is provided, set default extension
+        if any(integ.startswith('zoho') for integ in allowed_integrations):
+            # Initialize connection_config if not provided
+            if connection_config is None:
+                connection_config = {}
+                
+            # Set default extension if not specified
+            if "extension" not in connection_config:
+                connection_config["extension"] = "com"  # Default to US region
+                print(f"Using default Zoho region extension: {connection_config['extension']}")
+        
         try:
             # Use the NangoOpenAIService to get a session token
+            # This will handle server-side connection creation with the config
             session_data = await self.nango_openai_service.get_session_token(
                 user_id=user_id,
-                allowed_integrations=allowed_integrations
+                allowed_integrations=allowed_integrations,
+                connection_config=connection_config
             )
             
             print(f"Successfully retrieved Nango session token for user {user_id}")

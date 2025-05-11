@@ -114,20 +114,43 @@ async def get_nango_session_token(request: Request, call_handler: CallHandler = 
     print(data)
     # Get allowed integrations (optional)
     allowed_integrations = data.get('allowed_integrations')
-    print(allowed_integrations)
+    # Get connection_config if provided - will be used for server-side connection creation
+    connection_config = data.get('connection_config')
+    print(f"allowed_integrations: {allowed_integrations}, connection_config: {connection_config}")
+    
     # If integrationId is provided, use it as the only allowed integration
     if integration_id:
         allowed_integrations = [integration_id]
     
+    # Prepare Zoho configuration if needed
+    # This will be used for server-side connection creation via the /configs endpoint
+    if ((allowed_integrations and any(integ.startswith('zoho') for integ in allowed_integrations)) or 
+        (integration_id and integration_id.startswith('zoho'))):
+        
+        # Initialize connection_config if not provided
+        if not connection_config:
+            connection_config = {}
+            
+        # Set default extension if not specified
+        if "extension" not in connection_config:
+            connection_config["extension"] = "com"  # Default to US region
+            print(f"Using default Zoho region extension: {connection_config['extension']}")
+        
+        # Log the configuration to help with debugging
+        print(f"Zoho CRM integration detected - connection_config: {connection_config}")
+    
     # Use the ChatGPT service to get a Nango session token
+    # The service will handle server-side connection creation with the config
     try:
-        session_data = await call_handler.chatgpt_service.get_nango_session_token(
+        session_data = await call_handler.get_nango_session_token(
             user_id=user_id,
-            allowed_integrations=allowed_integrations
+            allowed_integrations=allowed_integrations,
+            connection_config=connection_config
         )
         print("checking if session data available",session_data)
         return session_data
     except Exception as e:
+        print(f"Error getting Nango session token: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

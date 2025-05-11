@@ -57,12 +57,12 @@ class HubSpotService(NangoService):
         params = {"id": line_item_id}
         return await self.fetch_data(connection_id, "get-line-item-by-id", params)
     
-    async def get_products(self, connection_id: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return await self.fetch_data(connection_id, "get-products", params)
+    # async def get_products(self, connection_id: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    #     return await self.fetch_data(connection_id, "get-products", params)
     
-    async def get_product_by_id(self, connection_id: str, product_id: str) -> Dict[str, Any]:
-        params = {"id": product_id}
-        return await self.fetch_data(connection_id, "get-product-by-id", params)
+    # async def get_product_by_id(self, connection_id: str, product_id: str) -> Dict[str, Any]:
+    #     params = {"id": product_id}
+    #     return await self.fetch_data(connection_id, "get-product-by-id", params)
     
     async def get_owners(self, connection_id: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         return await self.fetch_data(connection_id, "get-owners", params)
