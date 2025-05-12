@@ -553,7 +553,7 @@ class CallHandler:
         call_status = data.get("CallStatus")
         time_stamp = data.get("Timestamp")
         resolution_status= 'RESOLVED'
-
+        agent_id = None
         # self.sessions[call_sid]['stream_sid'] = stream_sid
         if call_sid in self.agents and "id" in self.agents[call_sid]:
             agent_id = self.agents[call_sid]['id']
@@ -592,6 +592,8 @@ class CallHandler:
         call_status = 'FAILED'
         time_stamp = data.get("Timestamp")
         resolution_status= 'FAILED'
+        agent_id = None
+        
         if call_sid in self.agents and "id" in self.agents[call_sid]:
             agent_id = self.agents[call_sid]['id']
 
