@@ -576,8 +576,8 @@ class CallHandler:
             # Ensure the call is fully disconnected
             self.twilio_service.client.calls(call_sid).update(status='completed')
             print(f"Call {call_sid} cleaned up.")
-            
-        self.agents[call_sid]['complete_call'] = True
+        if call_sid in self.agents:
+            self.agents[call_sid]['complete_call'] = True
         self.flush_agent(call_sid)
         return "OK", 200
     
@@ -593,7 +593,7 @@ class CallHandler:
         time_stamp = data.get("Timestamp")
         resolution_status= 'FAILED'
         agent_id = None
-        
+
         if call_sid in self.agents and "id" in self.agents[call_sid]:
             agent_id = self.agents[call_sid]['id']
 
