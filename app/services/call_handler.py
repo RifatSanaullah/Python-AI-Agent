@@ -582,7 +582,7 @@ class CallHandler:
         return "OK", 200
     
     def flush_agent(self, call_sid):
-        if self.agents[call_sid]['complete_call'] == True and self.agents[call_sid]['websocket_closed'] == True:
+        if call_sid in self.agents and self.agents[call_sid]['complete_call'] == True and self.agents[call_sid]['websocket_closed'] == True:
             del self.agents[call_sid]
     
     async def fallback_status_callback(self, data):
