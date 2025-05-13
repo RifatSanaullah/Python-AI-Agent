@@ -636,6 +636,6 @@ class CallHandler:
 
         await self.backend_service.update_call_info(data)
         
-    async def get_nango_session_token(self, user_id, allowed_integrations=None, connection_config=None):
+    async def get_nango_session_token(self, user_id, allowed_integrations=None):
         """Get a Nango session token for the frontend to use when connecting to third-party services"""
-        return await self.chatgpt_service.get_nango_session_token(user_id, allowed_integrations, connection_config)
+        return await self.chatgpt_service.get_nango_session_token(user_id, allowed_integrations)
