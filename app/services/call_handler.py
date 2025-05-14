@@ -3,12 +3,13 @@ from sqlalchemy.orm import Session
 from app.services.playht_service import PlayHT
 from app.services.twilio_service import TwilioService
 from app.services.chatgpt_service import ChatGPTService
-# from app.services.chatgpt_service_v2 import ChatGPTService
 from app.services.s3_service import S3Service
 from app.services.backend_service import BackendHandler
 from app.services.polly_service import PollyService
 from app.services.deepgram_service import DeepgramService
 from app.services.assembly_ai_transcribe_service import TranscribeService
+from app.services.zoho_service import ZohoService
+from app.services.hubspot_service import HubSpotService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 import logging
 from datetime import datetime
@@ -42,6 +43,8 @@ class CallHandler:
         self.chatgpt_service = ChatGPTService()
         self.s3_service = S3Service()
         self.playht_service = PlayHT()
+        self.zoho_service = ZohoService()
+        self.hubspot_service = HubSpotService()
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.sessions = {}
         self.agents = {}
@@ -198,9 +201,31 @@ class CallHandler:
                 del self.sessions[session['stream_sid']]
 
                 try:
-                    await self.backend_service.update_conversation_info(data)
+                    
+                    if 'call_sid' not in data or not data['call_sid']:
+                        print(f"Error: Missing call_sid in conversation update data")
+                        data['call_sid'] = call_id  # Use the call_id as a fallback
+                    
+                    # Add CRM connection IDs to the data if they exist
+                    if 'has_zoho' in self.agents[call_id] and self.agents[call_id]['has_zoho']:
+                        data['zoho_connection_id'] = self.agents[call_id].get('zoho_connection_id')
+                        print(f"Including Zoho connection ID {data['zoho_connection_id']} in conversation update")
+                    
+                    if 'has_hubspot' in self.agents[call_id] and self.agents[call_id]['has_hubspot']:
+                        data['hubspot_connection_id'] = self.agents[call_id].get('hubspot_connection_id')
+                        print(f"Including HubSpot connection ID {data['hubspot_connection_id']} in conversation update")
+                    
+                    
+                    print(f"Sending conversation update with data: {data}")
+                    
+                    # Send the update request
+                    result = await self.backend_service.update_conversation_info(data)
+                    print(f"Conversation update result: {result}")
                 except Exception as e:
-                    print(e)
+                    print(f"Error updating conversation info: {str(e)}")
+                    # Log the full exception traceback
+                    import traceback
+                    print(traceback.format_exc())
                     
                 self.agents[call_id]['websocket_closed'] = True
                 self.flush_agent(call_id)
@@ -307,6 +332,7 @@ class CallHandler:
             "aiInstructions" : self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'],
             "agentName" : self.agents[self.sessions[call_id]['call_sid']]['name'],
             "gender" : self.agents[self.sessions[call_id]['call_sid']]['voice']['gender'],
+            "integrations" : self.agents[self.sessions[call_id]['call_sid']]['integrations'],
         }
         self.agents[self.sessions[call_id]['call_sid']]['knowledge'] = None
         self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'] = None
@@ -418,6 +444,14 @@ class CallHandler:
         self.agents[call_id]['websocket_closed'] = False
         self.agents[call_id]['end_call'] = False
         self.agents[call_id]['route_call'] = False
+        self.agents[call_id]['integrations'] = api_response['data']['integrations']
+            
+        if 'hubspot_connection_id' in self.agents[call_id]:
+            print(f"Found HubSpot connection ID for call {call_id}")
+            self.agents[call_id]['has_hubspot'] = True
+        else:
+            self.agents[call_id]['has_hubspot'] = False
+            
         response = self.twilio_service.initialize_call(call_id)
         # self.transcribe_service.connect()  # Connect the transcriber service
         # await self.initialize_session_info(call_id)
@@ -582,3 +616,7 @@ class CallHandler:
         print(f"Call {call_sid} cleaned up.")
 
         await self.backend_service.update_call_info(data)
+        
+    async def get_nango_session_token(self, user_id, allowed_integrations=None):
+        """Get a Nango session token for the frontend to use when connecting to third-party services"""
+        return await self.chatgpt_service.get_nango_session_token(user_id, allowed_integrations)
