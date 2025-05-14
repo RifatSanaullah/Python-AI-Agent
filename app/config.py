@@ -20,11 +20,15 @@ class Settings(BaseSettings):
     domain: str = os.getenv("DOMAIN", "localhost")
     base_url: str = os.getenv("BASE_URL", "http://${domain}")
     ai_backend_url: str = os.getenv("AI_BACKEND_URL", "http://localhost:4000/v1")
+    boom_backend_url: str = os.getenv("BOOM_BACKEND_URL", "http://localhost:3567")
+    boom_number: str = os.getenv("BOOM_NUMBER", "+18774090666")
     deepgram_apikey: str = os.getenv("DEEPGRAM_API_KEY")
     playht_id: str = os.getenv("PLAY_HT_USER_ID")
     playht_apikey: str = os.getenv("PLAY_HT_API_KEY")
     elevenlabs_apikey: str = os.getenv("ELEVENLABS_API_KEY")
     elevenlabs_voice_id: str = os.getenv("ELEVENLABS_VOICE_ID", "8LVfoRdkh4zgjr8v5ObE") 
     tts_provider: str = os.getenv("TTS_PROVIDER", "deepgram") # or elevenlabs or playht
+    nango_secret_key: str = os.getenv("NANGO_SECRET_KEY")
+    nango_base_url: str = os.getenv("NANGO_BASE_URL", "https://api.nango.dev")
 
 settings = Settings()
