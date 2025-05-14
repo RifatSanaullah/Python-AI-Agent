@@ -230,29 +230,3 @@ class NangoOpenAIService:
         # For now, we'll return the hardcoded values for Zoho and HubSpot
         return ["zoho-crm", "hubspot"]
     
-    async def process_conversation(self, user_message: str) -> str:
-        """Process a conversation with the user, handling any tool calls dynamically"""
-        initial_response = await self.run_chat_with_tools(user_message)
-        choice = initial_response.choices[0]
-        
-        if choice.finish_reason == "tool_calls":
-            messages = [{"role": "user", "content": user_message}, choice.message]
-            
-            for tool_call in choice.message.tool_calls:
-                tool_output = await self.handle_tool_call(tool_call)
-                
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "name": tool_call.function.name,
-                    "content": json.dumps(tool_output)
-                })
-            
-            followup = openai.ChatCompletion.create(
-                model=self.openai_model,
-                messages=messages
-            )
-            
-            return followup.choices[0].message.content
-        else:
-            return choice.message.content

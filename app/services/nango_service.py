@@ -3,6 +3,7 @@ import json
 import logging
 from typing import Dict, Any, Optional, List
 from app.config import settings
+import http.client
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -59,7 +60,7 @@ class NangoService:
             response = requests.post(url, headers=self.headers, json=payload)
             response.raise_for_status()
             result = response.json()
-            logger.info(f"Successfully created Nango connect session")
+            logger.info(f"Successfully created Nango connect session", result)
             return {"sessionToken": result.get("data", {}).get("token")}
         except requests.exceptions.RequestException as e:
             error_msg = f"Error creating Nango connect session: {str(e)}"
@@ -74,13 +75,21 @@ class NangoService:
                     logger.error(f"Nango API error text: {e.response.text}")
             logger.error(error_msg)
             raise Exception(error_msg)
+        
+    async def delete_connect_session(self, connectionId: str) -> Dict[str, Any]:
+        url = f"{self.base_url.rstrip('/')}/connection/{connectionId}"
+        response = requests.request("DELETE", url)
+        return response.text
     
-    async def fetch_data(self, connection_id: str, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        url = f"{self.base_url}/proxy/{connection_id}/{endpoint}"
-        logger.info(f"Making Nango API request to: {url} with connection_id: {connection_id}")
+    async def fetch_data(self, connection_id: str, endpoint: str, params: Optional[Dict[str, Any]] = None, provider = 'hubspot') -> Dict[str, Any]:
+
+        url = f"{self.base_url}/v1/{endpoint}"
+        logger.info(f"Making Nango API request with connection_id: {connection_id}")
         
         try:
             logger.info(f"Request params: {params or {}}")
+            self.headers['Connection-Id'] = connection_id
+            self.headers['Provider-Config-Key'] = provider
             response = requests.get(url, headers=self.headers, params=params or {})
             response.raise_for_status()
             result = response.json()

@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import UploadFile, File
 from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
+from app.services.nango_service import NangoService
 
 load_dotenv()
 
@@ -53,7 +54,7 @@ async def incoming_call(request: Request, call_handler: CallHandler = Depends(ge
     application_sid = data.get('ApplicationSid')
     direction = data.get('Direction')
     fromNumber = data.get('From')
-    dialed_number = "+16692000795" 
+    dialed_number = data.get("To")
     call_id = data.get("CallSid")
     
     data = {
@@ -195,11 +196,25 @@ async def get_nango_session_token(request: Request, call_handler: CallHandler = 
         return session_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/remove-session")
+async def remove_session(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
+    data = await request.json()
+    connection_id = data.get('connection_id')
+    connection_type = data.get('connection_type')
+    account_id = data.get('account_id')
+    print("removing session", connection_id)
+    if not connection_id:
+        raise HTTPException(status_code=400, detail="Connection ID is required")
+    
+    try:
+        await NangoService().delete_connect_session(connection_id)
+        response = await call_handler.backend_service.remove_nango_connection(
+                    {
 
-if __name__ == "__main__":
-    from pyngrok import ngrok
-    # Get the ngrok tunnel
-    public_url = ngrok.connect(8000)
-    print(f"Public URL: {public_url}")
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+                        "account_id": account_id,
+                        "connection_type": connection_type,
+                    })
+        return JSONResponse(status_code=200, content={"status": "success", "message": "Session removed successfully" , data: response})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
