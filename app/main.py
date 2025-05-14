@@ -6,6 +6,8 @@ from app.services.call_handler import CallHandler
 from contextlib import asynccontextmanager
 from fastapi import UploadFile, File
 from pathlib import Path
+from app.config import settings
+from app.services.backend_service import BackendHandler
 from fastapi.middleware.cors import CORSMiddleware
 from app.services.nango_service import NangoService
 
@@ -56,13 +58,14 @@ async def incoming_call(request: Request, call_handler: CallHandler = Depends(ge
     fromNumber = data.get('From')
     dialed_number = data.get("To")
     call_id = data.get("CallSid")
-    
+    print(data.get("IsBoom"))
     data = {
-        "call_sid": call_id,
-        "from": fromNumber,
-        "to": dialed_number,
-        "application_sid": application_sid,
-        "direction": direction
+        "call_sid" : call_id,
+        "from" : fromNumber,
+        "to" : dialed_number,
+        "application_sid" : application_sid,
+        "direction" : direction,
+        "isBoom": data.get("IsBoom"),
     }
     response = await call_handler.handle_call(call_id, data)
     return PlainTextResponse(content=str(response), media_type="application/xml")
@@ -98,12 +101,35 @@ async def recording_status_callback(request: Request, call_handler: CallHandler 
 @app.post("/complete_status_callback")
 async def complete_status_callback(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
     data = await request.form()
-    return await call_handler.complete_status_callback(data)
+    fromNumber = data.get('From')
+    if fromNumber == settings.boom_number:
+        # Handle incoming call from Boom number
+        data = {
+            "CallDuration" : data.get("CallDuration"),
+            "From" : fromNumber,
+            "CallSid" : data.get("CallSid"),
+        }
+        response = await BackendHandler().complete_status_callback(data)
+        return PlainTextResponse(content=str(response), media_type="application/xml")
+
+    else:
+        return await call_handler.complete_status_callback(data)
 
 @app.post("/fallback_status_callback")
 async def fallback_status_callback(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
     data = await request.form()
-    return await call_handler.fallback_status_callback(data)
+    fromNumber = data.get('From')
+
+    if fromNumber == settings.boom_number:
+        # Handle incoming call from Boom number
+        data = {
+            "From" : fromNumber,
+        }
+        response = await BackendHandler().fallback_status_callback(data)
+        return PlainTextResponse(content=str(response), media_type="application/xml")
+
+    else:
+        return await call_handler.fallback_status_callback(data)
 
 
 @app.post("/nango-callback")

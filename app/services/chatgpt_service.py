@@ -209,7 +209,8 @@ class ChatGPTService:
             conversations['metadata'][conversation_id] = {}
 
         conversations[conversation_id] = [
-                {"role": "system", "content": f"Always ask only one question at a time. After each response, follow up with a single question. For example, if you need contact information, ask for the name first, then phone number, then email—one at a time. Do not ask for multiple pieces of information or offer multiple options in one message. Always provide responses that are suitable for phone conversations. Avoid lengthy explanations and special character (*), long lists, or complex details. Limit responses to key points. Keep responses under 3 sentences to ensure they are concise and easy to digest.Always refer to yourself using your name: {knowledge_base['agentName']} and your gender is {knowledge_base['gender']}"},
+
+                {"role": "system", "content": f"Always ask only one question at a time. After each response, follow up with a single question. For example, if you need contact information, ask for the name first, then phone number, then email—one at a time. Do not ask for multiple pieces of information or offer multiple options in one message. Always provide responses that are suitable for phone conversations. Avoid lengthy explanations and special character (*), long lists, or complex details. Current Date is: {date.today()} if you have been asked for any appointment or booking dates do not give the dates which has already been passed. Limit responses to key points and do not rush to complete the conversation. Keep responses under 3 sentences to ensure they are concise and easy to digest.Always refer to yourself using your name: {knowledge_base['agentName']} and your gender is {knowledge_base['gender']}"},
                  # {"role": "system", "content": "Whenever you get any answer and if you left any query. Ask instantly don't wait for querying from user."},
                 # {"role": "system", "content": "Before Ending the call you have to reclarify all the information you gather with user"},
                 # {"role": "system", "content": f"Current Date is: {date.today()}. If you gather any input in tomorrow or yesterday then response any date information in this format : 01 january 1970 with the time and if input only time then use use the time with current date"},
@@ -436,7 +437,7 @@ class ChatGPTService:
 
         if (conversation_id in self.system_convo and len(self.system_convo[conversation_id]) >= 6 + self.convo_index):
 
-            allmessages = 'Get summary with every context of below conversations: '
+            allmessages = 'Give me a summary with every context of below conversations: '
             for index in range(self.convo_index, len(self.system_convo[conversation_id])) :
                 item = self.system_convo[conversation_id][index]
                 allmessages +=  f"{item['role']}:  {item['content']}\n\n"
@@ -449,7 +450,7 @@ class ChatGPTService:
 
             self.convo_index += 1
             summary = response.choices[0].message.content
-            self.add_system_message(conversation_id, "assistant", summary)
+            self.add_system_message(conversation_id, "system", summary)
 
         return assistant_reply
     
