@@ -6,6 +6,7 @@ from datetime import date, datetime
 from app.services.nango_openai_service import NangoOpenAIService
 from app.services.zoho_service import ZohoService
 from app.services.hubspot_service import HubSpotService
+from app.services.salesforce_service import SalesforceService
 from typing import Dict, Any, List
 from app.services.backend_service import BackendHandler
 
@@ -70,6 +71,7 @@ class ChatGPTService:
         self.nango_openai_service = NangoOpenAIService()
         self.zoho_service = ZohoService()
         self.hubspot_service = HubSpotService()
+        self.salesforce_service = SalesforceService()
         self.backend_service = BackendHandler()
                 # Set the integration type
         # Initialize integration services and endpoints
@@ -124,6 +126,28 @@ class ChatGPTService:
                 "get-product-by-id",
                 "get-owners",
                 "get-owner-by-id"
+            ]
+            self._map_service_methods(integration_type, service)
+            
+        elif integration_type == "salesforce":
+            service = SalesforceService()
+            self.endpoints[integration_type] = [
+                "get-accounts",
+                "get-account-by-id",
+                "get-contacts",
+                "get-contact-by-id",
+                "get-leads",
+                "get-lead-by-id",
+                "get-opportunities",
+                "get-opportunity-by-id",
+                "get-cases",
+                "get-case-by-id",
+                "get-products",
+                "get-product-by-id",
+                "get-users",
+                "get-user-by-id",
+                "get-campaigns",
+                "get-campaign-by-id"
             ]
             self._map_service_methods(integration_type, service)
         
@@ -233,9 +257,7 @@ class ChatGPTService:
             self.conversations[conversation_id] = []
             self.convo_index = len(self.system_convo[conversation_id])
             
-            # Check if this conversation has a Zoho or HubSpot connection ID in the database
-            has_zoho_connection = False
-            has_hubspot_connection = False
+            # Check if this conversation has a CRM connection ID in the database
             try:
                 if knowledge['integrations']:
                     self.integrations[conversation_id] = knowledge['integrations']
@@ -369,9 +391,14 @@ class ChatGPTService:
             self.integration_type = 'zoho'
             self._initialize_integration()
             assistant_reply = await self.process_conversation_with_tool(conversation_id, self.integrations[conversation_id]['zoho_connection_id'], message, "Zoho")
-
+        
+        elif self.integrations[conversation_id]['salesforce_connection_id']:
+            # Use NangoOpenAIService to enhance the response with Zoho data
+            self.integration_type = 'salesforce'
+            self._initialize_integration()
+            assistant_reply = await self.process_conversation_with_tool(conversation_id, self.integrations[conversation_id]['salesforce_connection_id'], message, "Zoho")
         else:
-            # Standard response without Zoho integration
+            # Standard response without CRM integration
             response = openai.chat.completions.create(
                 model="gpt-4-turbo",
                 messages=self.system_convo[conversation_id]
@@ -504,4 +531,4 @@ class ChatGPTService:
     
    
 
-    
+

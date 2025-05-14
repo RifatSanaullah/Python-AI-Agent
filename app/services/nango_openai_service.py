@@ -5,6 +5,7 @@ from app.config import settings
 from app.services.nango_service import NangoService
 from app.services.zoho_service import ZohoService
 from app.services.hubspot_service import HubSpotService
+from app.services.salesforce_service import SalesforceService
 import logging
 from typing import List, Optional
 
@@ -77,6 +78,27 @@ class NangoOpenAIService:
             ]
             self._map_service_methods(integration_type, service)
         
+        elif integration_type == "salesforce":
+            service = SalesforceService()
+            self.endpoints[integration_type] = [
+                "get-accounts",
+                "get-account-by-id",
+                "get-contacts",
+                "get-contact-by-id",
+                "get-leads",
+                "get-lead-by-id",
+                "get-opportunities",
+                "get-opportunity-by-id",
+                "get-cases",
+                "get-case-by-id",
+                "get-products",
+                "get-product-by-id",
+                "get-users",
+                "get-user-by-id",
+                "get-campaigns",
+                "get-campaign-by-id"
+            ]
+            self._map_service_methods(integration_type, service)
     
     def _map_service_methods(self, integration_type: str, service: Any):
        
@@ -221,12 +243,11 @@ class NangoOpenAIService:
     async def get_available_integrations(self) -> List[str]:
         """
         Get a list of available integrations based on the current configuration.
-        Currently returns hardcoded values for Zoho and HubSpot.
+        Currently returns hardcoded values for Zoho, HubSpot, and Salesforce.
         
         Returns:
             List of integration IDs
         """
         # In a real implementation, this might fetch from Nango API or configuration
-        # For now, we'll return the hardcoded values for Zoho and HubSpot
-        return ["zoho-crm", "hubspot"]
-    
+        # For now, we'll return the hardcoded values for Zoho, HubSpot, and Salesforce
+        return ["zoho-crm", "hubspot", "salesforce"]

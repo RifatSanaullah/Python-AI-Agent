@@ -10,6 +10,7 @@ from app.services.deepgram_service import DeepgramService
 from app.services.assembly_ai_transcribe_service import TranscribeService
 from app.services.zoho_service import ZohoService
 from app.services.hubspot_service import HubSpotService
+from app.services.salesforce_service import SalesforceService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 import logging
 from datetime import datetime
@@ -45,6 +46,7 @@ class CallHandler:
         self.playht_service = PlayHT()
         self.zoho_service = ZohoService()
         self.hubspot_service = HubSpotService()
+        self.salesforce_service = SalesforceService()
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.sessions = {}
         self.agents = {}
@@ -205,15 +207,6 @@ class CallHandler:
                     if 'call_sid' not in data or not data['call_sid']:
                         print(f"Error: Missing call_sid in conversation update data")
                         data['call_sid'] = call_id  # Use the call_id as a fallback
-                    
-                    # Add CRM connection IDs to the data if they exist
-                    if 'has_zoho' in self.agents[call_id] and self.agents[call_id]['has_zoho']:
-                        data['zoho_connection_id'] = self.agents[call_id].get('zoho_connection_id')
-                        print(f"Including Zoho connection ID {data['zoho_connection_id']} in conversation update")
-                    
-                    if 'has_hubspot' in self.agents[call_id] and self.agents[call_id]['has_hubspot']:
-                        data['hubspot_connection_id'] = self.agents[call_id].get('hubspot_connection_id')
-                        print(f"Including HubSpot connection ID {data['hubspot_connection_id']} in conversation update")
                     
                     
                     print(f"Sending conversation update with data: {data}")
@@ -446,11 +439,6 @@ class CallHandler:
         self.agents[call_id]['route_call'] = False
         self.agents[call_id]['integrations'] = api_response['data']['integrations']
             
-        if 'hubspot_connection_id' in self.agents[call_id]:
-            print(f"Found HubSpot connection ID for call {call_id}")
-            self.agents[call_id]['has_hubspot'] = True
-        else:
-            self.agents[call_id]['has_hubspot'] = False
             
         response = self.twilio_service.initialize_call(call_id)
         # self.transcribe_service.connect()  # Connect the transcriber service
@@ -578,6 +566,8 @@ class CallHandler:
             "timestamp" : time_stamp,
             "resolution_status": resolution_status
         }
+        
+            
         await self.backend_service.update_call_info(data)
 
         if call_status in ["failed", "busy"]:
