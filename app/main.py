@@ -138,6 +138,7 @@ async def nango_webhook_callback(request: Request, call_handler: CallHandler = D
                 # Determine if this is Zoho or HubSpot based on the integration ID
                 is_zoho = "zoho" in (integration_id or "").lower()
                 is_hubspot = "hubspot" in (integration_id or "").lower()
+                is_salesforce = "salesforce" in (integration_id or "").lower()
                 
                 # Store the connection ID in the account
                 result = await call_handler.backend_service.store_nango_connection(
@@ -147,7 +148,8 @@ async def nango_webhook_callback(request: Request, call_handler: CallHandler = D
                         "connection_id": connection_id,
                         "integration_type": integration_id,
                         "is_zoho": is_zoho,
-                        "is_hubspot": is_hubspot
+                        "is_hubspot": is_hubspot,
+                        "is_salesforce": is_salesforce
                     }
                 )
                 
