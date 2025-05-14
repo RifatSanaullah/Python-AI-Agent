@@ -3,12 +3,14 @@ from sqlalchemy.orm import Session
 from app.services.playht_service import PlayHT
 from app.services.twilio_service import TwilioService
 from app.services.chatgpt_service import ChatGPTService
-# from app.services.chatgpt_service_v2 import ChatGPTService
 from app.services.s3_service import S3Service
 from app.services.backend_service import BackendHandler
 from app.services.polly_service import PollyService
 from app.services.deepgram_service import DeepgramService
 from app.services.assembly_ai_transcribe_service import TranscribeService
+from app.services.zoho_service import ZohoService
+from app.services.hubspot_service import HubSpotService
+from app.services.salesforce_service import SalesforceService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 import logging
 from datetime import datetime
@@ -42,6 +44,9 @@ class CallHandler:
         self.chatgpt_service = ChatGPTService()
         self.s3_service = S3Service()
         self.playht_service = PlayHT()
+        self.zoho_service = ZohoService()
+        self.hubspot_service = HubSpotService()
+        self.salesforce_service = SalesforceService()
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.sessions = {}
         self.agents = {}
@@ -207,7 +212,10 @@ class CallHandler:
                     if isBoom is not None or isBoom == True or isBoom == 'true' or isBoom != 'false':
                         await self.backend_service.update_conversation_bh({"conversations": data['conversations'],})
                 except Exception as e:
-                    print(e)
+                    print(f"Error updating conversation info: {str(e)}")
+                    # Log the full exception traceback
+                    import traceback
+                    print(traceback.format_exc())
                     
                 self.agents[call_id]['websocket_closed'] = True
                 # self.flush_agent(call_id)
@@ -331,6 +339,7 @@ class CallHandler:
             "aiInstructions" : self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'],
             "agentName" : self.agents[self.sessions[call_id]['call_sid']]['name'],
             "gender" : self.agents[self.sessions[call_id]['call_sid']]['voice']['gender'],
+            "integrations" : self.agents[self.sessions[call_id]['call_sid']]['integrations'],
         }
         self.agents[self.sessions[call_id]['call_sid']]['knowledge'] = None
         self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'] = None
@@ -442,6 +451,9 @@ class CallHandler:
         self.agents[call_id]['websocket_closed'] = False
         self.agents[call_id]['end_call'] = False
         self.agents[call_id]['route_call'] = False
+        self.agents[call_id]['integrations'] = api_response['data']['integrations']
+            
+            
         response = self.twilio_service.initialize_call(call_id)
         # self.transcribe_service.connect()  # Connect the transcriber service
         # await self.initialize_session_info(call_id)
@@ -570,6 +582,8 @@ class CallHandler:
             "timestamp" : time_stamp,
             "resolution_status": resolution_status
         }
+        
+            
         await self.backend_service.update_call_info(data)
 
         if call_status in ["failed", "busy"]:
@@ -612,3 +626,7 @@ class CallHandler:
         print(f"Call {call_sid} cleaned up.")
 
         await self.backend_service.update_call_info(data)
+        
+    async def get_nango_session_token(self, user_id, allowed_integrations=None):
+        """Get a Nango session token for the frontend to use when connecting to third-party services"""
+        return await self.chatgpt_service.get_nango_session_token(user_id, allowed_integrations)

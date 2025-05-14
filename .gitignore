@@ -4,3 +4,4 @@ boomercaller
 vosk-model*
 *_pycache_*
 recordings/
+venv

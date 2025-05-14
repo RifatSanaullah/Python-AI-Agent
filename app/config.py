@@ -25,5 +25,7 @@ class Settings(BaseSettings):
     deepgram_apikey: str = os.getenv("DEEPGRAM_API_KEY")
     playht_id: str = os.getenv("PLAY_HT_USER_ID")
     playht_apikey: str = os.getenv("PLAY_HT_API_KEY")
+    nango_secret_key: str = os.getenv("NANGO_SECRET_KEY")
+    nango_base_url: str = os.getenv("NANGO_BASE_URL", "https://api.nango.dev")
 
 settings = Settings()
