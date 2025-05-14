@@ -22,4 +22,4 @@ pydub
 pyht
 soundfile
 python-multipart
-pyngrok
+elevenlabs

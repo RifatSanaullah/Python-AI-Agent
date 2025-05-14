@@ -386,6 +386,11 @@ class ChatGPTService:
             assistant_reply = await self.process_conversation_with_tool(conversation_id, self.integrations[conversation_id]['hubspot_connection_id'], message, "HubSpot")
 
         # Check if this conversation has a Zoho connection ID
+        elif self.integrations[conversation_id]['salesforce_connection_id']:
+            # Use NangoOpenAIService to enhance the response with Zoho data
+            self.integration_type = 'salesforce'
+            self._initialize_integration()
+            assistant_reply = await self.process_conversation_with_tool(conversation_id, self.integrations[conversation_id]['salesforce_connection_id'], message, "Salesforce")
         
         elif self.integrations[conversation_id]['zoho_connection_id']:
             # Use NangoOpenAIService to enhance the response with Zoho data
@@ -393,11 +398,6 @@ class ChatGPTService:
             self._initialize_integration()
             assistant_reply = await self.process_conversation_with_tool(conversation_id, self.integrations[conversation_id]['zoho_connection_id'], message, "Zoho")
         
-        elif self.integrations[conversation_id]['salesforce_connection_id']:
-            # Use NangoOpenAIService to enhance the response with Zoho data
-            self.integration_type = 'salesforce'
-            self._initialize_integration()
-            assistant_reply = await self.process_conversation_with_tool(conversation_id, self.integrations[conversation_id]['salesforce_connection_id'], message, "Zoho")
         else:
             # Standard response without CRM integration
             response = openai.chat.completions.create(

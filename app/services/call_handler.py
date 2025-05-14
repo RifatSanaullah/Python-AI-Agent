@@ -8,6 +8,7 @@ from app.services.backend_service import BackendHandler
 from app.services.polly_service import PollyService
 from app.services.deepgram_service import DeepgramService
 from app.services.assembly_ai_transcribe_service import TranscribeService
+from app.services.elevenlabs_service import ElevenLabsService
 from app.services.zoho_service import ZohoService
 from app.services.hubspot_service import HubSpotService
 from app.services.salesforce_service import SalesforceService
@@ -44,6 +45,7 @@ class CallHandler:
         self.chatgpt_service = ChatGPTService()
         self.s3_service = S3Service()
         self.playht_service = PlayHT()
+        self.elevenlabs_service = ElevenLabsService()
         self.zoho_service = ZohoService()
         self.hubspot_service = HubSpotService()
         self.salesforce_service = SalesforceService()
@@ -363,19 +365,28 @@ class CallHandler:
         session = self.sessions.get(call_id)
         if not session or not text or text == '':
             return
+
         start_time = datetime.now()
-        # audio_stream = await self.polly_service.stream_text_to_speech(chunk)
-        model = self.agents[self.sessions[call_id]['call_sid']]['voice']['model']
-        audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text, model)
-        # audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
+
+        # Select TTS provider based on environment variable
+        tts_provider = settings.tts_provider.lower()
+        if tts_provider == "deepgram":
+            audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text)
+        elif tts_provider == "playht":
+            audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
+        elif tts_provider == "elevenlabs":
+            audio_stream = await self.elevenlabs_service.stream_text_to_speech(text)
+        else:
+            raise ValueError(f"Unsupported TTS provider: {settings.tts_provider}")
 
         result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
         session['wait_duration'] = result['duration'] + 3
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds() * 1000  # Calculate duration in milliseconds
-        logging.info(f"Total Deepgram duration: {duration:.3f} ms")
-        await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
+        logging.info(f"Total TTS duration: {duration:.3f} ms")
+
+        await self.twilio_service.enqueue_audio(call_id, audio_stream, 'response_buffer')
         session['last_user_audio_time'] = time.time()
         print('audio streamed', session['last_user_audio_time'])
 
