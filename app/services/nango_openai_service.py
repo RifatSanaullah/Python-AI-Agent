@@ -71,8 +71,8 @@ class NangoOpenAIService:
                 "get-ticket-by-id",
                 "get-line-items",
                 "get-line-item-by-id",
-                # "get-products",
-                # "get-product-by-id",
+                "get-products",
+                "get-product-by-id",
                 "get-owners",
                 "get-owner-by-id"
             ]
@@ -206,8 +206,7 @@ class NangoOpenAIService:
                                user_email: Optional[str] = None, 
                                user_display_name: Optional[str] = None,
                                org_id: Optional[str] = None,
-                               org_display_name: Optional[str] = None,
-                               connection_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                               org_display_name: Optional[str] = None) -> Dict[str, Any]:
         """
         Get a Nango session token for the frontend to use when connecting to third-party services.
         
@@ -218,56 +217,14 @@ class NangoOpenAIService:
             user_display_name: Optional display name of the user
             org_id: Optional organization ID
             org_display_name: Optional organization display name
-            connection_config: Optional configuration for server-side connection creation
             
         Returns:
             Dictionary containing the session token
         """
 
         print(f"Getting Nango session token for user {user_id} with allowed integrations: {allowed_integrations}")
-        
-        # Handle Zoho CRM configuration properly
-        if any(integ.startswith('zoho') for integ in allowed_integrations):
-            # Ensure we have a connection_config for Zoho
-            zoho_config = connection_config.copy() if connection_config else {}
-            
-            # Set default extension if not provided
-            if "extension" not in zoho_config:
-                zoho_config["extension"] = "com"  # Default to US region
-                logger.info(f"Using default Zoho region extension: {zoho_config['extension']}")
-            
-            # First, set up the global provider config for Zoho CRM
-            # This ensures the extension parameter is available for all connections
-            for integration in [i for i in allowed_integrations if i.startswith('zoho')]:
-                try:
-                    # Set the config at the provider level first
-                    logger.info(f"Setting global config for {integration} with extension: {zoho_config['extension']}")
-                    await self.nango_service.create_connection(
-                        provider_config_key=integration,
-                        connection_id="global",  # Using 'global' as a placeholder
-                        connection_config=zoho_config
-                    )
-                    
-                    # Log success for provider-level configuration
-                    logger.info(f"Successfully configured provider-level settings for {integration} with extension: {zoho_config['extension']}")
-                    
-                    # Then create the user-specific connection if needed
-                    if user_id != "global":
-                        logger.info(f"Creating user-specific connection for {integration} with user: {user_id}")
-                        # Make sure to pass the same configuration to the user-specific connection
-                        await self.nango_service.create_connection(
-                            provider_config_key=integration,
-                            connection_id=user_id,
-                            connection_config=zoho_config
-                        )
-                        logger.info(f"Successfully configured user-specific connection for {integration} with user: {user_id}")
-                except Exception as e:
-                    logger.error(f"Error configuring {integration}: {str(e)}")
-                    # Continue with session token creation even if connection creation fails
-        
         try:
             # Use the NangoService to create a connect session and get a token
-            # Note: We don't pass connection_config here as it should be set via create_connection
             session_data = await self.nango_service.create_connect_session(
                 end_user_id=user_id,
                 allowed_integrations=allowed_integrations,
@@ -294,30 +251,3 @@ class NangoOpenAIService:
         # In a real implementation, this might fetch from Nango API or configuration
         # For now, we'll return the hardcoded values for Zoho, HubSpot, and Salesforce
         return ["zoho-crm", "hubspot", "salesforce"]
-    
-    async def process_conversation(self, user_message: str) -> str:
-        """Process a conversation with the user, handling any tool calls dynamically"""
-        initial_response = await self.run_chat_with_tools(user_message)
-        choice = initial_response.choices[0]
-        
-        if choice.finish_reason == "tool_calls":
-            messages = [{"role": "user", "content": user_message}, choice.message]
-            
-            for tool_call in choice.message.tool_calls:
-                tool_output = await self.handle_tool_call(tool_call)
-                
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "name": tool_call.function.name,
-                    "content": json.dumps(tool_output)
-                })
-            
-            followup = openai.ChatCompletion.create(
-                model=self.openai_model,
-                messages=messages
-            )
-            
-            return followup.choices[0].message.content
-        else:
-            return choice.message.content

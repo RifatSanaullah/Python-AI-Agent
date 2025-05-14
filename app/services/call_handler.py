@@ -337,6 +337,7 @@ class CallHandler:
             "aiInstructions" : self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'],
             "agentName" : self.agents[self.sessions[call_id]['call_sid']]['name'],
             "gender" : self.agents[self.sessions[call_id]['call_sid']]['voice']['gender'],
+            "integrations" : self.agents[self.sessions[call_id]['call_sid']]['integrations'],
         }
         self.agents[self.sessions[call_id]['call_sid']]['knowledge'] = None
         self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'] = None
@@ -448,12 +449,7 @@ class CallHandler:
         self.agents[call_id]['websocket_closed'] = False
         self.agents[call_id]['end_call'] = False
         self.agents[call_id]['route_call'] = False
-        
-        if 'zoho_connection_id' in self.agents[call_id]:
-            print(f"Found Zoho connection ID for call {call_id}")
-            self.agents[call_id]['has_zoho'] = True
-        else:
-            self.agents[call_id]['has_zoho'] = False
+        self.agents[call_id]['integrations'] = api_response['data']['integrations']
             
         if 'hubspot_connection_id' in self.agents[call_id]:
             print(f"Found HubSpot connection ID for call {call_id}")
@@ -496,28 +492,6 @@ class CallHandler:
             self.timer = Timer(5, self.twilio_service.hangup_call, args=[call_sid])
             self.timer.start()
             return
-            
-        # Set up Zoho connection if available for this user/business
-        if self.agents[call_sid].get('has_zoho', False):
-            zoho_connection_id = self.agents[call_sid].get('zoho_connection_id')
-            if zoho_connection_id:
-                print(f"Setting up Zoho connection {zoho_connection_id} for stream {stream_sid}")
-                # Set the Zoho connection in the ChatGPT service
-                await self.chatgpt_service.set_zoho_connection(stream_sid, zoho_connection_id)
-                
-        if self.agents[call_sid].get('has_hubspot', False):
-            hubspot_connection_id = self.agents[call_sid].get('hubspot_connection_id')
-            if hubspot_connection_id:
-                print(f"Setting up HubSpot connection {hubspot_connection_id} for stream {stream_sid}")
-                # Set the HubSpot connection in the ChatGPT service
-                await self.chatgpt_service.set_hubspot_connection(stream_sid, hubspot_connection_id)
-                
-        if self.agents[call_sid].get('has_salesforce', False):
-            salesforce_connection_id = self.agents[call_sid].get('salesforce_connection_id')
-            if salesforce_connection_id:
-                print(f"Setting up Salesforce connection {salesforce_connection_id} for stream {stream_sid}")
-                # Set the Salesforce connection in the ChatGPT service
-                await self.chatgpt_service.set_salesforce_connection(stream_sid, salesforce_connection_id)
 
         greetings = self.agents[call_sid]['greetings']
         await self.synthesize_response(greetings , stream_sid)
@@ -665,6 +639,6 @@ class CallHandler:
 
         await self.backend_service.update_call_info(data)
         
-    async def get_nango_session_token(self, user_id, allowed_integrations=None, connection_config=None):
+    async def get_nango_session_token(self, user_id, allowed_integrations=None):
         """Get a Nango session token for the frontend to use when connecting to third-party services"""
-        return await self.chatgpt_service.get_nango_session_token(user_id, allowed_integrations, connection_config)
+        return await self.chatgpt_service.get_nango_session_token(user_id, allowed_integrations)

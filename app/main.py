@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import UploadFile, File
 from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
+from app.services.nango_service import NangoService
 
 load_dotenv()
 
@@ -53,7 +54,7 @@ async def incoming_call(request: Request, call_handler: CallHandler = Depends(ge
     application_sid = data.get('ApplicationSid')
     direction = data.get('Direction')
     fromNumber = data.get('From')
-    dialed_number = "+16692000795" 
+    dialed_number = data.get("To")
     call_id = data.get("CallSid")
     
     data = {
@@ -105,6 +106,72 @@ async def fallback_status_callback(request: Request, call_handler: CallHandler =
     return await call_handler.fallback_status_callback(data)
 
 
+@app.post("/nango-callback")
+async def nango_webhook_callback(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
+   
+    try:
+        # Parse the webhook payload
+        webhook_data = await request.json()
+        
+        # Check if this is an auth creation webhook
+        if (webhook_data.get("type") == "auth" and 
+            webhook_data.get("operation") == "creation" and 
+            webhook_data.get("success") is True):
+            
+            # Extract the important information
+            connection_id = webhook_data.get("connectionId")
+            end_user_id = webhook_data.get("endUser", {}).get("endUserId")
+            organization_id = webhook_data.get("endUser", {}).get("organizationId")
+            integration_id = webhook_data.get("providerConfigKey")  # Get the integration type (e.g., "zoho-crm", "hubspot")
+            
+            if not connection_id or not end_user_id:
+                return JSONResponse(
+                    status_code=400,
+                    content={"status": "error", "message": "Missing required fields"}
+                )
+            
+            # Log the connection info
+            print(f"Received Nango connection: User {end_user_id}, Connection {connection_id}, Integration: {integration_id}")
+            
+            # Store the connection ID in the user's account
+            try:
+                # Determine if this is Zoho or HubSpot based on the integration ID
+                is_zoho = "zoho" in (integration_id or "").lower()
+                is_hubspot = "hubspot" in (integration_id or "").lower()
+                
+                # Store the connection ID in the account
+                result = await call_handler.backend_service.store_nango_connection(
+                    {
+                        "user_id": end_user_id,
+                        "organization_id": organization_id,
+                        "connection_id": connection_id,
+                        "integration_type": integration_id,
+                        "is_zoho": is_zoho,
+                        "is_hubspot": is_hubspot
+                    }
+                )
+                
+                return JSONResponse(
+                    status_code=200,
+                    content={"status": "success", "message": "Connection stored successfully in account", "data": result}
+                )
+            except Exception as store_error:
+                print(f"Error storing connection ID in account: {str(store_error)}")
+                return JSONResponse(
+                    status_code=500,
+                    content={"status": "error", "message": f"Error storing connection ID in account: {str(store_error)}"}
+                )
+        return JSONResponse(
+            status_code=200,
+            content={"status": "acknowledged", "message": "Webhook received"}
+        )
+        
+    except Exception as e:
+        print(f"Error processing Nango webhook: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"Error processing webhook: {str(e)}"}
+        )
 
 @app.post("/nango/session-token")
 async def get_nango_session_token(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
@@ -114,49 +181,40 @@ async def get_nango_session_token(request: Request, call_handler: CallHandler = 
     print(data)
     # Get allowed integrations (optional)
     allowed_integrations = data.get('allowed_integrations')
-    # Get connection_config if provided - will be used for server-side connection creation
-    connection_config = data.get('connection_config')
-    print(f"allowed_integrations: {allowed_integrations}, connection_config: {connection_config}")
-    
+    print(allowed_integrations)
     # If integrationId is provided, use it as the only allowed integration
     if integration_id:
         allowed_integrations = [integration_id]
     
-    # Prepare Zoho configuration if needed
-    # This will be used for server-side connection creation via the /configs endpoint
-    if ((allowed_integrations and any(integ.startswith('zoho') for integ in allowed_integrations)) or 
-        (integration_id and integration_id.startswith('zoho'))):
-        
-        # Initialize connection_config if not provided
-        if not connection_config:
-            connection_config = {}
-            
-        # Set default extension if not specified
-        if "extension" not in connection_config:
-            connection_config["extension"] = "com"  # Default to US region
-            print(f"Using default Zoho region extension: {connection_config['extension']}")
-        
-        # Log the configuration to help with debugging
-        print(f"Zoho CRM integration detected - connection_config: {connection_config}")
-    
     # Use the ChatGPT service to get a Nango session token
-    # The service will handle server-side connection creation with the config
     try:
-        session_data = await call_handler.get_nango_session_token(
+        session_data = await call_handler.chatgpt_service.get_nango_session_token(
             user_id=user_id,
-            allowed_integrations=allowed_integrations,
-            connection_config=connection_config
+            allowed_integrations=allowed_integrations
         )
         print("checking if session data available",session_data)
         return session_data
     except Exception as e:
-        print(f"Error getting Nango session token: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/remove-session")
+async def remove_session(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
+    data = await request.json()
+    connection_id = data.get('connection_id')
+    connection_type = data.get('connection_type')
+    account_id = data.get('account_id')
+    print("removing session", connection_id)
+    if not connection_id:
+        raise HTTPException(status_code=400, detail="Connection ID is required")
+    
+    try:
+        await NangoService().delete_connect_session(connection_id)
+        response = await call_handler.backend_service.remove_nango_connection(
+                    {
 
-if __name__ == "__main__":
-    from pyngrok import ngrok
-    # Get the ngrok tunnel
-    public_url = ngrok.connect(8000)
-    print(f"Public URL: {public_url}")
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+                        "account_id": account_id,
+                        "connection_type": connection_type,
+                    })
+        return JSONResponse(status_code=200, content={"status": "success", "message": "Session removed successfully" , data: response})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -75,22 +75,42 @@ class BackendHandler:
             print(f"Request error while updating conversation info: {str(e)}")
             raise
             
-    async def store_hubspot_connection_id(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def store_nango_connection(self, data: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            url = f"{self.OTHER_BACKEND_URL}/call/update-conversation-info"
-            print(f"Storing Hubspot connection ID with data: {data}")
+            url = f"{self.OTHER_BACKEND_URL}/account/store-integration"
+            print(f"Storing Nango connection with data: {data}")
             async with httpx.AsyncClient() as client:
                 response = await client.post(url, json=data, timeout=20)
-
+    
             response.raise_for_status()  # Raise an exception for HTTP errors
             result = response.json()
-            print(f"Successfully stored Hubspot connection ID: {result}")
+            print(f"Successfully stored Nango connection in account: {result}")
             return result
-
+    
         except httpx.HTTPStatusError as e:
-            print(f"HTTP error while storing Hubspot connection ID: {e.response.status_code} {e.response.text}")
+            print(f"HTTP error while storing Nango connection: {e.response.status_code} {e.response.text}")
             print(f"Request data was: {data}")
             raise
         except httpx.RequestError as e:
-            print(f"Request error while storing Hubspot connection ID: {str(e)}")
+            print(f"Request error while storing Nango connection: {str(e)}")
+            raise
+
+    async def remove_nango_connection(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            url = f"{self.OTHER_BACKEND_URL}/account/remove-integration"
+            print(f"Storing Nango connection with data: {data}")
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=data, timeout=20)
+    
+            response.raise_for_status()  # Raise an exception for HTTP errors
+            result = response.json()
+            print(f"Successfully stored Nango connection in account: {result}")
+            return result
+    
+        except httpx.HTTPStatusError as e:
+            print(f"HTTP error while storing Nango connection: {e.response.status_code} {e.response.text}")
+            print(f"Request data was: {data}")
+            raise
+        except httpx.RequestError as e:
+            print(f"Request error while storing Nango connection: {str(e)}")
             raise
