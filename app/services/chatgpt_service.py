@@ -408,7 +408,7 @@ class ChatGPTService:
             assistant_reply = response.choices[0].message.content
         
         # Process the response for speech synthesis
-        print(assistant_reply)
+        assistant_reply = assistant_reply.replace('*', '')
         chunk_reply = ""
         chunker = StreamingChunker(max_length=200, onTTS=synthesize_response, conversation_id=conversation_id)
         await chunker.add_stream_data(assistant_reply)  # Simulating stream input
