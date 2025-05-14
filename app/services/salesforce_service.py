@@ -15,7 +15,7 @@ class SalesforceService(NangoService):
     async def get_accounts(self, connection_id: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         logger.info(f"Fetching Salesforce accounts with connection_id: {connection_id}")
         try:
-            result = await self.fetch_data(connection_id, "get-accounts", params)
+            result = await self.fetch_data(connection_id, "accounts", params)
             logger.info(f"Successfully fetched {len(result.get('data', []))} Salesforce accounts")
             return result
         except Exception as e:
@@ -27,21 +27,21 @@ class SalesforceService(NangoService):
         return await self.fetch_data(connection_id, "get-account-by-id", params)
     
     async def get_contacts(self, connection_id: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return await self.fetch_data(connection_id, "get-contacts", params)
+        return await self.fetch_data(connection_id, "contacts", params)
     
     async def get_contact_by_id(self, connection_id: str, contact_id: str) -> Dict[str, Any]:
         params = {"id": contact_id}
         return await self.fetch_data(connection_id, "get-contact-by-id", params)
     
     async def get_leads(self, connection_id: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return await self.fetch_data(connection_id, "get-leads", params)
+        return await self.fetch_data(connection_id, "leads", params)
     
     async def get_lead_by_id(self, connection_id: str, lead_id: str) -> Dict[str, Any]:
         params = {"id": lead_id}
         return await self.fetch_data(connection_id, "get-lead-by-id", params)
     
     async def get_opportunities(self, connection_id: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return await self.fetch_data(connection_id, "get-opportunities", params)
+        return await self.fetch_data(connection_id, "opportunities", params)
     
     async def get_opportunity_by_id(self, connection_id: str, opportunity_id: str) -> Dict[str, Any]:
         params = {"id": opportunity_id}
