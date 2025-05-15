@@ -74,3 +74,7 @@ class SalesforceService(NangoService):
     async def get_campaign_by_id(self, connection_id: str, campaign_id: str) -> Dict[str, Any]:
         params = {"id": campaign_id}
         return await self.fetch_data(connection_id, "get-campaign-by-id", params, 'salesforce')
+    
+    async def get_contact_by_phone(self, connection_id: str, phone: str) -> Dict[str, Any]:
+        params = {"phone": phone}
+        return await self.fetch_data(connection_id, "get-contact", params, 'salesforce', True)

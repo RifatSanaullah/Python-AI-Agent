@@ -125,6 +125,7 @@ class ChatGPTService:
                 "get-products",
                 "get-product-by-id",
                 "get-owners",
+                "store-contacts",
                 "get-owner-by-id"
             ]
             self._map_service_methods(integration_type, service)
@@ -215,16 +216,24 @@ class ChatGPTService:
                 # {"role": "system", "content": "Before Ending the call you have to reclarify all the information you gather with user"},
                 # {"role": "system", "content": f"Current Date is: {date.today()}. If you gather any input in tomorrow or yesterday then response any date information in this format : 01 january 1970 with the time and if input only time then use use the time with current date"},
         ]
-        
+        connection_id = None
+        integration = None
         # Check if this conversation has a Zoho or HubSpot connection ID stored in metadata
-        if 'zoho_connection_id' in conversations['metadata'].get(conversation_id, {}):
-            conversations[conversation_id].append(
-                {"role": "system", "content": "You have access to Zoho CRM data. When the caller mentions a name, company, or other identifying information, you can use this to provide personalized responses based on their CRM data. If they ask about their account, deals, or other business information, you can reference this data to provide accurate answers."}
-            )
+        if 'integration' in knowledge_base and knowledge_base['integration']['zoho_connection_id'] is not None:
+            connection_id = knowledge_base['integration']['zoho_connection_id']
+            integration = 'Zoho'
         
-        if 'hubspot_connection_id' in conversations['metadata'].get(conversation_id, {}):
+        if 'integration' in knowledge_base and knowledge_base['integration']['hubspot_connection_id'] is not None:
+            integration = 'HubSpot'
+            connection_id = knowledge_base['integration']['hubspot_connection_id']
+                
+        if 'integration' in knowledge_base and knowledge_base['integration']['salesforce_connection_id'] is not None:
+            integration = 'Salesforce'
+            connection_id = knowledge_base['integration']['salesforce_connection_id']
+
+        if connection_id is not None:
             conversations[conversation_id].append(
-                {"role": "system", "content": "You have access to HubSpot CRM data. When the caller mentions a name, company, or other identifying information, you can use this to provide personalized responses based on their CRM data. If they ask about their account, deals, or other business information, you can reference this data to provide accurate answers."}
+                {"role": "system", "content": f"You have access to {integration} CRM data. When the caller mentions a name, company, or other identifying information, you can use this to provide personalized responses based on their CRM data. If they ask about their account, deals, or other business information, you can reference this data to provide accurate answers.Use {integration} CRM data with connection ID {connection_id} if the bellow message is relevent than use the required tool call otherwise just response the user message without using tool call and response the user message normally:"}
             )
 
         if not knowledge_base:
@@ -313,8 +322,7 @@ class ChatGPTService:
         
         return schemas
       
-    async def run_chat_with_tools(self, user_message: str) -> Dict[str, Any]:
-        messages = [{"role": "user", "content": user_message}]
+    async def run_chat_with_tools(self, messages) -> Dict[str, Any]:
         response = openai.chat.completions.create(
             model="gpt-4-turbo",
             messages=messages,
@@ -322,10 +330,17 @@ class ChatGPTService:
             tool_choice="auto"
         )
         return response
+    async def run_chat_without_tools(self, messages) -> Dict[str, Any]:
+        response = openai.chat.completions.create(
+            model="gpt-4-turbo",
+            messages=messages,
+        )
+        return response
 
     async def process_conversation(self, user_message: str) -> str:
             """Process a conversation with the user, handling any tool calls dynamically"""
-            initial_response = await self.run_chat_with_tools(user_message)
+            messages = [{"role": "user", "content": user_message}]
+            initial_response = await self.run_chat_with_tools(messages)
             choice = initial_response.choices[0]
             
             if choice.finish_reason == "tool_calls":
@@ -350,14 +365,14 @@ class ChatGPTService:
             else:
                 return choice.message.content
             
-    async def process_conversation_with_tool(self, conversation_id, connection_id, user_message: str , integration: str) -> str:
+    async def process_conversation_with_tool(self, conversation_id, connection_id, messages: str , integration: str) -> str:
         assistant_reply = ''
         try:
             # Create a modified message that includes context about available Zoho data
-            enhanced_message = f"The following is a user message in a phone conversation. Use {integration} CRM data with connection ID {connection_id} if the bellow message is relevent than use the required tool call otherwise just response the user message normally: {user_message}"
+            # enhanced_message = f"The following is a user message in a phone conversation. Use {integration} CRM data with connection ID {connection_id} if the bellow message is relevent than use the required tool call otherwise just response the user message without using tool call and response the user message normally: {user_message}"
             
             # Get enhanced response from NangoOpenAIService
-            enhanced_response = await self.process_conversation(enhanced_message)
+            enhanced_response = await self.process_conversation(self.system_convo[conversation_id])
             
             # Use the enhanced response
             assistant_reply = enhanced_response
@@ -383,34 +398,34 @@ class ChatGPTService:
 
         assistant_reply = ''
         # Prioritize HubSpot if both are available, or use whichever is available
-        if self.integrations[conversation_id]['hubspot_connection_id']:
-            # Use NangoOpenAIService to enhance the response with HubSpot data
-            self.integration_type = 'hubspot'
-            self._initialize_integration()
-            assistant_reply = await self.process_conversation_with_tool(conversation_id, self.integrations[conversation_id]['hubspot_connection_id'], message, "HubSpot")
+        # if self.integrations[conversation_id]['hubspot_connection_id']:
+        #     # Use NangoOpenAIService to enhance the response with HubSpot data
+        #     self.integration_type = 'hubspot'
+        #     self._initialize_integration()
+        #     assistant_reply = await self.process_conversation_with_tool(conversation_id, self.integrations[conversation_id]['hubspot_connection_id'], self.system_convo[conversation_id], "HubSpot")
 
-        # Check if this conversation has a Zoho connection ID
-        elif self.integrations[conversation_id]['salesforce_connection_id']:
-            # Use NangoOpenAIService to enhance the response with Zoho data
-            self.integration_type = 'salesforce'
-            self._initialize_integration()
-            assistant_reply = await self.process_conversation_with_tool(conversation_id, self.integrations[conversation_id]['salesforce_connection_id'], message, "Salesforce")
+        # # Check if this conversation has a Zoho connection ID
+        # elif self.integrations[conversation_id]['salesforce_connection_id']:
+        #     # Use NangoOpenAIService to enhance the response with Zoho data
+        #     self.integration_type = 'salesforce'
+        #     self._initialize_integration()
+        #     assistant_reply = await self.process_conversation_with_tool(conversation_id, self.integrations[conversation_id]['salesforce_connection_id'], self.system_convo[conversation_id], "Salesforce")
         
-        elif self.integrations[conversation_id]['zoho_connection_id']:
-            # Use NangoOpenAIService to enhance the response with Zoho data
-            self.integration_type = 'zoho'
-            self._initialize_integration()
-            assistant_reply = await self.process_conversation_with_tool(conversation_id, self.integrations[conversation_id]['zoho_connection_id'], message, "Zoho")
+        # elif self.integrations[conversation_id]['zoho_connection_id']:
+        #     # Use NangoOpenAIService to enhance the response with Zoho data
+        #     self.integration_type = 'zoho'
+        #     self._initialize_integration()
+        #     assistant_reply = await self.process_conversation_with_tool(conversation_id, self.integrations[conversation_id]['zoho_connection_id'], self.system_convo[conversation_id], "Zoho")
         
-        else:
+        # else:
             # Standard response without CRM integration
-            response = openai.chat.completions.create(
-                model="gpt-4-turbo",
-                messages=self.system_convo[conversation_id]
-            )
-            print("Assistant: ", end="", flush=True)  # Print the assistant's response incrementally
-            assistant_reply = response.choices[0].message.content
-        
+        response = openai.chat.completions.create(
+            model="gpt-4-turbo",
+            messages=self.system_convo[conversation_id]
+        )
+        print("Assistant: ", end="", flush=True)  # Print the assistant's response incrementally
+        assistant_reply = response.choices[0].message.content
+    
         # Process the response for speech synthesis
         assistant_reply = assistant_reply.replace('*', '')
         chunk_reply = ""
@@ -498,7 +513,7 @@ class ChatGPTService:
         except Exception as e:
             print(f"Error getting Nango session token: {str(e)}")
             raise
-        
+
     async def handle_tool_call(self, tool_call: Any) -> Dict[str, Any]:
             """Handle tool calls dynamically based on the integration type"""
             tool_name = tool_call.function.name.replace("_", "-")
@@ -533,7 +548,10 @@ class ChatGPTService:
                 # Pass all other parameters except connection_id
                 params = {k: v for k, v in arguments.items() if k != "connection_id"}
                 return await method(connection_id, params if params else None)
-    
+            
+
+
+
    
 
 

@@ -32,6 +32,9 @@ class HubSpotService(NangoService):
     async def get_all_companies(self, connection_id: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         return await self.fetch_data(connection_id, "companies", params, 'hubspot')
     
+    async def store_contacts(self, connection_id: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return await self.post_data(connection_id, "contact", payload, 'hubspot')
+    
     async def get_company_by_id(self, connection_id: str, company_id: str) -> Dict[str, Any]:
         params = {"id": company_id}
         return await self.fetch_data(connection_id, "get-company-by-id", params, 'hubspot')
@@ -70,3 +73,7 @@ class HubSpotService(NangoService):
     async def get_owner_by_id(self, connection_id: str, owner_id: str) -> Dict[str, Any]:
         params = {"id": owner_id}
         return await self.fetch_data(connection_id, "get-owner-by-id", params, 'hubspot')
+    
+    async def get_contact_by_phone(self, connection_id: str, phone: str) -> Dict[str, Any]:
+        params = {"phone": phone}
+        return await self.fetch_data(connection_id, "get-contact", params, 'hubspot', True)
