@@ -257,7 +257,7 @@ class ChatGPTService:
             self.initial_message(self.system_convo, conversation_id, knowledge)
             self.conversations[conversation_id] = []
             self.convo_index = len(self.system_convo[conversation_id])
-            
+            self.integrations[conversation_id] = {}
             # Check if this conversation has a CRM connection ID in the database
             try:
                 if knowledge['integrations']:
