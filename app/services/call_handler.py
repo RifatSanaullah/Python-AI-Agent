@@ -451,8 +451,10 @@ class CallHandler:
         self.agents[call_id]['websocket_closed'] = False
         self.agents[call_id]['end_call'] = False
         self.agents[call_id]['route_call'] = False
-        self.agents[call_id]['integrations'] = api_response['data']['integrations']
-            
+        self.agents[call_id]['integrations'] = {}
+        if 'integrations' in api_response['data']:
+            self.agents[call_id]['integrations'] = api_response['data']['integrations']
+
             
         response = self.twilio_service.initialize_call(call_id)
         # self.transcribe_service.connect()  # Connect the transcriber service
