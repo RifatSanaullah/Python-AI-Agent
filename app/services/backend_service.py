@@ -118,7 +118,6 @@ class BackendHandler:
 
         try:
             url = f"{self.OTHER_BACKEND_URL}/call/update-conversation-info"
-            print(f"Updating conversation info with data: {data}")
             async with httpx.AsyncClient() as client:
                 response = await client.post(url, json=data, timeout=20)
 
