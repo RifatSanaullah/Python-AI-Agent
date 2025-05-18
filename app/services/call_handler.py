@@ -637,15 +637,15 @@ class CallHandler:
 
         if fullname is not None and fullname != "":
             self.chatgpt_service.add_message(stream_sid, "user", f"My Name is: {fullname}")
-            self.chatgpt_service.add_system_message(stream_sid, "user", f"My Name is: {fullname}")
+            self.chatgpt_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Name of the user you will use in this conversation: {fullname}")
         if email is not None and email != "":
             self.chatgpt_service.add_message(stream_sid, "user", f"My Email Address is: {email}")
-            self.chatgpt_service.add_system_message(stream_sid, "user", f"My Email Address is: {email}")
+            self.chatgpt_service.add_system_message(stream_sid, "system", f"Don't forget. This is the email address of the user you will use in this conversation : {email}.")
         if phone is not None and phone != "":
             self.chatgpt_service.add_message(stream_sid, "user", f"My Phone Number is: {phone}")
-            self.chatgpt_service.add_system_message(stream_sid, "user", f"My Phone Number is: {phone}")
+            self.chatgpt_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Phone Number of the user you will use in this conversation: {phone}")
         if description is not None and description != "":
-            self.chatgpt_service.add_system_message(stream_sid, "user", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
+            self.chatgpt_service.add_system_message(stream_sid, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
 
         
         return "OK", 200
