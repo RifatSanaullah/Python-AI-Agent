@@ -34,7 +34,7 @@ class DeepgramService:
             # vad_events=True,
             utterance_end_ms="1000",
             interim_results=True,
-            endpointing=1800,
+            endpointing=1500,
             # Time in milliseconds of silence to wait for before finalizing speech
             )
 
@@ -89,12 +89,12 @@ class DeepgramService:
     def on_data(self,res,**kwargs):
         "Called when a new transcript has been received."
         result = kwargs['result']
-        is_final = result.speech_final
+        is_final = result.is_final
         sentence = result.channel.alternatives[0].transcript
         if sentence and is_final and sentence !='':
             self.complete_sentence += ' ' + sentence
-            if self.is_sentence_complete(sentence):
-                if self.on_transcript:
+            # if self.is_sentence_complete(sentence):
+            if self.on_transcript and result.speech_final:
                     asyncio.run(self.on_transcript(self.complete_sentence))
                     self.complete_sentence = ''
 
