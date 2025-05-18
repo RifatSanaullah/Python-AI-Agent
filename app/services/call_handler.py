@@ -272,7 +272,7 @@ class CallHandler:
             try:
                 if lead_id:
             # summary = await self.chatgpt_service.get_summary(hubspot_patch_format, conversations)
-                    summary["Id"] = lead_id
+                    # summary["Id"] = lead_id
                     if previous_convo_summary:
                         summary['Description'] = f"{previous_convo_summary}. On Next Call Summary: {summary['Description']}"
                     if summary['LastName'] == '' :
@@ -282,7 +282,11 @@ class CallHandler:
                         summary['Company'] = 'N/A'
                     if summary['LastName'] != '':
                         summary = self.remove_empty_values(summary)
-                        await self.chatgpt_service.salesforce_service.update_leads(integrations['salesforce_connection_id'], summary)
+                        body = {
+                                'Id' : lead_id,
+                                'lead' : summary
+                            }
+                        await self.chatgpt_service.salesforce_service.update_leads(integrations['salesforce_connection_id'], body)
                 else:
                     if summary['LastName'] == '' :
                         summary['LastName'] = summary['FirstName']
