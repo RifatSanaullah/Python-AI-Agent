@@ -30,14 +30,15 @@ import random
 from io import BytesIO
 import numpy as np
 import soundfile as sf
-import time
+import time , re
+from app.utils.responseformat import hubspot_patch_format
+import json
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     # format='%(asctime)s.%(msecs)03d - %(levelname)s - %(message)s',
     # datefmt='%Y-%m-%d %H:%M:%S'
 )
-
 class CallHandler:
     def __init__(self):
         self.twilio_service = TwilioService()
@@ -114,7 +115,7 @@ class CallHandler:
                     self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
                     session = self.sessions[data['streamSid']]
                     session['deepgram_transcribe_service'].establish_dg_connection()
-                    session['transcribe_service'].connect()
+                    # session['transcribe_service'].connect()
 
                 if data['streamSid'] not in self.sessions or 'call_sid' not in self.sessions[data['streamSid']]:
                     continue
@@ -179,8 +180,8 @@ class CallHandler:
                 if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'audio_buffer'):
                     audio_data = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'audio_buffer')
                     # await self.transcribe_service.transcribe(audio_data)
-                    # await session['deepgram_transcribe_service'].transcribe(audio_data)
-                    await session['transcribe_service'].transcribe(audio_data)
+                    await session['deepgram_transcribe_service'].transcribe(audio_data)
+                    # await session['transcribe_service'].transcribe(audio_data)
 
         except ConnectionClosedError as e:
             print(f"Connection closed with error: {e.code} - {e.reason}")
@@ -192,43 +193,138 @@ class CallHandler:
             print("WebSocket connection closed.")
             if session['stream_sid'] in self.chatgpt_service.conversations:
                 conversations = self.chatgpt_service.conversations[session['stream_sid']]
+                # conversations = convo
                 outputFile= f"recordings/{call_id}.wav"
                 await self.convert_mulaw_to_wav(f"recordings/{call_id}.mulaw", outputFile)
                 # os.remove(output_file)
                 recordingUrl = await self.s3_service.uploadToS3(outputFile)
                 agent_id = self.agents[call_id]['id']
+                lead_id = None
+                if 'lead_id' in self.agents[call_id] and self.agents[call_id]['lead_id'] is not None:
+                    lead_id = self.agents[call_id]['lead_id']
+                event_id = None
+                if 'event_id' in self.agents[call_id] and self.agents[call_id]['event_id'] is not None:
+                    event_id = self.agents[call_id]['event_id']
+                previous_convo_summary = None
+                if 'call_id' in self.agents and 'previous_convo_summary' in self.agents[call_id]:
+                    previous_convo_summary = self.agents[call_id]['previous_convo_summary']
                 data = {
                     "call_sid" : call_id,
                     "conversations": conversations,
                     "recording_url" : recordingUrl,
-                    "agent_id" : agent_id
+                    "agent_id" : agent_id,
+                    "lead_id" : lead_id,
+                    "integrations" : self.agents[call_id]['integrations'],
+                    "event_id" : event_id,
+                    "previous_convo_summary" : previous_convo_summary,
                 }
                 self.chatgpt_service.close_conversation(session['stream_sid'])
                 self.twilio_service.remove_stream_from_queue(session['stream_sid'])
                 del self.sessions[session['stream_sid']]
+                
 
                 try:
-                    await self.backend_service.update_conversation_info(data)
+                    response = await self.backend_service.update_conversation_info(data)
                     isBoom = self.agents[call_id]['isBoom']
-                    print(isBoom)
-                    if isBoom is not None or isBoom == True or isBoom == 'true' or isBoom != 'false':
-                        await self.backend_service.update_conversation_bh({"conversations": data['conversations'],})
+                    if isBoom is not None or isBoom == True or isBoom == 'true':
+                        await self.backend_service.update_conversation_bh({"conversations": data['conversations']})
+                    else:
+                        summary = response['summary']
+                        await self.update_crm_data(call_id, data['lead_id'], data['integrations'], summary, response['appointment'], response['appointment']['id'], data['event_id'], data['previous_convo_summary'])
                 except Exception as e:
                     print(f"Error updating conversation info: {str(e)}")
                     # Log the full exception traceback
                     import traceback
                     print(traceback.format_exc())
-                    
+
+
                 self.agents[call_id]['websocket_closed'] = True
                 # self.flush_agent(call_id)
 
             session['deepgram_transcribe_service'].disconnect()
-            session['transcribe_service'].close()  # Close the transcriber service
+            # session['transcribe_service'].close()  # Close the transcriber service
             try:
                 await websocket.close()
             except Exception as e:
                 print("--Websocket connection Closed--")
+    
+    async def update_crm_data(self,call_id, lead_id: str, integrations, summary, appointment, appointment_id, prev_event_id, previous_convo_summary):
+        event = appointment['eventData']
 
+        if integrations and integrations["hubspot_connection_id"] is not None and integrations["hubspot_connection_id"] != '':
+            summary["email"] = summary['email'].replace(" ", "")
+            summary["phone"] = self.format_us_number_simple(summary["mobile_phone_number"])
+            if lead_id:
+            # Update CRM Contact
+            # summary = await self.chatgpt_service.get_summary(hubspot_patch_format, conversations)
+                summary["id"] = lead_id
+                await self.chatgpt_service.hubspot_service.update_leads(integrations['hubspot_connection_id'], summary)
+            else:
+                await self.chatgpt_service.hubspot_service.store_leads(integrations['hubspot_connection_id'], summary)
+                
+
+        if integrations and integrations["salesforce_connection_id"] is not None and integrations["salesforce_connection_id"] != '':
+            summary["Email"] = summary['Email'].replace(" ", "").replace(",",'')
+            summary["Phone"] = self.formatToSalesforceNumber(summary["Phone"])
+            if summary['Phone'] != self.agents[call_id]['from']:
+                summary['MobilePhone'] = self.formatToSalesforceNumber(self.agents[call_id]['from'])
+            # Update CRM Contact
+            try:
+                if lead_id:
+            # summary = await self.chatgpt_service.get_summary(hubspot_patch_format, conversations)
+                    summary["Id"] = lead_id
+                    if previous_convo_summary:
+                        summary['Description'] = f"{previous_convo_summary}. On Next Call Summary: {summary['Description']}"
+                    if summary['LastName'] == '' :
+                        summary['LastName'] = summary['FirstName']
+                        summary['FirstName'] = ''
+                    if summary['Company'] == '':
+                        summary['Company'] = 'N/A'
+                    if summary['LastName'] != '':
+                        summary = self.remove_empty_values(summary)
+                        await self.chatgpt_service.salesforce_service.update_leads(integrations['salesforce_connection_id'], summary)
+                else:
+                    if summary['LastName'] == '' :
+                        summary['LastName'] = summary['FirstName']
+                        summary['FirstName'] = ''
+                    if summary['Company'] == '':
+                        summary['Company'] = 'N/A'
+                    if summary['LastName'] != '':
+                        summary = self.remove_empty_values(summary)
+                        await self.chatgpt_service.salesforce_service.store_leads(integrations['salesforce_connection_id'], summary)
+            except Exception as e:
+                print("Lead Creat or Update failed" , e)
+
+            try:
+                if event is not None and event != '':
+                    new_appointment = appointment['newAppointment']
+                    update_appointment = appointment['updateAppointment']
+                    delete_appointment = appointment['deleteAppointment']
+                    if prev_event_id is not None and prev_event_id != '':
+                        if update_appointment:
+                            body = {
+                                'Id' : prev_event_id,
+                                'event' : event
+                            }
+                            response = await self.chatgpt_service.salesforce_service.update_event(integrations['salesforce_connection_id'], body)
+                        elif delete_appointment:
+                            response = await self.chatgpt_service.salesforce_service.delete_event(integrations['salesforce_connection_id'], {"Id" : prev_event_id})
+                    else:
+                        response = await self.chatgpt_service.salesforce_service.create_event(integrations['salesforce_connection_id'], event)
+                        if response and 'id' in response:
+                            await self.backend_service.update_appointment({"appointment_id" : appointment_id, "event_id" : response['id']})
+ 
+
+            except Exception as e:
+                print("Event Creation or update appointment Failed" , e)
+
+
+    def remove_empty_values(self, data: dict) -> dict:
+        """
+        Removes keys with values that are None, empty strings, or "undefined" (as a string).
+        """
+        return {k: v for k, v in data.items() if v not in (None, "", "undefined")}
+    
     def is_mulaw_stream_silent_base64(mulaw_bytes: bytes, silence_threshold: int = 500) -> bool:
         """
         Takes a base64-encoded µ-law audio chunk and returns True if it's silent.
@@ -452,6 +548,24 @@ class CallHandler:
                 "call_sid" : call_sid,
                 "last_user_audio_time" : None
             }
+
+    def formatToSalesforceNumber(self, phone):
+        digits = re.sub(r'\D', '', phone)
+        if len(digits) == 10:
+            return f'1 ({digits[0:3]}) {digits[3:6]}-{digits[6:]}'
+        elif len(digits) == 11 and digits.startswith('1'):
+            return f'1 ({digits[1:4]}) {digits[4:7]}-{digits[7:]}'
+        else:
+            return phone 
+        
+    def format_us_number_simple(self, number_str):
+        digits = ''.join(filter(str.isdigit, number_str))
+        if len(digits) == 10:
+            return '+1' + digits
+        elif len(digits) == 11 and digits.startswith('1'):
+            return '+' + digits
+        else:
+            raise ValueError("Invalid US number format")
         
     async def handle_call(self, call_id: str, data):
         print("Handling call...")
@@ -462,7 +576,17 @@ class CallHandler:
         self.agents[call_id]['websocket_closed'] = False
         self.agents[call_id]['end_call'] = False
         self.agents[call_id]['route_call'] = False
-        self.agents[call_id]['integrations'] = {}
+        self.agents[call_id]['from'] = data['from']
+
+        if 'appointment' in api_response['data'] and 'eventId' in api_response['data']['appointment']:
+            self.agents[call_id]['event_id'] = api_response['data']['appointment']['eventId']
+
+        self.agents[call_id]['integrations'] = {
+                "hubspot_connection_id": None,
+                "zoho_connection_id": None,
+                "salesforce_connection_id": None
+        }
+        self.agents[call_id]['lead_id'] = None
         if 'integrations' in api_response['data']:
             self.agents[call_id]['integrations'] = api_response['data']['integrations']
 
@@ -484,11 +608,11 @@ class CallHandler:
         print(f"Stream SID: {stream_sid}, Call SID: {call_sid}")
         self.initialize_session_info(stream_sid, call_sid)
         # self.sessions[call_sid]['stream_sid'] = stream_sid
-        data= {
+        updaedata= {
             "stream_sid" : stream_sid,
             "call_sid" : call_sid
         }
-        await self.backend_service.update_call_info(data)
+        await self.backend_service.update_call_info(updaedata)
         if (self.agents[call_sid]['isAvailable'] == False):
             await self.synthesize_response('Currenty we are not available, Please contact us in our available time', stream_sid)
             # Schedule the call to end after 2 seconds
@@ -496,14 +620,80 @@ class CallHandler:
             self.timer = Timer(5, self.twilio_service.hangup_call, args=[call_sid])
             self.timer.start()
             return
-
         greetings = self.agents[call_sid]['greetings']
+
+        result = await self.gather_contact_info(call_sid, greetings)
+        fullname = result['fullname']
+        greetings = result['greetings']
+        email = result['email']
+        phone = result['phone']
+        description = result['description']
+        self.agents[call_sid]['previous_convo_summary'] = description
+
         await self.synthesize_response(greetings , stream_sid)
         await self.chatgpt_service.process_initial_message(stream_sid, self.get_agent_knowledge)
         self.chatgpt_service.add_message(stream_sid, "assistant", greetings)
         self.chatgpt_service.add_system_message(stream_sid, "assistant", greetings)
+
+        if fullname is not None and fullname != "":
+            self.chatgpt_service.add_message(stream_sid, "user", f"My Name is: {fullname}")
+            self.chatgpt_service.add_system_message(stream_sid, "user", f"My Name is: {fullname}")
+        if email is not None and email != "":
+            self.chatgpt_service.add_message(stream_sid, "user", f"My Email Address is: {email}")
+            self.chatgpt_service.add_system_message(stream_sid, "user", f"My Email Address is: {email}")
+        if phone is not None and phone != "":
+            self.chatgpt_service.add_message(stream_sid, "user", f"My Phone Number is: {phone}")
+            self.chatgpt_service.add_system_message(stream_sid, "user", f"My Phone Number is: {phone}")
+        if description is not None and description != "":
+            self.chatgpt_service.add_system_message(stream_sid, "user", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
+
         
         return "OK", 200
+    
+    def modify_greeting(self, name, greetings):
+        greetings = greetings.replace('Hello', '')
+        greetings= 'Hello ' + name + ', ' + greetings
+        return greetings
+    
+    async def gather_contact_info(self, call_sid, greetings):
+        fullname = None
+        email = None
+        phoneNumber = None
+        description = None
+        crmUserId = None
+
+        if self.agents[call_sid]['integrations']['salesforce_connection_id']:
+
+            formatted_number = self.formatToSalesforceNumber(self.agents[call_sid]['from'])
+            result = await self.chatgpt_service.salesforce_service.get_lead_by_phone(self.agents[call_sid]['integrations']['salesforce_connection_id'], formatted_number)
+            
+            if len(result) > 0:
+                details = result[0]
+                fullname = details['LastName']
+                if details['FirstName']:
+                    fullname = details['FirstName'] + ' ' + details['LastName']
+                crmUserId = details['Id']
+                email = details['Email']
+                phoneNumber = details['Phone']
+                description = details['Description']
+                greetings = self.modify_greeting(fullname, greetings)
+
+        if self.agents[call_sid]['integrations']['hubspot_connection_id']:
+
+            result = await self.chatgpt_service.hubspot_service.get_contact_by_phone(self.agents[call_sid]['integrations']['hubspot_connection_id'], self.agents[call_sid]['from'])
+            
+            if 'results' in result and len(result['results']) > 0:
+                details = result['results'][0]['properties']
+                fullname = details['firstname'] + ' ' + details['lastname']
+                email = details['email']
+                phoneNumber = details['phone']
+                crmUserId = result['results'][0]['id']
+                greetings = self.modify_greeting(fullname, greetings)
+
+        if crmUserId is not None:
+            self.agents[call_sid]['lead_id'] = crmUserId
+
+        return {"greetings" : greetings , "email": email ,"phone": phoneNumber ,"description" : description, "fullname" : fullname }
     
     async def enable_background_sound(self ,call_id, status = False):
         self.sessions[call_id]['background_sound'] = status

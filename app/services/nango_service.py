@@ -81,7 +81,7 @@ class NangoService:
         response = requests.request("DELETE", url)
         return response.text
     
-    async def fetch_data(self, connection_id: str, endpoint: str, params: Optional[Dict[str, Any]] = None, provider = 'hubspot') -> Dict[str, Any]:
+    async def fetch_data(self, connection_id: str, endpoint: str, params: Optional[Dict[str, Any]] = None, provider = 'salesforce') -> Dict[str, Any]:
 
         url = f"{self.base_url}/v1/{endpoint}"
         logger.info(f"Making Nango API request with connection_id: {connection_id}")
@@ -91,6 +91,66 @@ class NangoService:
             self.headers['Connection-Id'] = connection_id
             self.headers['Provider-Config-Key'] = provider
             response = requests.get(url, headers=self.headers, params=params or {})
+            response.raise_for_status()
+            result = response.json()
+            logger.info(f"Nango API request successful for endpoint: {endpoint}")
+            return result
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Error fetching data from Nango: {str(e)}"
+            if hasattr(e, 'response') and e.response is not None:
+                error_msg += f" - Status code: {e.response.status_code}"
+                try:
+                    error_details = e.response.json()
+                    error_msg += f" - Response: {error_details}"
+                    logger.error(f"Nango API error details: {error_details}")
+                except:
+                    error_msg += f" - Response text: {e.response.text}"
+                    logger.error(f"Nango API error text: {e.response.text}")
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        
+    async def post_data(self, connection_id: str, endpoint: str, payload: Optional[Dict[str, Any]] = None, provider = 'salesforce', ispatch = False) -> Dict[str, Any]:
+
+        url = f"{self.base_url}/v1/{endpoint}"
+        logger.info(f"Making Nango API request with connection_id: {connection_id}")
+        
+        try:
+            logger.info(f"Request payload: {payload or {}}")
+            self.headers['Connection-Id'] = connection_id
+            self.headers['Provider-Config-Key'] = provider
+            if ispatch:
+                response = requests.patch(url, headers=self.headers, json=payload)
+            else:
+                response = requests.post(url, headers=self.headers, json=payload)
+            response.raise_for_status()
+            result = response.json()
+            logger.info(f"Nango API request successful for endpoint: {endpoint}")
+            return result
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Error fetching data from Nango: {str(e)}"
+            if hasattr(e, 'response') and e.response is not None:
+                error_msg += f" - Status code: {e.response.status_code}"
+                try:
+                    error_details = e.response.json()
+                    error_msg += f" - Response: {error_details}"
+                    logger.error(f"Nango API error details: {error_details}")
+                except:
+                    error_msg += f" - Response text: {e.response.text}"
+                    logger.error(f"Nango API error text: {e.response.text}")
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        
+
+    async def delete_data(self, connection_id: str, endpoint: str, payload: Optional[Dict[str, Any]] = None, provider = 'salesforce') -> Dict[str, Any]:
+
+        url = f"{self.base_url}/v1/{endpoint}"
+        logger.info(f"Making Nango API request with connection_id: {connection_id}")
+        
+        try:
+            logger.info(f"Request payload: {payload or {}}")
+            self.headers['Connection-Id'] = connection_id
+            self.headers['Provider-Config-Key'] = provider
+            response = requests.delete(url, headers=self.headers, json=payload)
             response.raise_for_status()
             result = response.json()
             logger.info(f"Nango API request successful for endpoint: {endpoint}")

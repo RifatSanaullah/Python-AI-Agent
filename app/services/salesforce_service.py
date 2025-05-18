@@ -74,3 +74,32 @@ class SalesforceService(NangoService):
     async def get_campaign_by_id(self, connection_id: str, campaign_id: str) -> Dict[str, Any]:
         params = {"id": campaign_id}
         return await self.fetch_data(connection_id, "get-campaign-by-id", params, 'salesforce')
+    
+    async def get_contact_by_phone(self, connection_id: str, phone: str) -> Dict[str, Any]:
+        params = {"phone": phone}
+        return await self.post_data(connection_id, "get-contact", params, 'salesforce')
+    
+    async def get_lead_by_phone(self, connection_id: str, phone: str) -> Dict[str, Any]:
+        params = {"phone": phone}
+        return await self.post_data(connection_id, "get-lead", params, 'salesforce')
+    
+    async def store_contacts(self, connection_id: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return await self.post_data(connection_id, "contact", payload, 'salesforce')
+    
+    async def update_contacts(self, connection_id: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return await self.post_data(connection_id, "contacts", payload, 'salesforce', True)
+    
+    async def update_leads(self, connection_id: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return await self.post_data(connection_id, "leads", payload, 'salesforce', True)
+    
+    async def store_leads(self, connection_id: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return await self.post_data(connection_id, "create-lead", payload, 'salesforce')
+    
+    async def create_event(self, connection_id: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return await self.post_data(connection_id, "create-event", payload, 'salesforce')
+    
+    async def update_event(self, connection_id: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return await self.post_data(connection_id, "update-event", payload, 'salesforce' , True)
+    
+    async def delete_event(self, connection_id: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return await self.delete_data(connection_id, "delete-event", payload, 'salesforce')

@@ -534,6 +534,25 @@ class ChatGPTService:
                 params = {k: v for k, v in arguments.items() if k != "connection_id"}
                 return await method(connection_id, params if params else None)
     
+            
+    async def get_summary(self, response_format, conversations):
+            summarize_prompt = {
+                    "role": "user",
+                    "content": f"""
+                From the above conversation history, extract and return the following information in JSON format using the structure below. If any fields are not available in the conversation, leave them as empty strings (""). All date/time values should be formatted as JavaScript Date objects.
+                Response Format:
+                {json.dumps(response_format, indent=2)}
+                Return only this structured JSON based on the conversation. If no data is found for a section, return that section with all fields as empty strings. :
+                """
+            }
+            conversations.insert(0, summarize_prompt)
+            result = await self.run_chat_without_tools(conversations)
+            summary = result.choices[0].message.content
+            summary = json.loads(summary)
+            return summary
+
+
+
    
 
 

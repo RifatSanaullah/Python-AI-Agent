@@ -125,7 +125,7 @@ class BackendHandler:
             response.raise_for_status()  # Raise an exception for HTTP errors
             result = response.json()
             print(f"Successfully updated conversation info: {result}")
-            return result
+            return result['data']
 
         except httpx.HTTPStatusError as e:
             print(f"HTTP error while updating conversation info: {e.response.status_code} {e.response.text}")
@@ -173,4 +173,24 @@ class BackendHandler:
             raise
         except httpx.RequestError as e:
             print(f"Request error while storing Nango connection: {str(e)}")
+            raise
+
+    async def update_appointment(self, data: Dict[str, Any]) -> Dict[str, Any]:
+
+        try:
+            url = f"{self.OTHER_BACKEND_URL}/appointment/update-appointment"
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=data, timeout=20)
+
+            response.raise_for_status()  # Raise an exception for HTTP errors
+            result = response.json()
+            print(f"Successfully updated conversation info: {result}")
+            return result['data']
+
+        except httpx.HTTPStatusError as e:
+            print(f"HTTP error while updating conversation info: {e.response.status_code} {e.response.text}")
+            print(f"Request data was: {data}")
+            raise
+        except httpx.RequestError as e:
+            print(f"Request error while updating conversation info: {str(e)}")
             raise
