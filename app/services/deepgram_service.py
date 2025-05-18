@@ -32,9 +32,9 @@ class DeepgramService:
             sample_rate=8000,
             smart_format=True,
             # vad_events=True,
-            utterance_end_ms="1200",
+            utterance_end_ms="1000",
             interim_results=True,
-            endpointing=2000,
+            endpointing=1800,
             # Time in milliseconds of silence to wait for before finalizing speech
             )
 
@@ -89,7 +89,7 @@ class DeepgramService:
     def on_data(self,res,**kwargs):
         "Called when a new transcript has been received."
         result = kwargs['result']
-        is_final = result.is_final
+        is_final = result.speech_final
         sentence = result.channel.alternatives[0].transcript
         if sentence and is_final and sentence !='':
             self.complete_sentence += ' ' + sentence
