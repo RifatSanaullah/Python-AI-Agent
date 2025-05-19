@@ -92,9 +92,9 @@ class DeepgramService:
         try:
             print('wait for words')
             if self.is_sentence_complete(self.complete_sentence):
-                await asyncio.sleep(3)  # Wait for more speech
+                await asyncio.sleep(1.5)  # Wait for more speech
             else:
-                await asyncio.sleep(5)  # Wait for more speech
+                await asyncio.sleep(3)  # Wait for more speech
             print('wait complete')
 
             with self.lock:
@@ -119,11 +119,6 @@ class DeepgramService:
             self.complete_sentence += ' ' + sentence.strip()
             with self.lock:
 
-                    # Cancel previous delayed task
-                    if self.transmit_task:
-                        print('cancel transmit request')
-                        self.transmit_task.cancel()
-
                     # Schedule new task: wait 2 seconds, then emit final transcript
                     self.transmit_task = asyncio.run_coroutine_threadsafe(
                         self.transmit_after_delay(),
@@ -133,6 +128,10 @@ class DeepgramService:
         
         
         elif sentence and not is_final : 
+            # Cancel previous delayed task
+            if self.transmit_task:
+                print('cancel transmit request')
+                self.transmit_task.cancel()
             asyncio.run(self.on_start())
 
 
