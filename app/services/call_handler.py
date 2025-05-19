@@ -276,7 +276,7 @@ class CallHandler:
             # summary = await self.chatgpt_service.get_summary(hubspot_patch_format, conversations)
                     # summary["Id"] = lead_id
                     if previous_convo_summary:
-                        summary['Description'] = f"{previous_convo_summary}. On Next Call Summary: {summary['Description']}"
+                        summary['Description'] = f"{previous_convo_summary}. Call Note on {datetime.now()}: {summary['Description']}"
                     if summary['LastName'] == '' :
                         summary['LastName'] = summary['FirstName']
                         summary['FirstName'] = ''
@@ -677,8 +677,8 @@ class CallHandler:
             if len(result) > 0:
                 details = result[0]
                 fullname = details['LastName']
-                if details['FirstName']:
-                    fullname = details['FirstName'] + ' ' + details['LastName']
+                # if details['FirstName']:
+                #     fullname = details['FirstName'] + ' ' + details['LastName']
                 crmUserId = details['Id']
                 email = details['Email']
                 phoneNumber = details['Phone']
