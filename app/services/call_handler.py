@@ -55,6 +55,7 @@ class CallHandler:
         self.agents = {}
         self.completed_sessions = {}
         self.timer = None
+        self.loop= asyncio.get_running_loop()
 
     def get_business_agent(self, call_id: str):
         """Retrieve specific AI agent/business logic based on the dialed number."""
@@ -230,7 +231,7 @@ class CallHandler:
                         await self.backend_service.update_conversation_bh({"conversations": data['conversations']})
                     else:
                         summary = response['summary']
-                        await self.update_crm_data(call_id, data['lead_id'], data['integrations'], summary, response['appointment'], response['appointment']['id'], data['event_id'], data['previous_convo_summary'])
+                        await self.update_crm_data(call_id, data['lead_id'], data['integrations'], summary, response['appointment'], data['event_id'], data['previous_convo_summary'])
                 except Exception as e:
                     print(f"Error updating conversation info: {str(e)}")
                     # Log the full exception traceback
@@ -248,7 +249,7 @@ class CallHandler:
             except Exception as e:
                 print("--Websocket connection Closed--")
     
-    async def update_crm_data(self,call_id, lead_id: str, integrations, summary, appointment, appointment_id, prev_event_id, previous_convo_summary):
+    async def update_crm_data(self,call_id, lead_id: str, integrations, summary, appointment, prev_event_id, previous_convo_summary):
         event = appointment['eventData']
 
         if integrations and integrations["hubspot_connection_id"] is not None and integrations["hubspot_connection_id"] != '':
@@ -315,7 +316,8 @@ class CallHandler:
                             response = await self.chatgpt_service.salesforce_service.delete_event(integrations['salesforce_connection_id'], {"Id" : prev_event_id})
                     else:
                         response = await self.chatgpt_service.salesforce_service.create_event(integrations['salesforce_connection_id'], event)
-                        if response and 'id' in response:
+                        if response and 'id' in response and 'id' in appointment:
+                            appointment_id = appointment['id']
                             await self.backend_service.update_appointment({"appointment_id" : appointment_id, "event_id" : response['id']})
  
 
@@ -356,6 +358,7 @@ class CallHandler:
         return Service(
             on_transcript=self.create_on_transcript_handler(call_id),
             on_start=self.create_on_user_speech_handler(call_id),
+            loop= self.loop,
         )
 
     def create_on_transcript_handler(self, call_id: str):
