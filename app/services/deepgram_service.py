@@ -91,9 +91,9 @@ class DeepgramService:
     async def transmit_after_delay(self):
         try:
             if self.is_sentence_complete(self.complete_sentence):
-                await asyncio.sleep(1.5)  # Wait for more speech
+                await asyncio.sleep(1.2)  # Wait for more speech
             else:
-                await asyncio.sleep(2.5)  # Wait for more speech
+                await asyncio.sleep(2.2)  # Wait for more speech
 
             with self.lock:
                 if self.on_transcript and self.complete_sentence.strip():
