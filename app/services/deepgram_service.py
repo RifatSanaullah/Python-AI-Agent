@@ -92,9 +92,9 @@ class DeepgramService:
         try:
             print('wait for words')
             if self.is_sentence_complete(self.complete_sentence):
-                await asyncio.sleep(2)  # Wait for more speech
+                await asyncio.sleep(3)  # Wait for more speech
             else:
-                await asyncio.sleep(4)  # Wait for more speech
+                await asyncio.sleep(5)  # Wait for more speech
             print('wait complete')
 
             with self.lock:
