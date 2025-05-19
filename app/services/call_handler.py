@@ -220,17 +220,13 @@ class CallHandler:
                     "event_id" : event_id,
                     "previous_convo_summary" : previous_convo_summary,
                 }
-                self.chatgpt_service.close_conversation(session['stream_sid'])
-                self.twilio_service.remove_stream_from_queue(session['stream_sid'])
-                del self.sessions[session['stream_sid']]
-                
 
                 try:
                     response = await self.backend_service.update_conversation_info(data)
                     isBoom = self.agents[call_id]['isBoom']
                     if isBoom is not None or isBoom == True or isBoom == 'true':
                         await self.backend_service.update_conversation_bh({"conversations": data['conversations']})
-                    else:
+                    if 'summary' in response:
                         summary = response['summary']
                         await self.update_crm_data(call_id, data['lead_id'], data['integrations'], summary, response['appointment'], data['event_id'], data['previous_convo_summary'])
                 except Exception as e:
@@ -238,8 +234,13 @@ class CallHandler:
                     # Log the full exception traceback
                     import traceback
                     print(traceback.format_exc())
+                    self.chatgpt_service.close_conversation(session['stream_sid'])
+                    self.twilio_service.remove_stream_from_queue(session['stream_sid'])
+                    del self.sessions[session['stream_sid']]
 
-
+                self.chatgpt_service.close_conversation(session['stream_sid'])
+                self.twilio_service.remove_stream_from_queue(session['stream_sid'])
+                del self.sessions[session['stream_sid']]
                 self.agents[call_id]['websocket_closed'] = True
                 # self.flush_agent(call_id)
 
@@ -766,6 +767,10 @@ class CallHandler:
                 wav_fp.writeframes(pcm_chunk)
 
         wav_fp.close()
+        if os.path.exists(mulaw_file):
+                os.remove(mulaw_file)
+        else:
+            print("The file does not exist")
 
     async def complete_status_callback(self, data):
         """Handle the stream callback to get the streamSid."""
