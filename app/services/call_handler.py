@@ -192,6 +192,7 @@ class CallHandler:
             print("Unexpected error:", e)
         finally:
             print("WebSocket connection closed.")
+            session['deepgram_transcribe_service'].cancel_transmit()
             if session['stream_sid'] in self.chatgpt_service.conversations:
                 conversations = self.chatgpt_service.conversations[session['stream_sid']]
                 # conversations = convo
@@ -207,7 +208,7 @@ class CallHandler:
                 if 'event_id' in self.agents[call_id] and self.agents[call_id]['event_id'] is not None:
                     event_id = self.agents[call_id]['event_id']
                 previous_convo_summary = None
-                if 'call_id' in self.agents and 'previous_convo_summary' in self.agents[call_id]:
+                if call_id in self.agents and 'previous_convo_summary' in self.agents[call_id]:
                     previous_convo_summary = self.agents[call_id]['previous_convo_summary']
                 data = {
                     "call_sid" : call_id,
@@ -411,14 +412,14 @@ class CallHandler:
             response = response.replace('End Call Message', '')
             # Schedule the call to end after 2 seconds
             self.clear_timer()
-            self.timer = Timer(11, self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
+            self.timer = Timer(13, self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
             self.timer.start()
             
         if 'Routing Message' in response or 'I am forwarding the call' in response:
             response = response.replace('Routing Message', '')
             # Schedule the call to end after 2 seconds
             self.clear_timer()
-            self.timer = Timer(11, self.twilio_service.redirect_call,
+            self.timer = Timer(13, self.twilio_service.redirect_call,
                           args=[
                             self.sessions[call_id]['call_sid'],
                             self.agents[self.sessions[call_id]['call_sid']]['routingInfo']['routingNumber'],
@@ -584,6 +585,7 @@ class CallHandler:
         self.agents[call_id]['end_call'] = False
         self.agents[call_id]['route_call'] = False
         self.agents[call_id]['from'] = data['from']
+        self.agents[call_id]['previous_convo_summary'] = None
 
         if 'appointment' in api_response['data'] and 'eventId' in api_response['data']['appointment']:
             self.agents[call_id]['event_id'] = api_response['data']['appointment']['eventId']
@@ -635,8 +637,6 @@ class CallHandler:
         email = result['email']
         phone = result['phone']
         description = result['description']
-        self.agents[call_sid]['previous_convo_summary'] = description
-
         await self.synthesize_response(greetings , stream_sid)
         await self.chatgpt_service.process_initial_message(stream_sid, self.get_agent_knowledge)
         self.chatgpt_service.add_message(stream_sid, "assistant", greetings)
@@ -699,6 +699,7 @@ class CallHandler:
 
         if crmUserId is not None:
             self.agents[call_sid]['lead_id'] = crmUserId
+            self.agents[call_sid]['previous_convo_summary'] = description
 
         return {"greetings" : greetings , "email": email ,"phone": phoneNumber ,"description" : description, "fullname" : fullname }
     

@@ -90,22 +90,18 @@ class DeepgramService:
 
     async def transmit_after_delay(self):
         try:
-            print('wait for words')
             if self.is_sentence_complete(self.complete_sentence):
                 await asyncio.sleep(1.5)  # Wait for more speech
             else:
-                await asyncio.sleep(3)  # Wait for more speech
-            print('wait complete')
+                await asyncio.sleep(2.5)  # Wait for more speech
 
             with self.lock:
-                print('way to transcript')
                 if self.on_transcript and self.complete_sentence.strip():
                     await self.on_transcript(self.complete_sentence.strip())
                     self.complete_sentence = ''
                 self.transmit_task = None
         except asyncio.CancelledError:
             # Canceled because more speech came in
-            print("cancelled transmit")
             pass
 
     def on_data(self,res,**kwargs):
@@ -129,12 +125,12 @@ class DeepgramService:
         
         elif sentence and not is_final : 
             # Cancel previous delayed task
-            if self.transmit_task:
-                print('cancel transmit request')
-                self.transmit_task.cancel()
+            self.cancel_transmit()
             asyncio.run(self.on_start())
 
-
+    def cancel_transmit(self):
+        if self.transmit_task:
+            self.transmit_task.cancel()
 
     def on_started(self, message, **kwargs):
         # asyncio.run(self.on_update(True))
