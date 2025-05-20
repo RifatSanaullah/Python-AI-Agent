@@ -93,7 +93,8 @@ class CallHandler:
             "transcribe_service": None,
             "ai_interrupt": False,
             "ai_speaking": False,
-            "wait_duration": 10,
+            "wait_duration": 12,
+            "prev_wait_duration": 0,
             "stream_sid": None,
             "background_sound": None,
             "end_call": False,
@@ -354,7 +355,7 @@ class CallHandler:
                     
     def disable_ai_speaking(self, call_id):
             self.sessions[call_id]['ai_speaking'] = False
-            self.sessions[call_id]['wait_duration'] = 10
+            self.sessions[call_id]['wait_duration'] = 12
             self.sessions[call_id]['ai_interrupt'] = False
 
     def initialize_transcriber(self, call_id: str, Service : TranscribeService | DeepgramService):
@@ -414,8 +415,12 @@ class CallHandler:
             self.agents[self.sessions[call_id]['call_sid']]['end_call'] = True
             response = response.replace('End Call Message', '')
             # Schedule the call to end after 2 seconds
+            wait_time = self.sessions[call_id]['wait_duration']
+            if len(response) > 200:
+                wait_time = self.sessions[call_id]['wait_duration'] + self.sessions[call_id]['prev_wait_duration']
+            print("wait_time: ", wait_time)
             self.clear_timer()
-            self.timer = Timer(13, self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
+            self.timer = Timer(wait_time, self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
             self.timer.start()
             
         if 'Routing Message' in response or 'I am forwarding the call' in response:
@@ -486,14 +491,14 @@ class CallHandler:
         else:
             raise ValueError(f"Unsupported TTS provider: {settings.tts_provider}")
 
-        result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
-        session['wait_duration'] = result['duration'] + 3
-
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds() * 1000  # Calculate duration in milliseconds
         logging.info(f"Total TTS duration: {duration:.3f} ms")
 
         await self.twilio_service.enqueue_audio(call_id, audio_stream, 'response_buffer')
+        result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
+        session['prev_wait_duration'] = session['wait_duration']
+        session['wait_duration'] = result['duration'] + 3
         session['last_user_audio_time'] = time.time()
         print('audio streamed', session['last_user_audio_time'])
 
@@ -552,7 +557,8 @@ class CallHandler:
                 "ai_speaking": False,
                 "ai_interrupt": False,
                 "wait_counter": 0,
-                "wait_duration": 10,
+                "wait_duration": 12,
+                "prev_wait_duration": 0,
                 "stream_sid": stream_sid,
                 "background_sound": None,
                 "websocket" : None,
