@@ -27,7 +27,7 @@ class DeepgramService:
         self.complete_sentence = ''
         self.transmit_task = None
         self.loop = loop or asyncio.get_event_loop()
-        self.lock = threading.Lock()
+        # self.lock = threading.Lock()
         # connect to websocket
         self.transcribeOptions = LiveOptions(
             model="nova-3",
@@ -37,7 +37,7 @@ class DeepgramService:
             # vad_events=True,
             utterance_end_ms="1000",
             interim_results=True,
-            endpointing=1000,
+            endpointing=700,
             # Time in milliseconds of silence to wait for before finalizing speech
             )
 
@@ -95,11 +95,11 @@ class DeepgramService:
             else:
                 await asyncio.sleep(2.2)  # Wait for more speech
 
-            with self.lock:
-                if self.on_transcript and self.complete_sentence.strip():
-                    await self.on_transcript(self.complete_sentence.strip())
-                    self.complete_sentence = ''
-                self.transmit_task = None
+            # with self.lock:
+            if self.on_transcript and self.complete_sentence.strip():
+                await self.on_transcript(self.complete_sentence.strip())
+                self.complete_sentence = ''
+            self.transmit_task = None
         except asyncio.CancelledError:
             # Canceled because more speech came in
             pass
@@ -109,21 +109,21 @@ class DeepgramService:
         result = kwargs['result']
         is_final = result.is_final
         sentence = result.channel.alternatives[0].transcript
-        
         if sentence and is_final and sentence.strip():
             print("sentence: ", sentence)
             self.complete_sentence += ' ' + sentence.strip()
-            with self.lock:
+            # with self.lock:
 
-                    # Schedule new task: wait 2 seconds, then emit final transcript
-                    self.transmit_task = asyncio.run_coroutine_threadsafe(
-                        self.transmit_after_delay(),
-                        self.loop
-                    )
+            # Schedule new task: wait 2 seconds, then emit final transcript
+            self.cancel_transmit()
+            self.transmit_task = asyncio.run_coroutine_threadsafe(
+                self.transmit_after_delay(),
+                self.loop
+            )
             print('Final' , self.complete_sentence)
         
         
-        elif sentence and not is_final : 
+        elif sentence and not is_final: 
             # Cancel previous delayed task
             self.cancel_transmit()
             asyncio.run(self.on_start())

@@ -280,11 +280,12 @@ class CallHandler:
                         summary['Description'] = f"{previous_convo_summary}. Call Note on {datetime.now()}: {summary['Description']}"
                     if summary['LastName'] == '' :
                         summary['LastName'] = summary['FirstName']
-                        summary['FirstName'] = ''
                     if summary['Company'] == '':
                         summary['Company'] = 'N/A'
                     if summary['LastName'] != '':
                         summary = self.remove_empty_values(summary)
+                        if summary['LastName'] == summary['FirstName']:
+                            summary['FirstName'] = ''
                         body = {
                                 'Id' : lead_id,
                                 'lead' : summary
@@ -293,11 +294,12 @@ class CallHandler:
                 else:
                     if summary['LastName'] == '' :
                         summary['LastName'] = summary['FirstName']
-                        summary['FirstName'] = ''
                     if summary['Company'] == '':
                         summary['Company'] = 'N/A'
                     if summary['LastName'] != '':
                         summary = self.remove_empty_values(summary)
+                        if summary['LastName'] == summary['FirstName']:
+                            summary['FirstName'] = ''
                         await self.chatgpt_service.salesforce_service.store_leads(integrations['salesforce_connection_id'], summary)
             except Exception as e:
                 print("Lead Creat or Update failed" , e)
