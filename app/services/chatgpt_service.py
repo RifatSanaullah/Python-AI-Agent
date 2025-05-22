@@ -8,6 +8,7 @@ from app.services.zoho_service import ZohoService
 from app.services.hubspot_service import HubSpotService
 from app.services.salesforce_service import SalesforceService
 from app.services.calendly_service import CalendlyService
+from app.services.google_calendar_service import GoogleCalendarService
 from typing import Dict, Any, List
 from app.services.backend_service import BackendHandler
 
@@ -74,6 +75,7 @@ class ChatGPTService:
         self.hubspot_service = HubSpotService()
         self.salesforce_service = SalesforceService()
         self.calendly_service = CalendlyService()
+        self.google_calendar_service = GoogleCalendarService()
         self.backend_service = BackendHandler()
                 # Set the integration type
         # Initialize integration services and endpoints
@@ -161,6 +163,13 @@ class ChatGPTService:
                 "events",
             ]
             self._map_service_methods(integration_type, service)
+        
+        elif integration_type == "google-calendar":
+            service = GoogleCalendarService()
+            self.endpoints[integration_type] = [
+                "events",
+            ]
+            self._map_service_methods(integration_type, service)
     
         # Future integrations can be added here without changing the core logic
     
@@ -244,6 +253,10 @@ class ChatGPTService:
         if 'integration' in knowledge_base and knowledge_base['integration']['calendly_connection_id'] is not None:
             integration = 'Calendly'
             connection_id = knowledge_base['integration']['calendly_connection_id']
+            
+        if 'integration' in knowledge_base and knowledge_base['integration']['google_calendar_connection_id'] is not None:
+            integration = 'Google Calendar'
+            connection_id = knowledge_base['integration']['google_calendar_connection_id']
 
         if connection_id is not None:
             conversations[conversation_id].append(
@@ -284,7 +297,8 @@ class ChatGPTService:
                 "hubspot_connection_id": None,
                 "zoho_connection_id": None,
                 "salesforce_connection_id": None,
-                "calendly_connection_id": None
+                "calendly_connection_id": None,
+                "google_calendar_connection_id": None
             }
             # Check if this conversation has a CRM connection ID in the database
             try:

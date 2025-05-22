@@ -167,6 +167,7 @@ async def nango_webhook_callback(request: Request, call_handler: CallHandler = D
                 is_hubspot = "hubspot" in (integration_id or "").lower()
                 is_salesforce = "salesforce" in (integration_id or "").lower()
                 is_calendly = "calendly" in (integration_id or "").lower()
+                is_google_calendar = "google-calendar" in (integration_id or "").lower()
                 # Store the connection ID in the account
                 result = await call_handler.backend_service.store_nango_connection(
                     {
@@ -178,6 +179,7 @@ async def nango_webhook_callback(request: Request, call_handler: CallHandler = D
                         "is_hubspot": is_hubspot,
                         "is_salesforce": is_salesforce,
                         "is_calendly": is_calendly,
+                        "is_google_calendar": is_google_calendar,
                     }
                 )
                 

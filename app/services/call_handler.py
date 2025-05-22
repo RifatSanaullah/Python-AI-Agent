@@ -13,6 +13,7 @@ from app.services.zoho_service import ZohoService
 from app.services.hubspot_service import HubSpotService
 from app.services.salesforce_service import SalesforceService
 from app.services.calendly_service import CalendlyService
+from app.services.google_calendar_service import GoogleCalendarService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 import logging
 from datetime import datetime
@@ -52,6 +53,7 @@ class CallHandler:
         self.hubspot_service = HubSpotService()
         self.salesforce_service = SalesforceService()
         self.calendly_service = CalendlyService()
+        self.google_calendar_service = GoogleCalendarService()
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.sessions = {}
         self.agents = {}
@@ -605,7 +607,8 @@ class CallHandler:
                 "hubspot_connection_id": None,
                 "zoho_connection_id": None,
                 "salesforce_connection_id": None,
-                "calendly_connection_id": None
+                "calendly_connection_id": None,
+                "google_calendar_connection_id": None
         }
         self.agents[call_id]['lead_id'] = None
         if 'integrations' in api_response['data']:
@@ -785,6 +788,57 @@ class CallHandler:
                         
             except Exception as e:
                 print(f"Error checking Calendly events: {str(e)}")
+                import traceback
+                print(traceback.format_exc())
+                
+        if self.agents[call_sid]['integrations']['google_calendar_connection_id']:
+            # Check if there are any scheduled events for this user in Google Calendar
+            print(f"Google Calendar connection ID: {self.agents[call_sid]['integrations']['google_calendar_connection_id']}")
+
+            try:
+                # Get calendar events
+                events_result = await self.google_calendar_service.get_events(
+                    self.agents[call_sid]['integrations']['google_calendar_connection_id']
+                )
+                
+
+                print(f"Google Calendar Events result: {json.dumps(events_result, indent=2)}")
+                
+                # Extract events from response format
+                events_collection = []
+                if events_result and 'items' in events_result:
+                    events_collection = events_result['items']
+                
+                if events_collection and len(events_collection) > 0:
+                    # Print detailed information about each scheduled event
+                    print("\n=== GOOGLE CALENDAR SCHEDULED EVENTS ===")
+                    for i, event in enumerate(events_collection):
+                        print(f"\nEvent #{i+1}:")
+                        # Print key event details
+                        print(f"  Summary: {event.get('summary', 'N/A')}")
+                        print(f"  Status: {event.get('status', 'N/A')}")
+                        if 'start' in event:
+                            print(f"  Start time: {event['start'].get('dateTime', event['start'].get('date', 'N/A'))}")
+                        if 'end' in event:
+                            print(f"  End time: {event['end'].get('dateTime', event['end'].get('date', 'N/A'))}")
+                        if 'location' in event:
+                            print(f"  Location: {event.get('location', 'N/A')}")
+                        
+                    print("===============================\n")
+                    
+                    # We have scheduled events, update description with this info
+                    events_count = len(events_collection)
+                    calendar_info = f"Has {events_count} upcoming Google Calendar event"
+                    calendar_info += "s" if events_count > 1 else ""
+                    
+                    if description:
+                        description += f" {calendar_info}."
+                    else:
+                        description = calendar_info + "."
+                else:
+                    print("No upcoming Google Calendar events found.")
+            except Exception as e:
+                print(f"Error checking Google Calendar events: {str(e)}")
                 import traceback
                 print(traceback.format_exc())
 
