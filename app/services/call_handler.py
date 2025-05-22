@@ -12,6 +12,7 @@ from app.services.elevenlabs_service import ElevenLabsService
 from app.services.zoho_service import ZohoService
 from app.services.hubspot_service import HubSpotService
 from app.services.salesforce_service import SalesforceService
+from app.services.calendly_service import CalendlyService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 import logging
 from datetime import datetime
@@ -50,6 +51,7 @@ class CallHandler:
         self.zoho_service = ZohoService()
         self.hubspot_service = HubSpotService()
         self.salesforce_service = SalesforceService()
+        self.calendly_service = CalendlyService()
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.sessions = {}
         self.agents = {}
@@ -602,7 +604,8 @@ class CallHandler:
         self.agents[call_id]['integrations'] = {
                 "hubspot_connection_id": None,
                 "zoho_connection_id": None,
-                "salesforce_connection_id": None
+                "salesforce_connection_id": None,
+                "calendly_connection_id": None
         }
         self.agents[call_id]['lead_id'] = None
         if 'integrations' in api_response['data']:
@@ -705,6 +708,85 @@ class CallHandler:
                 phoneNumber = details['phone']
                 crmUserId = result['results'][0]['id']
                 greetings = self.modify_greeting(fullname, greetings)
+
+        if self.agents[call_sid]['integrations']['calendly_connection_id']:
+            # Check if there are any scheduled events for this user in Calendly
+            print(f"Calendly connection ID: {self.agents[call_sid]['integrations']['calendly_connection_id']}")
+
+            try:
+                # First get the user information
+                user_result = await self.calendly_service.get_user(
+                    self.agents[call_sid]['integrations']['calendly_connection_id']
+                )
+                
+                print(f"Calendly User result: {json.dumps(user_result, indent=2)}")
+                
+                # Extract user info from response format
+                user_info = None
+                if user_result and 'records' in user_result and len(user_result['records']) > 0:
+                    user_info = user_result['records'][0]
+                    # Add user name from Calendly if available
+                    if not fullname and user_info:
+                        if 'firstName' in user_info and 'lastName' in user_info:
+                            fullname = f"{user_info['firstName']} {user_info['lastName']}".strip()
+                        elif 'firstName' in user_info:
+                            fullname = user_info['firstName']
+                        elif 'lastName' in user_info:
+                            fullname = user_info['lastName']
+                    
+                    if not email and 'email' in user_info:
+                        email = user_info['email']
+                    
+                    # Now check for scheduled events with debug
+                    try:
+                        events_result = await self.calendly_service.get_events(
+                            self.agents[call_sid]['integrations']['calendly_connection_id']
+                        )
+                        
+                        print(f"Calendly Events result: {json.dumps(events_result, indent=2)}")
+                        
+                        # Extract events from response format
+                        events_collection = []
+                        if events_result and 'records' in events_result:
+                            events_collection = events_result['records']
+                        elif events_result and 'collection' in events_result:
+                            events_collection = events_result['collection']
+                        
+                        if events_collection and len(events_collection) > 0:
+                            # Print detailed information about each scheduled event
+                            print("\n=== CALENDLY SCHEDULED EVENTS ===")
+                            for i, event in enumerate(events_collection):
+                                print(f"\nEvent #{i+1}:")
+                                # Print key event details
+                                print(f"  Name: {event.get('name', 'N/A')}")
+                                print(f"  Status: {event.get('status', 'N/A')}")
+                                print(f"  Start time: {event.get('start_time', 'N/A')}")
+                                print(f"  End time: {event.get('end_time', 'N/A')}")
+                                if 'location' in event:
+                                    print(f"  Location: {event['location'].get('type', 'N/A')}")
+                                
+                            print("===============================\n")
+                            
+                            # We have scheduled events, update description with this info
+                            events_count = len(events_collection)
+                            calendly_info = f"Has {events_count} upcoming Calendly appointment"
+                            calendly_info += "s" if events_count > 1 else ""
+                            
+                            if description:
+                                description += f" {calendly_info}."
+                            else:
+                                description = calendly_info + "."
+                        else:
+                            print("No upcoming Calendly events found.")
+                    except Exception as events_error:
+                        print(f"Error fetching Calendly events: {str(events_error)}")
+                        import traceback
+                        print(traceback.format_exc())
+                        
+            except Exception as e:
+                print(f"Error checking Calendly events: {str(e)}")
+                import traceback
+                print(traceback.format_exc())
 
         if crmUserId is not None:
             self.agents[call_sid]['lead_id'] = crmUserId
