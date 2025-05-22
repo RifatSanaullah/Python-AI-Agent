@@ -3,3 +3,6 @@ boomercaller
 *.db
 vosk-model*
 *_pycache_*
+recordings/
+venv/
+venv

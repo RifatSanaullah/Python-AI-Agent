@@ -16,3 +16,10 @@ botocore
 deepgram-sdk
 docx
 PyPDF2
+numpy
+python-docx
+pydub
+pyht
+soundfile
+python-multipart
+elevenlabs

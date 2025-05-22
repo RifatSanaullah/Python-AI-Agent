@@ -3,10 +3,9 @@ import os, asyncio
 from twilio.rest import Client
 import base64  # Add this import
 from app.config import settings
-from twilio.twiml.voice_response import VoiceResponse, Gather, Connect
+from twilio.twiml.voice_response import VoiceResponse, Gather, Connect , Record
 import audioop
 import wave
-
 # # Path to your background sound file (WAV format)
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 BACKGROUND_SOUND_FILE =os.path.abspath(os.path.join(ROOT_DIR, '../' , 'keyboard.wav'))
@@ -18,12 +17,6 @@ class TwilioService:
         self.client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
         self.audio_buffer = asyncio.Queue()
         self.response_buffer = asyncio.Queue()
-        self.active_calls = {}
-        self.fields_needed = {
-            "name": None,
-            "email": None,
-            "phone_number": None,
-        }
         self.background_sound = None
         # A dictionary to dynamically store queues by their unique IDs
         self.queue_map = {}
@@ -49,6 +42,30 @@ class TwilioService:
         queue[type].task_done()
         return value
     
+    async def dequeue_all_except_next(self, queue_id, type):
+        """Remove all queued items except the next one in the queue."""
+        queue = self.get_or_create_queue(queue_id)[type]
+
+        # Get the size of the queue
+        queue_size = queue.qsize()
+
+        # If there are more than one items, remove all but the next one
+        if queue_size > 1:
+            temp_queue = asyncio.Queue()
+
+            # Keep the last item
+            for _ in range(queue_size - 1):
+                await queue.get()
+                queue.task_done()
+            
+            # Transfer the last item to a temporary queue
+            last_item = await queue.get()
+            queue.task_done()
+            await temp_queue.put(last_item)
+
+            # Replace the queue with the temporary queue
+            self.queue_map[queue_id][type] = temp_queue
+    
     def is_empty(self , queue_id , type):
         queue = self.get_or_create_queue(queue_id)
         return queue[type].empty()
@@ -64,21 +81,19 @@ class TwilioService:
     def initialize_call(self, call_sid):
         """Initialize the call state with required fields."""
         print("Initializing call...")
-        if (call_sid not in self.active_calls):
-            self.active_calls[call_sid] = {
-                "fields_needed": self.fields_needed.copy(),
-                "is_complete": False
-            }
-            response = VoiceResponse()
-            connect = Connect()
-            connect.stream(
-                url=f"wss://{settings.domain}/audio-stream",
-                status_callback=f"{settings.base_url}/stream_callback",
-                status_callback_method="POST"
-            )
-            print("Call initialized.")
-            response.append(connect)
-            return response
+        response = VoiceResponse()
+        # response.record(recording_status_callback=f"{settings.base_url}/recording_status_callback")
+        connect = Connect()
+        connect.stream(
+            url=f"wss://{settings.domain}/audio-stream/{call_sid}",
+            status_callback=f"{settings.base_url}/stream_callback",
+            status_callback_method="POST",
+        )
+        
+        print("Call initialized.")
+        response.append(connect)
+
+        return response
         
     # Helper function to read the WAV file and loop it
     async def get_background_sound(self):
@@ -117,9 +132,10 @@ class TwilioService:
                 "payload": encoded_audio_data
             }
         })
+
     def hangup_call(self, call_sid):
         response = VoiceResponse()
-        response.say("Thank you. We have gathered all required information. Goodbye!", voice="alice", language="en-US")
+        # response.say("Thank you. We have gathered all required information. Goodbye!", voice="alice", language="en-US")
         response.hangup()
         self.client.calls(call_sid).update(status="completed")
 
@@ -130,3 +146,24 @@ class TwilioService:
             url=f"{settings.base_url}/incoming_call"  # Replace with your actual URL
         )
         return call.sid
+    
+    # Function to redirect an ongoing call
+    def redirect_call(self, call_sid, new_number, call_routed):
+        try:
+            # Update the ongoing call to forward it
+            # call = self.client.calls(call_sid).update(
+            #     method='POST',
+            #     url=f"{settings.ai_backend_url}/call/forward-call?newNumber={new_number}&callerId={callerId}"
+            # )
+            call = self.client.calls(call_sid).update(
+                twiml=f"""
+                <Response>
+                    <Dial callerId="{new_number}">{new_number}</Dial>
+                </Response>
+                """
+            )
+            call_routed(call_sid)
+            print(f"Call redirected to {new_number}, Status: {call.status}")
+        except Exception as e:
+            print(f"Error redirecting call: {e}")
+
