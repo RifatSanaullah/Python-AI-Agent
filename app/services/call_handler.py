@@ -227,7 +227,7 @@ class CallHandler:
                     isBoom = self.agents[call_id]['isBoom']
                     if isBoom is not None or isBoom == True or isBoom == 'true':
                         await self.backend_service.update_conversation_bh({"conversations": data['conversations']})
-                    if 'summary' in response:
+                    elif 'summary' in response:
                         summary = response['summary']
                         await self.update_crm_data(call_id, data['lead_id'], data['integrations'], summary, response['appointment'], data['event_id'], data['previous_convo_summary'])
                 except Exception as e:
@@ -416,7 +416,7 @@ class CallHandler:
             response = response.replace('End Call Message', '')
             # Schedule the call to end after 2 seconds
             wait_time = self.sessions[call_id]['wait_duration']
-            if len(response) > 200:
+            if len(response) >= 200:
                 wait_time = self.sessions[call_id]['wait_duration'] + self.sessions[call_id]['prev_wait_duration']
             print("wait_time: ", wait_time)
             self.clear_timer()
@@ -498,7 +498,7 @@ class CallHandler:
         await self.twilio_service.enqueue_audio(call_id, audio_stream, 'response_buffer')
         result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
         session['prev_wait_duration'] = session['wait_duration']
-        session['wait_duration'] = result['duration'] + 3
+        session['wait_duration'] = result['duration'] + 4
         session['last_user_audio_time'] = time.time()
         print('audio streamed', session['last_user_audio_time'])
 
@@ -677,7 +677,12 @@ class CallHandler:
         phoneNumber = None
         description = None
         crmUserId = None
+        isBoom = self.agents[call_sid]['isBoom']
 
+        if isBoom is not None or isBoom == True or isBoom == 'true':
+
+            return {"greetings" : greetings , "email": email ,"phone": phoneNumber ,"description" : description, "fullname" : fullname }
+        
         if self.agents[call_sid]['integrations']['salesforce_connection_id']:
 
             formatted_number = self.formatToSalesforceNumber(self.agents[call_sid]['from'])
@@ -703,6 +708,7 @@ class CallHandler:
                 fullname = details['firstname'] + ' ' + details['lastname']
                 email = details['email']
                 phoneNumber = details['phone']
+                description = details['notes']
                 crmUserId = result['results'][0]['id']
                 greetings = self.modify_greeting(fullname, greetings)
 
