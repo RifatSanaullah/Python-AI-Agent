@@ -9,10 +9,10 @@ from deepgram import (
     DeepgramClientOptions
 )
 from app.config import settings
-
+import threading
 import re
 class DeepgramService:
-    def __init__(self , on_transcript = None ,on_start=None):
+    def __init__(self , on_transcript = None ,on_start=None ,loop =None):
         self.config = DeepgramClientOptions(
             options={"keepalive": "true"} # Comment this out to see the effect of not using keepalive
         )
@@ -25,6 +25,9 @@ class DeepgramService:
         self.on_start = on_start
         self.speaker = self.deepgram.speak.rest.v("1")
         self.complete_sentence = ''
+        self.transmit_task = None
+        self.loop = loop or asyncio.get_event_loop()
+        # self.lock = threading.Lock()
         # connect to websocket
         self.transcribeOptions = LiveOptions(
             model="nova-3",
@@ -34,7 +37,7 @@ class DeepgramService:
             # vad_events=True,
             utterance_end_ms="1000",
             interim_results=True,
-            endpointing=1500,
+            endpointing=700,
             # Time in milliseconds of silence to wait for before finalizing speech
             )
 
@@ -85,26 +88,49 @@ class DeepgramService:
         self.dg_connection.on(LiveTranscriptionEvents.Close, self.on_close)
         self.dg_connection.on(LiveTranscriptionEvents.Error, self.on_error)
 
+    async def transmit_after_delay(self):
+        try:
+            if self.is_sentence_complete(self.complete_sentence):
+                await asyncio.sleep(1.2)  # Wait for more speech
+            else:
+                await asyncio.sleep(1.5)  # Wait for more speech
+
+            # with self.lock:
+            if self.on_transcript and self.complete_sentence.strip():
+                await self.on_transcript(self.complete_sentence.strip())
+                self.complete_sentence = ''
+            self.transmit_task = None
+        except asyncio.CancelledError:
+            # Canceled because more speech came in
+            pass
 
     def on_data(self,res,**kwargs):
         "Called when a new transcript has been received."
         result = kwargs['result']
         is_final = result.is_final
         sentence = result.channel.alternatives[0].transcript
-        if sentence and is_final and sentence !='':
-            self.complete_sentence += ' ' + sentence
-            if self.is_sentence_complete(sentence):
-                if self.on_transcript:
-                    asyncio.run(self.on_transcript(self.complete_sentence))
-                    self.complete_sentence = ''
+        if sentence and is_final and sentence.strip():
+            print("sentence: ", sentence)
+            self.complete_sentence += ' ' + sentence.strip()
+            # with self.lock:
 
+            # Schedule new task: wait 2 seconds, then emit final transcript
+            self.cancel_transmit()
+            self.transmit_task = asyncio.run_coroutine_threadsafe(
+                self.transmit_after_delay(),
+                self.loop
+            )
             print('Final' , self.complete_sentence)
         
         
-        elif sentence and not is_final : 
+        elif sentence and not is_final: 
+            # Cancel previous delayed task
+            self.cancel_transmit()
             asyncio.run(self.on_start())
 
-
+    def cancel_transmit(self):
+        if self.transmit_task:
+            self.transmit_task.cancel()
 
     def on_started(self, message, **kwargs):
         # asyncio.run(self.on_update(True))

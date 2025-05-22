@@ -3,12 +3,15 @@ from sqlalchemy.orm import Session
 from app.services.playht_service import PlayHT
 from app.services.twilio_service import TwilioService
 from app.services.chatgpt_service import ChatGPTService
-# from app.services.chatgpt_service_v2 import ChatGPTService
 from app.services.s3_service import S3Service
 from app.services.backend_service import BackendHandler
 from app.services.polly_service import PollyService
 from app.services.deepgram_service import DeepgramService
 from app.services.assembly_ai_transcribe_service import TranscribeService
+from app.services.elevenlabs_service import ElevenLabsService
+from app.services.zoho_service import ZohoService
+from app.services.hubspot_service import HubSpotService
+from app.services.salesforce_service import SalesforceService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 import logging
 from datetime import datetime
@@ -27,14 +30,15 @@ import random
 from io import BytesIO
 import numpy as np
 import soundfile as sf
-import time
+import time , re
+from app.utils.responseformat import hubspot_patch_format
+import json
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     # format='%(asctime)s.%(msecs)03d - %(levelname)s - %(message)s',
     # datefmt='%Y-%m-%d %H:%M:%S'
 )
-
 class CallHandler:
     def __init__(self):
         self.twilio_service = TwilioService()
@@ -42,11 +46,16 @@ class CallHandler:
         self.chatgpt_service = ChatGPTService()
         self.s3_service = S3Service()
         self.playht_service = PlayHT()
+        self.elevenlabs_service = ElevenLabsService()
+        self.zoho_service = ZohoService()
+        self.hubspot_service = HubSpotService()
+        self.salesforce_service = SalesforceService()
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.sessions = {}
         self.agents = {}
         self.completed_sessions = {}
         self.timer = None
+        self.loop= asyncio.get_running_loop()
 
     def get_business_agent(self, call_id: str):
         """Retrieve specific AI agent/business logic based on the dialed number."""
@@ -84,7 +93,8 @@ class CallHandler:
             "transcribe_service": None,
             "ai_interrupt": False,
             "ai_speaking": False,
-            "wait_duration": 10,
+            "wait_duration": 12,
+            "prev_wait_duration": 0,
             "stream_sid": None,
             "background_sound": None,
             "end_call": False,
@@ -107,30 +117,30 @@ class CallHandler:
                     self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
                     session = self.sessions[data['streamSid']]
                     session['deepgram_transcribe_service'].establish_dg_connection()
-                    session['transcribe_service'].connect()
+                    # session['transcribe_service'].connect()
 
                 if data['streamSid'] not in self.sessions or 'call_sid' not in self.sessions[data['streamSid']]:
                     continue
 
-                if (data['streamSid'] 
-                and self.sessions[data['streamSid']]['last_user_audio_time'] 
-                and time.time() - self.sessions[data['streamSid']]['last_user_audio_time'] > self.sessions[data['streamSid']]['wait_duration']):
+                # if (data['streamSid'] 
+                # and self.sessions[data['streamSid']]['last_user_audio_time'] 
+                # and time.time() - self.sessions[data['streamSid']]['last_user_audio_time'] > self.sessions[data['streamSid']]['wait_duration']):
 
-                    if data['streamSid'] and self.sessions[data['streamSid']]['wait_counter'] >= 2:
-                        self.sessions[data['streamSid']]['wait_counter'] = 0
-                        message = self.get_interrupt_message('end_call')
-                        self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
-                        await self.synthesize_response(message, data['streamSid'])
-                        # Schedule the call to end after 2 seconds
-                        self.clear_timer()
-                        self.timer = Timer(5, self.twilio_service.hangup_call, args=[self.sessions[data['streamSid']]['call_sid']])
-                        self.timer.start()
-                        return
+                #     if data['streamSid'] and self.sessions[data['streamSid']]['wait_counter'] >= 2:
+                #         self.sessions[data['streamSid']]['wait_counter'] = 0
+                #         message = self.get_interrupt_message('end_call')
+                #         self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
+                #         await self.synthesize_response(message, data['streamSid'])
+                #         # Schedule the call to end after 2 seconds
+                #         self.clear_timer()
+                #         self.timer = Timer(5, self.twilio_service.hangup_call, args=[self.sessions[data['streamSid']]['call_sid']])
+                #         self.timer.start()
+                #         return
                     
-                    message = self.get_interrupt_message()
-                    self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
-                    await self.synthesize_response(message, data['streamSid'])
-                    self.sessions[data['streamSid']]['wait_counter'] += 1
+                #     message = self.get_interrupt_message()
+                #     self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
+                #     await self.synthesize_response(message, data['streamSid'])
+                #     self.sessions[data['streamSid']]['wait_counter'] += 1
 
                 if data["event"] == "media":
                     media = data["media"]
@@ -138,8 +148,11 @@ class CallHandler:
                     chunk_bytes = base64.b64decode(chunk)
                                             # Step 2: Check if the decoded data is empty
                                             # Convert byte data to an AudioSegment instance
+
                     result = await self.is_silent_or_empty_mulaw_numpy(chunk_bytes)
                     is_audio_silent = result['is_silent']
+                    # is_audio_silent = await self.is_mulaw_stream_silent_base64(chunk_bytes)
+                    # is_audio_silent = result['is_silent']
 
                     if not is_audio_silent:
                         # await self.on_user_speech(data['streamSid'])
@@ -169,8 +182,8 @@ class CallHandler:
                 if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'audio_buffer'):
                     audio_data = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'audio_buffer')
                     # await self.transcribe_service.transcribe(audio_data)
-                    # await session['deepgram_transcribe_service'].transcribe(audio_data)
-                    await session['transcribe_service'].transcribe(audio_data)
+                    await session['deepgram_transcribe_service'].transcribe(audio_data)
+                    # await session['transcribe_service'].transcribe(audio_data)
 
         except ConnectionClosedError as e:
             print(f"Connection closed with error: {e.code} - {e.reason}")
@@ -180,41 +193,169 @@ class CallHandler:
             print("Unexpected error:", e)
         finally:
             print("WebSocket connection closed.")
+            session['deepgram_transcribe_service'].cancel_transmit()
             if session['stream_sid'] in self.chatgpt_service.conversations:
                 conversations = self.chatgpt_service.conversations[session['stream_sid']]
+                # conversations = convo
                 outputFile= f"recordings/{call_id}.wav"
                 await self.convert_mulaw_to_wav(f"recordings/{call_id}.mulaw", outputFile)
                 # os.remove(output_file)
                 recordingUrl = await self.s3_service.uploadToS3(outputFile)
                 agent_id = self.agents[call_id]['id']
+                lead_id = None
+                if 'lead_id' in self.agents[call_id] and self.agents[call_id]['lead_id'] is not None:
+                    lead_id = self.agents[call_id]['lead_id']
+                event_id = None
+                if 'event_id' in self.agents[call_id] and self.agents[call_id]['event_id'] is not None:
+                    event_id = self.agents[call_id]['event_id']
+                previous_convo_summary = None
+                if call_id in self.agents and 'previous_convo_summary' in self.agents[call_id]:
+                    previous_convo_summary = self.agents[call_id]['previous_convo_summary']
                 data = {
                     "call_sid" : call_id,
                     "conversations": conversations,
                     "recording_url" : recordingUrl,
-                    "agent_id" : agent_id
+                    "agent_id" : agent_id,
+                    "lead_id" : lead_id,
+                    "integrations" : self.agents[call_id]['integrations'],
+                    "event_id" : event_id,
+                    "previous_convo_summary" : previous_convo_summary,
                 }
+
+                try:
+                    response = await self.backend_service.update_conversation_info(data)
+                    isBoom = self.agents[call_id]['isBoom']
+                    if isBoom is not None or isBoom == True or isBoom == 'true':
+                        await self.backend_service.update_conversation_bh({"conversations": data['conversations']})
+                    elif 'summary' in response:
+                        summary = response['summary']
+                        await self.update_crm_data(call_id, data['lead_id'], data['integrations'], summary, response['appointment'], data['event_id'], data['previous_convo_summary'])
+                except Exception as e:
+                    print(f"Error updating conversation info: {str(e)}")
+                    # Log the full exception traceback
+                    import traceback
+                    print(traceback.format_exc())
+                    self.chatgpt_service.close_conversation(session['stream_sid'])
+                    self.twilio_service.remove_stream_from_queue(session['stream_sid'])
+                    del self.sessions[session['stream_sid']]
+
                 self.chatgpt_service.close_conversation(session['stream_sid'])
                 self.twilio_service.remove_stream_from_queue(session['stream_sid'])
                 del self.sessions[session['stream_sid']]
-
-                try:
-                    await self.backend_service.update_conversation_info(data)
-                except Exception as e:
-                    print(e)
-                    
                 self.agents[call_id]['websocket_closed'] = True
-                self.flush_agent(call_id)
+                # self.flush_agent(call_id)
 
             session['deepgram_transcribe_service'].disconnect()
-            session['transcribe_service'].close()  # Close the transcriber service
+            # session['transcribe_service'].close()  # Close the transcriber service
             try:
                 await websocket.close()
             except Exception as e:
                 print("--Websocket connection Closed--")
+    
+    async def update_crm_data(self,call_id, lead_id: str, integrations, summary, appointment, prev_event_id, previous_convo_summary):
+        event = appointment['eventData']
+
+        if integrations and integrations["hubspot_connection_id"] is not None and integrations["hubspot_connection_id"] != '':
+            summary["email"] = summary['email'].replace(" ", "")
+            summary["phone"] = self.format_us_number_simple(summary["mobile_phone_number"])
+            if lead_id:
+            # Update CRM Contact
+            # summary = await self.chatgpt_service.get_summary(hubspot_patch_format, conversations)
+                summary["id"] = lead_id
+                await self.chatgpt_service.hubspot_service.update_leads(integrations['hubspot_connection_id'], summary)
+            else:
+                await self.chatgpt_service.hubspot_service.store_leads(integrations['hubspot_connection_id'], summary)
+                
+
+        if integrations and integrations["salesforce_connection_id"] is not None and integrations["salesforce_connection_id"] != '':
+            summary["Email"] = summary['Email'].replace(" ", "").replace(",",'')
+            summary["Phone"] = self.formatToSalesforceNumber(summary["Phone"])
+            if summary['Phone'] != self.agents[call_id]['from']:
+                summary['MobilePhone'] = self.formatToSalesforceNumber(self.agents[call_id]['from'])
+            # Update CRM Contact
+            try:
+                if lead_id:
+            # summary = await self.chatgpt_service.get_summary(hubspot_patch_format, conversations)
+                    # summary["Id"] = lead_id
+                    if previous_convo_summary:
+                        summary['Description'] = f"{previous_convo_summary}. Call Note on {datetime.now()}: {summary['Description']}"
+                    if summary['LastName'] == '' :
+                        summary['LastName'] = summary['FirstName']
+                    if summary['Company'] == '':
+                        summary['Company'] = 'N/A'
+                    if summary['LastName'] != '':
+                        summary = self.remove_empty_values(summary)
+                        if summary['LastName'] == summary['FirstName']:
+                            summary['FirstName'] = ''
+                        body = {
+                                'Id' : lead_id,
+                                'lead' : summary
+                            }
+                        await self.chatgpt_service.salesforce_service.update_leads(integrations['salesforce_connection_id'], body)
+                else:
+                    if summary['LastName'] == '' :
+                        summary['LastName'] = summary['FirstName']
+                    if summary['Company'] == '':
+                        summary['Company'] = 'N/A'
+                    if summary['LastName'] != '':
+                        summary = self.remove_empty_values(summary)
+                        if summary['LastName'] == summary['FirstName']:
+                            summary['FirstName'] = ''
+                        await self.chatgpt_service.salesforce_service.store_leads(integrations['salesforce_connection_id'], summary)
+            except Exception as e:
+                print("Lead Creat or Update failed" , e)
+
+            try:
+                if event is not None and event != '':
+                    new_appointment = appointment['newAppointment']
+                    update_appointment = appointment['updateAppointment']
+                    delete_appointment = appointment['deleteAppointment']
+                    if prev_event_id is not None and prev_event_id != '':
+                        if update_appointment:
+                            body = {
+                                'Id' : prev_event_id,
+                                'event' : event
+                            }
+                            response = await self.chatgpt_service.salesforce_service.update_event(integrations['salesforce_connection_id'], body)
+                        elif delete_appointment:
+                            response = await self.chatgpt_service.salesforce_service.delete_event(integrations['salesforce_connection_id'], {"Id" : prev_event_id})
+                    else:
+                        response = await self.chatgpt_service.salesforce_service.create_event(integrations['salesforce_connection_id'], event)
+                        if response and 'id' in response and 'id' in appointment:
+                            appointment_id = appointment['id']
+                            await self.backend_service.update_appointment({"appointment_id" : appointment_id, "event_id" : response['id']})
+ 
+
+            except Exception as e:
+                print("Event Creation or update appointment Failed" , e)
+
+
+    def remove_empty_values(self, data: dict) -> dict:
+        """
+        Removes keys with values that are None, empty strings, or "undefined" (as a string).
+        """
+        return {k: v for k, v in data.items() if v not in (None, "", "undefined")}
+    
+    def is_mulaw_stream_silent_base64(mulaw_bytes: bytes, silence_threshold: int = 500) -> bool:
+        """
+        Takes a base64-encoded µ-law audio chunk and returns True if it's silent.
+        """
+        # Convert µ-law to linear PCM (16-bit)
+        pcm_data = audioop.ulaw2lin(mulaw_bytes, 2)
+
+        # Convert to numpy array for analysis
+        pcm_array = np.frombuffer(pcm_data, dtype=np.int16)
+
+        # Measure maximum amplitude
+        max_amplitude = np.max(np.abs(pcm_array)) if pcm_array.size > 0 else 0
+
+        print(f"Max amplitude: {max_amplitude}")
+
+        return max_amplitude < silence_threshold
                     
     def disable_ai_speaking(self, call_id):
             self.sessions[call_id]['ai_speaking'] = False
-            self.sessions[call_id]['wait_duration'] = 10
+            self.sessions[call_id]['wait_duration'] = 12
             self.sessions[call_id]['ai_interrupt'] = False
 
     def initialize_transcriber(self, call_id: str, Service : TranscribeService | DeepgramService):
@@ -222,6 +363,7 @@ class CallHandler:
         return Service(
             on_transcript=self.create_on_transcript_handler(call_id),
             on_start=self.create_on_user_speech_handler(call_id),
+            loop= self.loop,
         )
 
     def create_on_transcript_handler(self, call_id: str):
@@ -273,15 +415,19 @@ class CallHandler:
             self.agents[self.sessions[call_id]['call_sid']]['end_call'] = True
             response = response.replace('End Call Message', '')
             # Schedule the call to end after 2 seconds
+            wait_time = self.sessions[call_id]['wait_duration']
+            if len(response) >= 200:
+                wait_time = self.sessions[call_id]['wait_duration'] + self.sessions[call_id]['prev_wait_duration']
+            print("wait_time: ", wait_time)
             self.clear_timer()
-            self.timer = Timer(11, self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
+            self.timer = Timer(wait_time, self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
             self.timer.start()
             
         if 'Routing Message' in response or 'I am forwarding the call' in response:
             response = response.replace('Routing Message', '')
             # Schedule the call to end after 2 seconds
             self.clear_timer()
-            self.timer = Timer(11, self.twilio_service.redirect_call,
+            self.timer = Timer(13, self.twilio_service.redirect_call,
                           args=[
                             self.sessions[call_id]['call_sid'],
                             self.agents[self.sessions[call_id]['call_sid']]['routingInfo']['routingNumber'],
@@ -307,6 +453,7 @@ class CallHandler:
             "aiInstructions" : self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'],
             "agentName" : self.agents[self.sessions[call_id]['call_sid']]['name'],
             "gender" : self.agents[self.sessions[call_id]['call_sid']]['voice']['gender'],
+            "integrations" : self.agents[self.sessions[call_id]['call_sid']]['integrations'],
         }
         self.agents[self.sessions[call_id]['call_sid']]['knowledge'] = None
         self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'] = None
@@ -330,19 +477,28 @@ class CallHandler:
         session = self.sessions.get(call_id)
         if not session or not text or text == '':
             return
-        start_time = datetime.now()
-        # audio_stream = await self.polly_service.stream_text_to_speech(chunk)
-        model = self.agents[self.sessions[call_id]['call_sid']]['voice']['model']
-        audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text, model)
-        # audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
 
-        result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
-        session['wait_duration'] = result['duration'] + 3
+        start_time = datetime.now()
+
+        # Select TTS provider based on environment variable
+        tts_provider = settings.tts_provider.lower()
+        if tts_provider == "deepgram":
+            audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text)
+        elif tts_provider == "playht":
+            audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
+        elif tts_provider == "elevenlabs":
+            audio_stream = await self.elevenlabs_service.stream_text_to_speech(text)
+        else:
+            raise ValueError(f"Unsupported TTS provider: {settings.tts_provider}")
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds() * 1000  # Calculate duration in milliseconds
-        logging.info(f"Total Deepgram duration: {duration:.3f} ms")
-        await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
+        logging.info(f"Total TTS duration: {duration:.3f} ms")
+
+        await self.twilio_service.enqueue_audio(call_id, audio_stream, 'response_buffer')
+        result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
+        session['prev_wait_duration'] = session['wait_duration']
+        session['wait_duration'] = result['duration'] + 4
         session['last_user_audio_time'] = time.time()
         print('audio streamed', session['last_user_audio_time'])
 
@@ -401,23 +557,58 @@ class CallHandler:
                 "ai_speaking": False,
                 "ai_interrupt": False,
                 "wait_counter": 0,
-                "wait_duration": 10,
+                "wait_duration": 12,
+                "prev_wait_duration": 0,
                 "stream_sid": stream_sid,
                 "background_sound": None,
                 "websocket" : None,
                 "call_sid" : call_sid,
                 "last_user_audio_time" : None
             }
+
+    def formatToSalesforceNumber(self, phone):
+        digits = re.sub(r'\D', '', phone)
+        if len(digits) == 10:
+            return f'1 ({digits[0:3]}) {digits[3:6]}-{digits[6:]}'
+        elif len(digits) == 11 and digits.startswith('1'):
+            return f'1 ({digits[1:4]}) {digits[4:7]}-{digits[7:]}'
+        else:
+            return phone 
+        
+    def format_us_number_simple(self, number_str):
+        digits = ''.join(filter(str.isdigit, number_str))
+        if len(digits) == 10:
+            return '+1' + digits
+        elif len(digits) == 11 and digits.startswith('1'):
+            return '+' + digits
+        else:
+            raise ValueError("Invalid US number format")
         
     async def handle_call(self, call_id: str, data):
         print("Handling call...")
         api_response = await self.backend_service.create_call_info(data)
         self.agents[call_id] = api_response['data']['agent']
-        self.agents[call_id]['receipent'] = data['from']
+        self.agents[call_id]['isBoom'] = data['isBoom']
         self.agents[call_id]['complete_call'] = False
         self.agents[call_id]['websocket_closed'] = False
         self.agents[call_id]['end_call'] = False
         self.agents[call_id]['route_call'] = False
+        self.agents[call_id]['from'] = data['from']
+        self.agents[call_id]['previous_convo_summary'] = None
+
+        if 'appointment' in api_response['data'] and 'eventId' in api_response['data']['appointment']:
+            self.agents[call_id]['event_id'] = api_response['data']['appointment']['eventId']
+
+        self.agents[call_id]['integrations'] = {
+                "hubspot_connection_id": None,
+                "zoho_connection_id": None,
+                "salesforce_connection_id": None
+        }
+        self.agents[call_id]['lead_id'] = None
+        if 'integrations' in api_response['data']:
+            self.agents[call_id]['integrations'] = api_response['data']['integrations']
+
+            
         response = self.twilio_service.initialize_call(call_id)
         # self.transcribe_service.connect()  # Connect the transcriber service
         # await self.initialize_session_info(call_id)
@@ -435,11 +626,11 @@ class CallHandler:
         print(f"Stream SID: {stream_sid}, Call SID: {call_sid}")
         self.initialize_session_info(stream_sid, call_sid)
         # self.sessions[call_sid]['stream_sid'] = stream_sid
-        data= {
+        updaedata= {
             "stream_sid" : stream_sid,
             "call_sid" : call_sid
         }
-        await self.backend_service.update_call_info(data)
+        await self.backend_service.update_call_info(updaedata)
         if (self.agents[call_sid]['isAvailable'] == False):
             await self.synthesize_response('Currenty we are not available, Please contact us in our available time', stream_sid)
             # Schedule the call to end after 2 seconds
@@ -447,14 +638,85 @@ class CallHandler:
             self.timer = Timer(5, self.twilio_service.hangup_call, args=[call_sid])
             self.timer.start()
             return
-
         greetings = self.agents[call_sid]['greetings']
+
+        result = await self.gather_contact_info(call_sid, greetings)
+        fullname = result['fullname']
+        greetings = result['greetings']
+        email = result['email']
+        phone = result['phone']
+        description = result['description']
         await self.synthesize_response(greetings , stream_sid)
         await self.chatgpt_service.process_initial_message(stream_sid, self.get_agent_knowledge)
         self.chatgpt_service.add_message(stream_sid, "assistant", greetings)
         self.chatgpt_service.add_system_message(stream_sid, "assistant", greetings)
+
+        if fullname is not None and fullname != "":
+            self.chatgpt_service.add_message(stream_sid, "user", f"My Name is: {fullname}")
+            self.chatgpt_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Name of the user you will use in this conversation: {fullname}")
+        if email is not None and email != "":
+            self.chatgpt_service.add_message(stream_sid, "user", f"My Email Address is: {email}")
+            self.chatgpt_service.add_system_message(stream_sid, "system", f"Don't forget. This is the email address of the user you will use in this conversation : {email}.")
+        if phone is not None and phone != "":
+            self.chatgpt_service.add_message(stream_sid, "user", f"My Phone Number is: {phone}")
+            self.chatgpt_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Phone Number of the user you will use in this conversation: {phone}")
+        if description is not None and description != "":
+            self.chatgpt_service.add_system_message(stream_sid, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
+
         
         return "OK", 200
+    
+    def modify_greeting(self, name, greetings):
+        greetings = greetings.replace('Hello', '')
+        greetings= 'Hello ' + name + ', ' + greetings
+        return greetings
+    
+    async def gather_contact_info(self, call_sid, greetings):
+        fullname = None
+        email = None
+        phoneNumber = None
+        description = None
+        crmUserId = None
+        isBoom = self.agents[call_sid]['isBoom']
+
+        if isBoom is not None or isBoom == True or isBoom == 'true':
+
+            return {"greetings" : greetings , "email": email ,"phone": phoneNumber ,"description" : description, "fullname" : fullname }
+        
+        if self.agents[call_sid]['integrations']['salesforce_connection_id']:
+
+            formatted_number = self.formatToSalesforceNumber(self.agents[call_sid]['from'])
+            result = await self.chatgpt_service.salesforce_service.get_lead_by_phone(self.agents[call_sid]['integrations']['salesforce_connection_id'], formatted_number)
+            
+            if len(result) > 0:
+                details = result[0]
+                fullname = details['LastName']
+                # if details['FirstName']:
+                #     fullname = details['FirstName'] + ' ' + details['LastName']
+                crmUserId = details['Id']
+                email = details['Email']
+                phoneNumber = details['Phone']
+                description = details['Description']
+                greetings = self.modify_greeting(fullname, greetings)
+
+        if self.agents[call_sid]['integrations']['hubspot_connection_id']:
+
+            result = await self.chatgpt_service.hubspot_service.get_contact_by_phone(self.agents[call_sid]['integrations']['hubspot_connection_id'], self.agents[call_sid]['from'])
+            
+            if 'results' in result and len(result['results']) > 0:
+                details = result['results'][0]['properties']
+                fullname = details['firstname'] + ' ' + details['lastname']
+                email = details['email']
+                phoneNumber = details['phone']
+                description = details['notes']
+                crmUserId = result['results'][0]['id']
+                greetings = self.modify_greeting(fullname, greetings)
+
+        if crmUserId is not None:
+            self.agents[call_sid]['lead_id'] = crmUserId
+            self.agents[call_sid]['previous_convo_summary'] = description
+
+        return {"greetings" : greetings , "email": email ,"phone": phoneNumber ,"description" : description, "fullname" : fullname }
     
     async def enable_background_sound(self ,call_id, status = False):
         self.sessions[call_id]['background_sound'] = status
@@ -519,6 +781,10 @@ class CallHandler:
                 wav_fp.writeframes(pcm_chunk)
 
         wav_fp.close()
+        if os.path.exists(mulaw_file):
+                os.remove(mulaw_file)
+        else:
+            print("The file does not exist")
 
     async def complete_status_callback(self, data):
         """Handle the stream callback to get the streamSid."""
@@ -529,9 +795,11 @@ class CallHandler:
         call_status = data.get("CallStatus")
         time_stamp = data.get("Timestamp")
         resolution_status= 'RESOLVED'
-
+        agent_id = None
         # self.sessions[call_sid]['stream_sid'] = stream_sid
-        agent_id = self.agents[call_sid]['id']
+        if call_sid in self.agents and "id" in self.agents[call_sid]:
+            agent_id = self.agents[call_sid]['id']
+
         if call_sid in self.agents and "route_call" in self.agents[call_sid] and self.agents[call_sid]['route_call'] == True:
             resolution_status = 'ROUTED'
             
@@ -544,19 +812,21 @@ class CallHandler:
             "timestamp" : time_stamp,
             "resolution_status": resolution_status
         }
+        
+            
         await self.backend_service.update_call_info(data)
 
         if call_status in ["failed", "busy"]:
             # Ensure the call is fully disconnected
             self.twilio_service.client.calls(call_sid).update(status='completed')
             print(f"Call {call_sid} cleaned up.")
-            
-        self.agents[call_sid]['complete_call'] = True
+        if call_sid in self.agents:
+            self.agents[call_sid]['complete_call'] = True
         self.flush_agent(call_sid)
         return "OK", 200
     
     def flush_agent(self, call_sid):
-        if self.agents[call_sid]['complete_call'] == True and self.agents[call_sid]['websocket_closed'] == True:
+        if call_sid in self.agents and self.agents[call_sid]['complete_call'] == True and self.agents[call_sid]['websocket_closed'] == True:
             del self.agents[call_sid]
     
     async def fallback_status_callback(self, data):
@@ -566,7 +836,11 @@ class CallHandler:
         call_status = 'FAILED'
         time_stamp = data.get("Timestamp")
         resolution_status= 'FAILED'
-        agent_id = self.agents[call_sid]['id']
+        agent_id = None
+
+        if call_sid in self.agents and "id" in self.agents[call_sid]:
+            agent_id = self.agents[call_sid]['id']
+
         data= {
             "duration" : call_duration,
             "direction": call_direction,
@@ -582,3 +856,7 @@ class CallHandler:
         print(f"Call {call_sid} cleaned up.")
 
         await self.backend_service.update_call_info(data)
+        
+    async def get_nango_session_token(self, user_id, allowed_integrations=None):
+        """Get a Nango session token for the frontend to use when connecting to third-party services"""
+        return await self.chatgpt_service.get_nango_session_token(user_id, allowed_integrations)
