@@ -384,11 +384,32 @@ class CallHandler:
         if integrations and integrations.get("outlook_connection_id") and integrations["outlook_connection_id"] != '':
             try:
                 if event is not None and event != '' and appointment.get('newAppointment'):
-                    outlook_event_payload = event # Assumes 'event' is structured for Outlook Calendar API
+                    # Prepare attendees list
+                    outlook_attendees = []
+                    contact_email_outlook = None
+                    if summary and 'email' in summary and summary['email']: # HubSpot format
+                        contact_email_outlook = summary['email']
+                    elif summary and 'Email' in summary and summary['Email']: # Salesforce format
+                        contact_email_outlook = summary['Email']
                     
-                    # Basic validation for Outlook (similar to Google Calendar, adjust fields as needed for Outlook)
-                    if not all(k in outlook_event_payload for k in ("subject", "start", "end")):
-                        print(f"Outlook Calendar event payload missing required fields (subject, start, end): {outlook_event_payload}")
+                    if contact_email_outlook:
+                        outlook_attendees.append(contact_email_outlook)
+                    
+                    # Transform event data to the format expected by the Nango script's 'fields'
+                    outlook_event_payload = {
+                        "subject": event.get("Subject"),
+                        "description": event.get("Description"),
+                        "startDateTime": event.get("StartDateTime"), # Expected as ISO 8601 string
+                        "endDateTime": event.get("EndDateTime"),     # Expected as ISO 8601 string
+                        "timeZone": event.get("timeZone", "America/New_York"), # Default if not in event
+                        "attendees": outlook_attendees # List of email strings
+                        # Add other fields like 'location' if your Nango script handles them
+                    }
+                    
+                    # Basic validation for fields required by the Nango script
+                    required_fields = ["subject", "startDateTime", "endDateTime", "timeZone"]
+                    if not all(outlook_event_payload.get(k) for k in required_fields):
+                        print(f"Outlook Calendar event payload (for Nango script) missing required fields: {outlook_event_payload}")
                     else:
                         response = await self.outlook_calendar_service.create_event(
                             integrations['outlook_connection_id'],
@@ -414,35 +435,52 @@ class CallHandler:
         if integrations and integrations.get("calendly_connection_id") and integrations["calendly_connection_id"] != '':
             try:
                 if event is not None and event != '' and appointment.get('newAppointment'):
-                    # Payload for Calendly scheduling an event typically requires event_type_uri, invitee details, etc.
-                    # Ensure 'event' (appointment['eventData']) contains these.
-                    calendly_event_payload = event 
+                    # Transform event data to the format expected by the Nango script's 'fields'
+                    # for creating a Calendly one-off event.
                     
-                    # Basic validation for Calendly (adjust fields based on Calendly's "Create Invitee" or "Schedule Event" API)
-                    # Common fields: event_type_uri (or similar), invitee_email, start_time, end_time
-                    if not all(k in calendly_event_payload for k in ("event_type_uri", "invitee_email", "start_time")):
-                        print(f"Calendly scheduled event payload missing required fields: {calendly_event_payload}")
+                    # Assuming 'event' (from appointment['eventData']) contains the necessary details.
+                    # The Nango script handles mapping these fields to the actual Calendly API structure.
+                    calendly_event_payload = {
+                        "name": event.get("Subject"), # Maps to Nango script's fields.name
+                        "description": "30", # Maps to Nango script's fields.description
+                        "duration": event.get("DurationInMinutes"), # Maps to Nango script's fields.duration
+                        "locationType": event.get("LocationType", "Remote"), # Default to "custom" if not specified
+                        "location": "Remote", # Maps to Nango script's fields.location
+                        "startTime": event.get("StartDateTime"), # Maps to Nango script's fields.startTime
+                        "endTime": event.get("EndDateTime"), # Maps to Nango script's fields.endTime
+                        "inviteesCanChooseTime": event.get("InviteesCanChooseTime", False) # Default if not specified
+                        # Ensure 'event' provides these keys or add defaults.
+                        # 'host_uri' might be needed if not handled by Nango connection context.
+                    }
+                    
+                    # Basic validation for fields required by the Nango script
+                    required_calendly_fields = ["name", "duration", "locationType", "location", "startTime", "endTime"]
+                    if not all(calendly_event_payload.get(k) is not None for k in required_calendly_fields): # Check for None explicitly for boolean field
+                        print(f"Calendly one-off event payload (for Nango script) missing required fields: {calendly_event_payload}")
                     else:
                         response = await self.calendly_service.create_one_off_event_type(
                             integrations['calendly_connection_id'],
                             calendly_event_payload
                         )
-                        # Calendly API for scheduling might return event UUID in 'resource.uri' or 'resource.uuid'
-                        event_uuid = None
-                        if response and response.get('resource') and response['resource'].get('uuid'):
-                            event_uuid = response['resource']['uuid']
-                        
-                        if event_uuid and 'id' in appointment:
+                        # Calendly API for one-off event types might return the event URI or UUID.
+                        # The Nango script returns response.data.resource, which should contain the URI/UUID.
+                        event_resource_uri = None
+                        if response and response.get('uri'): # Nango script returns response.data.resource which has a 'uri'
+                            event_resource_uri = response.get('uri')
+                        elif response and response.get('uuid'): # Fallback if 'uuid' is directly available
+                            event_resource_uri = response.get('uuid')
+
+                        if event_resource_uri and 'id' in appointment:
                             appointment_id = appointment['id']
                             await self.backend_service.update_appointment({
                                 "appointment_id": appointment_id,
-                                "calendly_event_uuid": event_uuid
+                                "calendly_event_uuid": event_resource_uri # Storing URI or UUID
                             })
-                            print(f"Successfully created Calendly scheduled event: {event_uuid}")
+                            print(f"Successfully created Calendly one-off event: {event_resource_uri}")
                         elif response:
-                            print(f"Calendly scheduled event creation response did not contain expected ID: {response}")
+                            print(f"Calendly one-off event creation response did not contain expected URI/UUID: {response}")
                         else:
-                            print("Calendly scheduled event creation returned no response.")
+                            print("Calendly one-off event creation returned no response.")
             except Exception as e:
                 print(f"Calendly scheduled event creation failed: {str(e)}")
                 import traceback

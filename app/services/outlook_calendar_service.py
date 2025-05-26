@@ -36,27 +36,30 @@ class OutlookCalendarService(NangoService):
     
     async def create_event(self, connection_id: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        Create a calendar event in Outlook using Microsoft Graph API.
-        
+        Create a calendar event in Outlook by invoking a Nango action.
+        The Nango action script is expected to transform this payload into the
+        Microsoft Graph API format.
+
         Args:
-            connection_id: The Nango connection ID for Outlook authentication
-            payload: Dictionary containing event details including:
-                - subject: Event title
-                - body: Event description (contentType and content)
-                - start: Start time (dateTime and timeZone)
-                - end: End time (dateTime and timeZone)
-                - location: Location details
-                - attendees: List of attendees
-                - isOnlineMeeting: Whether this is an online meeting (optional)
-                - onlineMeetingProvider: Provider for online meeting (optional)
+            connection_id: The Nango connection ID for Outlook authentication.
+            payload: Dictionary containing event details (expected as 'fields' by the Nango script):
+                - subject: (string) Event title.
+                - description: (string) Event description (to be used for body.content).
+                - startDateTime: (string) ISO 8601 date-time string for the event start.
+                - endDateTime: (string) ISO 8601 date-time string for the event end.
+                - timeZone: (string) The time zone for start and end times (e.g., "America/New_York").
+                - attendees: (List[str]) A list of email addresses for attendees.
+                (Other fields like 'location' can be added if the Nango script handles them)
                 
         Returns:
-            Dictionary containing the created event details
+            Dictionary containing the response from the Nango action, typically the created event details.
         """
-        logger.info(f"Attempting to create Outlook calendar event with connection_id: {connection_id}. Payload: {json.dumps(payload, indent=2)}")
+        logger.info(f"Attempting to create Outlook calendar event via Nango action with connection_id: {connection_id}. Payload (fields for Nango script): {json.dumps(payload, indent=2)}")
         try:
+            # "create-event" is assumed to be the Nango action ID that corresponds
+            # to the provided Javascript snippet which calls the Graph API.
             result = await self.post_data(connection_id, "create-event", payload, 'outlook')
-            logger.info(f"Outlook create_event response: {json.dumps(result, indent=2)}")
+            logger.info(f"Outlook create_event (via Nango action) response: {json.dumps(result, indent=2)}")
             return result
         except Exception as e:
             logger.error(f"Error creating Outlook calendar event: {str(e)}. Payload was: {json.dumps(payload, indent=2)}")
