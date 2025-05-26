@@ -48,7 +48,7 @@ class CallHandler:
         self.backend_service = BackendHandler()
         self.chatgpt_service = ChatGPTService()
         self.s3_service = S3Service()
-        self.playht_service = PlayHT()
+        # self.playht_service = PlayHT()
         self.elevenlabs_service = ElevenLabsService()
         self.zoho_service = ZohoService()
         self.hubspot_service = HubSpotService()
@@ -229,7 +229,8 @@ class CallHandler:
                 }
 
                 try:
-                    response = await self.backend_service.update_conversation_info(data)
+                    # response = await self.backend_service.update_conversation_info(data)
+                    response =  {'conversation': {'recording_url': 'https://ai-agent-boom.s3.us-east-1.amazonaws.com/recordings/CAdcff0528f2d7d00c9ba0ce48a6100f11.wav', 'call_id': 147, 'agent_call_id': None, 'id': 104, 'created_at': '2025-05-26T15:19:42.960Z', 'updated_at': '2025-05-26T15:19:42.960Z'}, 'summary': {}, 'appointment': {'id': 39, 'eventData': {'Subject': 'Meeting with Jubay Islam', 'StartDateTime': '2025-06-02T10:00:00.000Z', 'EndDateTime': '2025-06-02T10:30:00.000Z', 'Description': 'Mortgage consultation', 'Location': '', 'IsAllDayEvent': False, 'DurationInMinutes': 30}, 'newAppointment': True, 'updateAppointment': False, 'deleteAppointment': False}}
                     isBoom = self.agents[call_id]['isBoom']
                     if isBoom is not None or isBoom == True or isBoom == 'true':
                         await self.backend_service.update_conversation_bh({"conversations": data['conversations']})
@@ -334,6 +335,118 @@ class CallHandler:
 
             except Exception as e:
                 print("Event Creation or update appointment Failed" , e)
+
+        # Google Calendar Event Handling
+        if integrations and integrations.get("google_calendar_connection_id") and integrations["google_calendar_connection_id"] != '':
+            try:
+                if event is not None and event != '' and appointment.get('newAppointment'):
+                    # The 'event' variable (derived from appointment['eventData']) is used as the payload.
+                    # Its structure must align with Google Calendar API requirements
+                    
+                    # Transform the event data to Google Calendar API format
+                    google_event_payload = {
+                        "summary": event.get("Subject"),
+                        "description": event.get("Description"),
+                        "start": {
+                            "dateTime": event.get("StartDateTime"),
+                            "timeZone": "America/New_York"  # Adjust time zone as needed
+                        },
+                        "end": {
+                            "dateTime": event.get("EndDateTime"),
+                            "timeZone": "America/New_York"  # Adjust time zone as needed      
+                        }
+                        # Attendees can be added her?e if available in 'event'
+                        # "attendees": event.get("attendees", []) 
+                    }
+        
+                    
+                    response = await self.google_calendar_service.create_event(
+                        integrations['google_calendar_connection_id'],
+                        google_event_payload
+                    )
+                    if response and 'id' in response and 'id' in appointment:
+                        appointment_id = appointment['id'] # BoomersHub internal appointment ID
+                        await self.backend_service.update_appointment({
+                            "appointment_id": appointment_id,
+                            "google_calendar_event_id": response['id'] # Storing Google Calendar event ID
+                        })
+                        print(f"Successfully created Google Calendar event: {response['id']}")
+                    elif response:
+                        print(f"Google Calendar event creation response did not contain an ID: {response}")
+                    else:
+                        print("Google Calendar event creation returned no response.")
+            except Exception as e:
+                print(f"Google Calendar event creation failed: {str(e)}")
+                import traceback
+                print(traceback.format_exc())
+
+        # Outlook Calendar Event Handling
+        if integrations and integrations.get("outlook_connection_id") and integrations["outlook_connection_id"] != '':
+            try:
+                if event is not None and event != '' and appointment.get('newAppointment'):
+                    outlook_event_payload = event # Assumes 'event' is structured for Outlook Calendar API
+                    
+                    # Basic validation for Outlook (similar to Google Calendar, adjust fields as needed for Outlook)
+                    if not all(k in outlook_event_payload for k in ("subject", "start", "end")):
+                        print(f"Outlook Calendar event payload missing required fields (subject, start, end): {outlook_event_payload}")
+                    else:
+                        response = await self.outlook_calendar_service.create_event(
+                            integrations['outlook_connection_id'],
+                            outlook_event_payload
+                        )
+                        if response and 'id' in response and 'id' in appointment:
+                            appointment_id = appointment['id']
+                            await self.backend_service.update_appointment({
+                                "appointment_id": appointment_id,
+                                "outlook_event_id": response['id']
+                            })
+                            print(f"Successfully created Outlook Calendar event: {response['id']}")
+                        elif response:
+                            print(f"Outlook Calendar event creation response did not contain an ID: {response}")
+                        else:
+                            print("Outlook Calendar event creation returned no response.")
+            except Exception as e:
+                print(f"Outlook Calendar event creation failed: {str(e)}")
+                import traceback
+                print(traceback.format_exc())
+
+        # Calendly Scheduled Event Handling
+        if integrations and integrations.get("calendly_connection_id") and integrations["calendly_connection_id"] != '':
+            try:
+                if event is not None and event != '' and appointment.get('newAppointment'):
+                    # Payload for Calendly scheduling an event typically requires event_type_uri, invitee details, etc.
+                    # Ensure 'event' (appointment['eventData']) contains these.
+                    calendly_event_payload = event 
+                    
+                    # Basic validation for Calendly (adjust fields based on Calendly's "Create Invitee" or "Schedule Event" API)
+                    # Common fields: event_type_uri (or similar), invitee_email, start_time, end_time
+                    if not all(k in calendly_event_payload for k in ("event_type_uri", "invitee_email", "start_time")):
+                        print(f"Calendly scheduled event payload missing required fields: {calendly_event_payload}")
+                    else:
+                        response = await self.calendly_service.create_one_off_event_type(
+                            integrations['calendly_connection_id'],
+                            calendly_event_payload
+                        )
+                        # Calendly API for scheduling might return event UUID in 'resource.uri' or 'resource.uuid'
+                        event_uuid = None
+                        if response and response.get('resource') and response['resource'].get('uuid'):
+                            event_uuid = response['resource']['uuid']
+                        
+                        if event_uuid and 'id' in appointment:
+                            appointment_id = appointment['id']
+                            await self.backend_service.update_appointment({
+                                "appointment_id": appointment_id,
+                                "calendly_event_uuid": event_uuid
+                            })
+                            print(f"Successfully created Calendly scheduled event: {event_uuid}")
+                        elif response:
+                            print(f"Calendly scheduled event creation response did not contain expected ID: {response}")
+                        else:
+                            print("Calendly scheduled event creation returned no response.")
+            except Exception as e:
+                print(f"Calendly scheduled event creation failed: {str(e)}")
+                import traceback
+                print(traceback.format_exc())
 
 
     def remove_empty_values(self, data: dict) -> dict:
@@ -490,8 +603,8 @@ class CallHandler:
         tts_provider = settings.tts_provider.lower()
         if tts_provider == "deepgram":
             audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text)
-        elif tts_provider == "playht":
-            audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
+        # elif tts_provider == "playht":
+        #     audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
         elif tts_provider == "elevenlabs":
             audio_stream = await self.elevenlabs_service.stream_text_to_speech(text)
         else:

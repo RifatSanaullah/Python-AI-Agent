@@ -139,7 +139,7 @@ async def nango_webhook_callback(request: Request, call_handler: CallHandler = D
         # Parse the webhook payload
   
         webhook_data = await request.json()
-        print("Nango webhook callback received:", webhook_data)
+
         # Check if this is an auth creation webhook
         if (webhook_data.get("type") == "auth" and 
             webhook_data.get("operation") == "creation" and 
@@ -157,8 +157,6 @@ async def nango_webhook_callback(request: Request, call_handler: CallHandler = D
                     content={"status": "error", "message": "Missing required fields"}
                 )
             
-            # Log the connection info
-            print(f"Received Nango connection: User {end_user_id}, Connection {connection_id}, Integration: {integration_id}")
             
             # Store the connection ID in the user's account
             try:
