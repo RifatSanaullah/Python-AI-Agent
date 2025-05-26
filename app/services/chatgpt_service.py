@@ -176,7 +176,6 @@ class ChatGPTService:
         elif integration_type == "outlook":
             service = OutlookCalendarService()
             self.endpoints[integration_type] = [
-                "calendars",
                 "events",
             ]
             self._map_service_methods(integration_type, service)

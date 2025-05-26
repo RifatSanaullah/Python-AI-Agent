@@ -1000,79 +1000,51 @@ class CallHandler:
             print(f"Outlook Calendar connection ID: {self.agents[call_sid]['integrations']['outlook_connection_id']}")
 
             try:
-                # First get the available calendars
-                calendars_result = await self.outlook_calendar_service.get_calendars(
+                # Get events directly, NangoService's fetch_data for outlook events
+                # will typically fetch from the default calendar if no calendar_id is specified.
+                print(f"Fetching events from default Outlook calendar")
+                events_result = await self.outlook_calendar_service.get_events(
                     self.agents[call_sid]['integrations']['outlook_connection_id']
                 )
                 
-                # Print the calendars in a more readable format
-                print("\n=== OUTLOOK CALENDARS ===")
-                default_calendar_id = None
+                # Display events in a well-formatted way
+                print("\n=== OUTLOOK CALENDAR EVENTS ===")
+                events_collection = []
                 
-                if 'records' in calendars_result and len(calendars_result['records']) > 0:
-                    for i, calendar in enumerate(calendars_result['records']):
-                        print(f"\nCalendar #{i+1}:")
-                        print(f"  Name: {calendar.get('name', 'N/A')}")
-                        print(f"  ID: {calendar.get('id', 'N/A')}")
-                        print(f"  Default: {calendar.get('isDefaultCalendar', False)}")
-                        print(f"  Color: {calendar.get('color', 'N/A')}")
+                if events_result and 'records' in events_result:
+                    events_collection = events_result['records']
+                
+                if events_collection and len(events_collection) > 0:
+                    for i, event in enumerate(events_collection):
+                        print(f"\nEvent #{i+1}:")
+                        print(f"  Subject: {event.get('subject', 'N/A')}")
                         
-                        # Try to find the default calendar
-                        if calendar.get('isDefaultCalendar', False):
-                            default_calendar_id = calendar.get('id')
-                            print(f"  [DEFAULT CALENDAR IDENTIFIED]")
+                        if 'start' in event:
+                            start = event['start'].get('dateTime', 'N/A')
+                            timezone = event['start'].get('timeZone', 'N/A')
+                            print(f"  Start: {start} ({timezone})")
                             
+                        if 'end' in event:
+                            end = event['end'].get('dateTime', 'N/A')
+                            timezone = event['end'].get('timeZone', 'N/A')
+                            print(f"  End: {end} ({timezone})")
+                            
+                        print(f"  Location: {event.get('location', {}).get('displayName', 'N/A')}")
+                        print(f"  Status: {event.get('showAs', 'N/A')}")
+                        
                     print("===============================\n")
-                else:
-                    print("No Outlook calendars found.")
-                
-                # Now get the events from the default calendar
-                if default_calendar_id:
-                    print(f"Fetching events from default calendar (ID: {default_calendar_id})")
-                    events_result = await self.outlook_calendar_service.get_events(
-                        self.agents[call_sid]['integrations']['outlook_connection_id']
-                    )
                     
-                    # Display events in a well-formatted way
-                    print("\n=== OUTLOOK CALENDAR EVENTS ===")
-                    events_collection = []
+                    # Update description with events count
+                    events_count = len(events_collection)
+                    outlook_info = f"Has {events_count} upcoming Outlook Calendar event"
+                    outlook_info += "s" if events_count > 1 else ""
                     
-                    if events_result and 'records' in events_result:
-                        events_collection = events_result['records']
-                    
-                    if events_collection and len(events_collection) > 0:
-                        for i, event in enumerate(events_collection):
-                            print(f"\nEvent #{i+1}:")
-                            print(f"  Subject: {event.get('subject', 'N/A')}")
-                            
-                            if 'start' in event:
-                                start = event['start'].get('dateTime', 'N/A')
-                                timezone = event['start'].get('timeZone', 'N/A')
-                                print(f"  Start: {start} ({timezone})")
-                                
-                            if 'end' in event:
-                                end = event['end'].get('dateTime', 'N/A')
-                                timezone = event['end'].get('timeZone', 'N/A')
-                                print(f"  End: {end} ({timezone})")
-                                
-                            print(f"  Location: {event.get('location', {}).get('displayName', 'N/A')}")
-                            print(f"  Status: {event.get('showAs', 'N/A')}")
-                            
-                        print("===============================\n")
-                        
-                        # Update description with events count
-                        events_count = len(events_collection)
-                        outlook_info = f"Has {events_count} upcoming Outlook Calendar event"
-                        outlook_info += "s" if events_count > 1 else ""
-                        
-                        if description:
-                            description += f" {outlook_info}."
-                        else:
-                            description = outlook_info + "."
+                    if description:
+                        description += f" {outlook_info}."
                     else:
-                        print("No upcoming Outlook Calendar events found.")
+                        description = outlook_info + "."
                 else:
-                    print("No default Outlook calendar found.")
+                    print("No upcoming Outlook Calendar events found.")
 
             except Exception as e:
                 print(f"Error checking Outlook Calendar events: {str(e)}")
@@ -1223,12 +1195,12 @@ class CallHandler:
 
         await self.backend_service.update_call_info(data)
         
-    async def get_nango_session_token(self, user_id, allowed_integrations=None, integrations_config=None):
+    async def get_nango_session_token(self, user_id, allowed_integrations=None):
         """Get a Nango session token for the frontend to use when connecting to third-party services
         
         Args:
             user_id: Unique identifier for the user
             allowed_integrations: List of integration IDs the user is allowed to connect to (optional) 
-            integrations_config: Configuration defaults for specific integrations (optional)
+           
         """
-        return await self.chatgpt_service.get_nango_session_token(user_id, allowed_integrations, integrations_config)
+        return await self.chatgpt_service.get_nango_session_token(user_id, allowed_integrations)
