@@ -109,7 +109,7 @@ async def complete_status_callback(request: Request, call_handler: CallHandler =
             "From" : fromNumber,
             "CallSid" : data.get("CallSid"),
         }
-        response = await BackendHandler().complete_status_callback(data)
+        response = await BackendHandler.complete_status_callback(data)
         return PlainTextResponse(content=str(response), media_type="application/xml")
 
     else:
@@ -125,7 +125,7 @@ async def fallback_status_callback(request: Request, call_handler: CallHandler =
         data = {
             "From" : fromNumber,
         }
-        response = await BackendHandler().fallback_status_callback(data)
+        response = await BackendHandler.fallback_status_callback(data)
         return PlainTextResponse(content=str(response), media_type="application/xml")
 
     else:
