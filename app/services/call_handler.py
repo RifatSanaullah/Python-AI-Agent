@@ -802,7 +802,7 @@ class CallHandler:
         elif len(digits) == 11 and digits.startswith('1'):
             return '+' + digits
         else:
-            raise ValueError("Invalid US number format")
+            return number_str 
         
     async def handle_call(self, call_id: str, data):
         print("Handling call...")
