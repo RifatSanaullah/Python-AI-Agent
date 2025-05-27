@@ -222,11 +222,11 @@ class CallHandler:
                 }
 
                 try:
+                    response = await self.backend_service.update_conversation_info(data)
                     isBoom = self.agents[call_id]['isBoom']
                     if isBoom is not None or isBoom == True or isBoom == 'true':
                         await self.backend_service.update_conversation_bh({ "lead_id" : lead_id, "conversations": data['conversations']})
                     else:
-                        response = await self.backend_service.update_conversation_info(data)
                         if 'summary' in response:
                             summary = response['summary']
                             await self.update_crm_data(call_id, data['lead_id'], data['integrations'], summary, response['appointment'], data['event_id'], data['previous_convo_summary'])
