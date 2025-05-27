@@ -228,8 +228,7 @@ class CallHandler:
                 }
 
                 try:
-                    # response = await self.backend_service.update_conversation_info(data)
-                    response =  {'conversation': {'recording_url': 'https://ai-agent-boom.s3.us-east-1.amazonaws.com/recordings/CAdcff0528f2d7d00c9ba0ce48a6100f11.wav', 'call_id': 147, 'agent_call_id': None, 'id': 104, 'created_at': '2025-05-26T15:19:42.960Z', 'updated_at': '2025-05-26T15:19:42.960Z'}, 'summary': {}, 'appointment': {'id': 39, 'eventData': {'Subject': 'Meeting with Jubay Islam', 'StartDateTime': '2025-06-02T10:00:00.000Z', 'EndDateTime': '2025-06-02T10:30:00.000Z', 'Description': 'Mortgage consultation', 'Location': '', 'IsAllDayEvent': False, 'DurationInMinutes': 30}, 'newAppointment': True, 'updateAppointment': False, 'deleteAppointment': False}}
+                    response = await self.backend_service.update_conversation_info(data)
                     isBoom = self.agents[call_id]['isBoom']
                     if isBoom is not None or isBoom == True or isBoom == 'true':
                         await self.backend_service.update_conversation_bh({ "lead_id" : lead_id, "conversations": data['conversations']})
