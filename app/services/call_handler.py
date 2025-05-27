@@ -939,6 +939,7 @@ class CallHandler:
                 phoneNumber = details['Phone']
                 description = details['Description']
                 greetings = self.modify_greeting(fullname, greetings)
+                self.agents[call_sid]['new_knowledge'] = True
 
         elif self.agents[call_sid]['integrations']['hubspot_connection_id']:
 
@@ -952,6 +953,7 @@ class CallHandler:
                 description = details['notes']
                 crmUserId = result['results'][0]['id']
                 greetings = self.modify_greeting(fullname, greetings)
+                self.agents[call_sid]['new_knowledge'] = True
 
         elif self.agents[call_sid]['integrations']['zoho_connection_id']:
 
@@ -967,6 +969,7 @@ class CallHandler:
                 phoneNumber = details['Phone']
                 description = details['Description']
                 greetings = self.modify_greeting(fullname, greetings)
+                self.agents[call_sid]['new_knowledge'] = True
 
 
         if self.agents[call_sid]['integrations']['calendly_connection_id']:
