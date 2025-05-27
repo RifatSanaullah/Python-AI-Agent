@@ -12,6 +12,9 @@ from app.services.elevenlabs_service import ElevenLabsService
 from app.services.zoho_service import ZohoService
 from app.services.hubspot_service import HubSpotService
 from app.services.salesforce_service import SalesforceService
+from app.services.calendly_service import CalendlyService
+from app.services.google_calendar_service import GoogleCalendarService
+from app.services.outlook_calendar_service import OutlookCalendarService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 import logging
 from datetime import datetime
@@ -50,6 +53,9 @@ class CallHandler:
         self.zoho_service = ZohoService()
         self.hubspot_service = HubSpotService()
         self.salesforce_service = SalesforceService()
+        self.calendly_service = CalendlyService()
+        self.google_calendar_service = GoogleCalendarService()
+        self.outlook_calendar_service = OutlookCalendarService()
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.sessions = {}
         self.agents = {}
@@ -222,7 +228,8 @@ class CallHandler:
                 }
 
                 try:
-                    response = await self.backend_service.update_conversation_info(data)
+                    # response = await self.backend_service.update_conversation_info(data)
+                    response =  {'conversation': {'recording_url': 'https://ai-agent-boom.s3.us-east-1.amazonaws.com/recordings/CAdcff0528f2d7d00c9ba0ce48a6100f11.wav', 'call_id': 147, 'agent_call_id': None, 'id': 104, 'created_at': '2025-05-26T15:19:42.960Z', 'updated_at': '2025-05-26T15:19:42.960Z'}, 'summary': {}, 'appointment': {'id': 39, 'eventData': {'Subject': 'Meeting with Jubay Islam', 'StartDateTime': '2025-06-02T10:00:00.000Z', 'EndDateTime': '2025-06-02T10:30:00.000Z', 'Description': 'Mortgage consultation', 'Location': '', 'IsAllDayEvent': False, 'DurationInMinutes': 30}, 'newAppointment': True, 'updateAppointment': False, 'deleteAppointment': False}}
                     isBoom = self.agents[call_id]['isBoom']
                     if isBoom is not None or isBoom == True or isBoom == 'true':
                         await self.backend_service.update_conversation_bh({ "lead_id" : lead_id, "conversations": data['conversations']})
@@ -392,6 +399,156 @@ class CallHandler:
 
 
 
+        # Google Calendar Event Handling
+        if integrations and integrations.get("google_calendar_connection_id") and integrations["google_calendar_connection_id"] != '':
+            try:
+                if event is not None and event != '' and appointment.get('newAppointment'):
+                    # The 'event' variable (derived from appointment['eventData']) is used as the payload.
+                    # Its structure must align with Google Calendar API requirements
+                    
+                    # Transform the event data to Google Calendar API format
+                    google_event_payload = {
+                        "summary": event.get("Subject"),
+                        "description": event.get("Description"),
+                        "start": {
+                            "dateTime": event.get("StartDateTime"),
+                            "timeZone": "America/New_York"  # Adjust time zone as needed
+                        },
+                        "end": {
+                            "dateTime": event.get("EndDateTime"),
+                            "timeZone": "America/New_York"  # Adjust time zone as needed      
+                        }
+                        # Attendees can be added her?e if available in 'event'
+                        # "attendees": event.get("attendees", []) 
+                    }
+        
+                    
+                    response = await self.google_calendar_service.create_event(
+                        integrations['google_calendar_connection_id'],
+                        google_event_payload
+                    )
+                    if response and 'id' in response and 'id' in appointment:
+                        appointment_id = appointment['id'] # BoomersHub internal appointment ID
+                        await self.backend_service.update_appointment({
+                            "appointment_id": appointment_id,
+                            "google_calendar_event_id": response['id'] # Storing Google Calendar event ID
+                        })
+                        print(f"Successfully created Google Calendar event: {response['id']}")
+                    elif response:
+                        print(f"Google Calendar event creation response did not contain an ID: {response}")
+                    else:
+                        print("Google Calendar event creation returned no response.")
+            except Exception as e:
+                print(f"Google Calendar event creation failed: {str(e)}")
+                import traceback
+                print(traceback.format_exc())
+
+        # Outlook Calendar Event Handling
+        if integrations and integrations.get("outlook_connection_id") and integrations["outlook_connection_id"] != '':
+            try:
+                if event is not None and event != '' and appointment.get('newAppointment'):
+                    # Prepare attendees list
+                    outlook_attendees = []
+                    contact_email_outlook = None
+                    if summary and 'email' in summary and summary['email']: # HubSpot format
+                        contact_email_outlook = summary['email']
+                    elif summary and 'Email' in summary and summary['Email']: # Salesforce format
+                        contact_email_outlook = summary['Email']
+                    
+                    if contact_email_outlook:
+                        outlook_attendees.append(contact_email_outlook)
+                    
+                    # Transform event data to the format expected by the Nango script's 'fields'
+                    outlook_event_payload = {
+                        "subject": event.get("Subject"),
+                        "description": event.get("Description"),
+                        "startDateTime": event.get("StartDateTime"), # Expected as ISO 8601 string
+                        "endDateTime": event.get("EndDateTime"),     # Expected as ISO 8601 string
+                        "timeZone": event.get("timeZone", "America/New_York"), # Default if not in event
+                        "attendees": outlook_attendees # List of email strings
+                        # Add other fields like 'location' if your Nango script handles them
+                    }
+                    
+                    # Basic validation for fields required by the Nango script
+                    required_fields = ["subject", "startDateTime", "endDateTime", "timeZone"]
+                    if not all(outlook_event_payload.get(k) for k in required_fields):
+                        print(f"Outlook Calendar event payload (for Nango script) missing required fields: {outlook_event_payload}")
+                    else:
+                        response = await self.outlook_calendar_service.create_event(
+                            integrations['outlook_connection_id'],
+                            outlook_event_payload
+                        )
+                        if response and 'id' in response and 'id' in appointment:
+                            appointment_id = appointment['id']
+                            await self.backend_service.update_appointment({
+                                "appointment_id": appointment_id,
+                                "outlook_event_id": response['id']
+                            })
+                            print(f"Successfully created Outlook Calendar event: {response['id']}")
+                        elif response:
+                            print(f"Outlook Calendar event creation response did not contain an ID: {response}")
+                        else:
+                            print("Outlook Calendar event creation returned no response.")
+            except Exception as e:
+                print(f"Outlook Calendar event creation failed: {str(e)}")
+                import traceback
+                print(traceback.format_exc())
+
+        # Calendly Scheduled Event Handling
+        if integrations and integrations.get("calendly_connection_id") and integrations["calendly_connection_id"] != '':
+            try:
+                if event is not None and event != '' and appointment.get('newAppointment'):
+                    # Transform event data to the format expected by the Nango script's 'fields'
+                    # for creating a Calendly one-off event.
+                    
+                    # Assuming 'event' (from appointment['eventData']) contains the necessary details.
+                    # The Nango script handles mapping these fields to the actual Calendly API structure.
+                    calendly_event_payload = {
+                        "name": event.get("Subject"), # Maps to Nango script's fields.name
+                        "description": "30", # Maps to Nango script's fields.description
+                        "duration": event.get("DurationInMinutes"), # Maps to Nango script's fields.duration
+                        "locationType": event.get("LocationType", "Remote"), # Default to "custom" if not specified
+                        "location": "Remote", # Maps to Nango script's fields.location
+                        "startTime": event.get("StartDateTime"), # Maps to Nango script's fields.startTime
+                        "endTime": event.get("EndDateTime"), # Maps to Nango script's fields.endTime
+                        "inviteesCanChooseTime": event.get("InviteesCanChooseTime", False) # Default if not specified
+                        # Ensure 'event' provides these keys or add defaults.
+                        # 'host_uri' might be needed if not handled by Nango connection context.
+                    }
+                    
+                    # Basic validation for fields required by the Nango script
+                    required_calendly_fields = ["name", "duration", "locationType", "location", "startTime", "endTime"]
+                    if not all(calendly_event_payload.get(k) is not None for k in required_calendly_fields): # Check for None explicitly for boolean field
+                        print(f"Calendly one-off event payload (for Nango script) missing required fields: {calendly_event_payload}")
+                    else:
+                        response = await self.calendly_service.create_one_off_event_type(
+                            integrations['calendly_connection_id'],
+                            calendly_event_payload
+                        )
+                        # Calendly API for one-off event types might return the event URI or UUID.
+                        # The Nango script returns response.data.resource, which should contain the URI/UUID.
+                        event_resource_uri = None
+                        if response and response.get('uri'): # Nango script returns response.data.resource which has a 'uri'
+                            event_resource_uri = response.get('uri')
+                        elif response and response.get('uuid'): # Fallback if 'uuid' is directly available
+                            event_resource_uri = response.get('uuid')
+
+                        if event_resource_uri and 'id' in appointment:
+                            appointment_id = appointment['id']
+                            await self.backend_service.update_appointment({
+                                "appointment_id": appointment_id,
+                                "calendly_event_uuid": event_resource_uri # Storing URI or UUID
+                            })
+                            print(f"Successfully created Calendly one-off event: {event_resource_uri}")
+                        elif response:
+                            print(f"Calendly one-off event creation response did not contain expected URI/UUID: {response}")
+                        else:
+                            print("Calendly one-off event creation returned no response.")
+            except Exception as e:
+                print(f"Calendly scheduled event creation failed: {str(e)}")
+                import traceback
+                print(traceback.format_exc())
+
 
     def remove_empty_values(self, data: dict) -> dict:
         """
@@ -547,8 +704,8 @@ class CallHandler:
         tts_provider = settings.tts_provider.lower()
         if tts_provider == "deepgram":
             audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text)
-        elif tts_provider == "playht":
-            audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
+        # elif tts_provider == "playht":
+        #     audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
         elif tts_provider == "elevenlabs":
             audio_stream = await self.elevenlabs_service.stream_text_to_speech(text)
         else:
@@ -665,7 +822,9 @@ class CallHandler:
         self.agents[call_id]['integrations'] = {
                 "hubspot_connection_id": None,
                 "zoho_connection_id": None,
-                "salesforce_connection_id": None
+                "salesforce_connection_id": None,
+                "calendly_connection_id": None,
+                "google_calendar_connection_id": None
         }
         self.agents[call_id]['lead_id'] = None
         if 'integrations' in api_response['data']:
@@ -795,6 +954,192 @@ class CallHandler:
                 phoneNumber = details['Phone']
                 description = details['Description']
                 greetings = self.modify_greeting(fullname, greetings)
+
+
+        if self.agents[call_sid]['integrations']['calendly_connection_id']:
+            # Check if there are any scheduled events for this user in Calendly
+            print(f"Calendly connection ID: {self.agents[call_sid]['integrations']['calendly_connection_id']}")
+
+            try:
+                # First get the user information
+                user_result = await self.calendly_service.get_user(
+                    self.agents[call_sid]['integrations']['calendly_connection_id']
+                )
+                
+                print(f"Calendly User result: {json.dumps(user_result, indent=2)}")
+                
+                # Extract user info from response format
+                user_info = None
+                if user_result and 'records' in user_result and len(user_result['records']) > 0:
+                    user_info = user_result['records'][0]
+                    # Add user name from Calendly if available
+                    if not fullname and user_info:
+                        if 'firstName' in user_info and 'lastName' in user_info:
+                            fullname = f"{user_info['firstName']} {user_info['lastName']}".strip()
+                        elif 'firstName' in user_info:
+                            fullname = user_info['firstName']
+                        elif 'lastName' in user_info:
+                            fullname = user_info['lastName']
+                    
+                    if not email and 'email' in user_info:
+                        email = user_info['email']
+                    
+                    # Now check for scheduled events with debug
+                    try:
+                        events_result = await self.calendly_service.get_events(
+                            self.agents[call_sid]['integrations']['calendly_connection_id']
+                        )
+                        
+                        print(f"Calendly Events result: {json.dumps(events_result, indent=2)}")
+                        
+                        # Extract events from response format
+                        events_collection = []
+                        if events_result and 'records' in events_result:
+                            events_collection = events_result['records']
+                        elif events_result and 'collection' in events_result:
+                            events_collection = events_result['collection']
+                        
+                        if events_collection and len(events_collection) > 0:
+                            # Print detailed information about each scheduled event
+                            print("\n=== CALENDLY SCHEDULED EVENTS ===")
+                            for i, event in enumerate(events_collection):
+                                print(f"\nEvent #{i+1}:")
+                                # Print key event details
+                                print(f"  Name: {event.get('name', 'N/A')}")
+                                print(f"  Status: {event.get('status', 'N/A')}")
+                                print(f"  Start time: {event.get('start_time', 'N/A')}")
+                                print(f"  End time: {event.get('end_time', 'N/A')}")
+                                if 'location' in event:
+                                    print(f"  Location: {event['location'].get('type', 'N/A')}")
+                                
+                            print("===============================\n")
+                            
+                            # We have scheduled events, update description with this info
+                            events_count = len(events_collection)
+                            calendly_info = f"Has {events_count} upcoming Calendly appointment"
+                            calendly_info += "s" if events_count > 1 else ""
+                            
+                            if description:
+                                description += f" {calendly_info}."
+                            else:
+                                description = calendly_info + "."
+                        else:
+                            print("No upcoming Calendly events found.")
+                    except Exception as events_error:
+                        print(f"Error fetching Calendly events: {str(events_error)}")
+                        import traceback
+                        print(traceback.format_exc())
+                        
+            except Exception as e:
+                print(f"Error checking Calendly events: {str(e)}")
+                import traceback
+                print(traceback.format_exc())
+                
+        if self.agents[call_sid]['integrations']['google_calendar_connection_id']:
+            # Check if there are any scheduled events for this user in Google Calendar
+            print(f"Google Calendar connection ID: {self.agents[call_sid]['integrations']['google_calendar_connection_id']}")
+
+            try:
+                # Get calendar events
+                events_result = await self.google_calendar_service.get_events(
+                    self.agents[call_sid]['integrations']['google_calendar_connection_id']
+                )
+                
+
+                print(f"Google Calendar Events result: {json.dumps(events_result, indent=2)}")
+                
+                # Extract events from response format
+                events_collection = []
+                if events_result and 'items' in events_result:
+                    events_collection = events_result['items']
+                
+                if events_collection and len(events_collection) > 0:
+                    # Print detailed information about each scheduled event
+                    print("\n=== GOOGLE CALENDAR SCHEDULED EVENTS ===")
+                    for i, event in enumerate(events_collection):
+                        print(f"\nEvent #{i+1}:")
+                        # Print key event details
+                        print(f"  Summary: {event.get('summary', 'N/A')}")
+                        print(f"  Status: {event.get('status', 'N/A')}")
+                        if 'start' in event:
+                            print(f"  Start time: {event['start'].get('dateTime', event['start'].get('date', 'N/A'))}")
+                        if 'end' in event:
+                            print(f"  End time: {event['end'].get('dateTime', event['end'].get('date', 'N/A'))}")
+                        if 'location' in event:
+                            print(f"  Location: {event.get('location', 'N/A')}")
+                        
+                    print("===============================\n")
+                    
+                    # We have scheduled events, update description with this info
+                    events_count = len(events_collection)
+                    calendar_info = f"Has {events_count} upcoming Google Calendar event"
+                    calendar_info += "s" if events_count > 1 else ""
+                    
+                    if description:
+                        description += f" {calendar_info}."
+                    else:
+                        description = calendar_info + "."
+                else:
+                    print("No upcoming Google Calendar events found.")
+            except Exception as e:
+                print(f"Error checking Google Calendar events: {str(e)}")
+                print(traceback.format_exc())
+                
+        # Check for Outlook calendar events
+        if self.agents[call_sid]['integrations'].get('outlook_connection_id'):
+            # Check if there are any scheduled events for this user in Outlook Calendar
+            print(f"Outlook Calendar connection ID: {self.agents[call_sid]['integrations']['outlook_connection_id']}")
+
+            try:
+                # Get events directly, NangoService's fetch_data for outlook events
+                # will typically fetch from the default calendar if no calendar_id is specified.
+                print(f"Fetching events from default Outlook calendar")
+                events_result = await self.outlook_calendar_service.get_events(
+                    self.agents[call_sid]['integrations']['outlook_connection_id']
+                )
+                
+                # Display events in a well-formatted way
+                print("\n=== OUTLOOK CALENDAR EVENTS ===")
+                events_collection = []
+                
+                if events_result and 'records' in events_result:
+                    events_collection = events_result['records']
+                
+                if events_collection and len(events_collection) > 0:
+                    for i, event in enumerate(events_collection):
+                        print(f"\nEvent #{i+1}:")
+                        print(f"  Subject: {event.get('subject', 'N/A')}")
+                        
+                        if 'start' in event:
+                            start = event['start'].get('dateTime', 'N/A')
+                            timezone = event['start'].get('timeZone', 'N/A')
+                            print(f"  Start: {start} ({timezone})")
+                            
+                        if 'end' in event:
+                            end = event['end'].get('dateTime', 'N/A')
+                            timezone = event['end'].get('timeZone', 'N/A')
+                            print(f"  End: {end} ({timezone})")
+                            
+                        print(f"  Location: {event.get('location', {}).get('displayName', 'N/A')}")
+                        print(f"  Status: {event.get('showAs', 'N/A')}")
+                        
+                    print("===============================\n")
+                    
+                    # Update description with events count
+                    events_count = len(events_collection)
+                    outlook_info = f"Has {events_count} upcoming Outlook Calendar event"
+                    outlook_info += "s" if events_count > 1 else ""
+                    
+                    if description:
+                        description += f" {outlook_info}."
+                    else:
+                        description = outlook_info + "."
+                else:
+                    print("No upcoming Outlook Calendar events found.")
+
+            except Exception as e:
+                print(f"Error checking Outlook Calendar events: {str(e)}")
+                print(traceback.format_exc())
 
         if crmUserId is not None:
             self.agents[call_sid]['lead_id'] = crmUserId
@@ -942,5 +1287,11 @@ class CallHandler:
         await self.backend_service.update_call_info(data)
         
     async def get_nango_session_token(self, user_id, allowed_integrations=None):
-        """Get a Nango session token for the frontend to use when connecting to third-party services"""
+        """Get a Nango session token for the frontend to use when connecting to third-party services
+        
+        Args:
+            user_id: Unique identifier for the user
+            allowed_integrations: List of integration IDs the user is allowed to connect to (optional) 
+           
+        """
         return await self.chatgpt_service.get_nango_session_token(user_id, allowed_integrations)

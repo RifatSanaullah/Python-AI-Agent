@@ -56,7 +56,7 @@ async def incoming_call(request: Request, call_handler: CallHandler = Depends(ge
     application_sid = data.get('ApplicationSid')
     direction = data.get('Direction')
     fromNumber = data.get('From')
-    dialed_number = data.get("To")
+    dialed_number = data.get('To')
     call_id = data.get("CallSid")
     print(data.get("IsBoom"))
     data = {
@@ -134,11 +134,12 @@ async def fallback_status_callback(request: Request, call_handler: CallHandler =
 
 @app.post("/nango-callback")
 async def nango_webhook_callback(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
-   
+
     try:
         # Parse the webhook payload
+  
         webhook_data = await request.json()
-        
+
         # Check if this is an auth creation webhook
         if (webhook_data.get("type") == "auth" and 
             webhook_data.get("operation") == "creation" and 
@@ -149,15 +150,13 @@ async def nango_webhook_callback(request: Request, call_handler: CallHandler = D
             end_user_id = webhook_data.get("endUser", {}).get("endUserId")
             organization_id = webhook_data.get("endUser", {}).get("organizationId")
             integration_id = webhook_data.get("providerConfigKey")  # Get the integration type (e.g., "zoho-crm", "hubspot")
-            
+            print("Nango webhook callback received:{integration_id}")
             if not connection_id or not end_user_id:
                 return JSONResponse(
                     status_code=400,
                     content={"status": "error", "message": "Missing required fields"}
                 )
             
-            # Log the connection info
-            print(f"Received Nango connection: User {end_user_id}, Connection {connection_id}, Integration: {integration_id}")
             
             # Store the connection ID in the user's account
             try:
@@ -165,7 +164,9 @@ async def nango_webhook_callback(request: Request, call_handler: CallHandler = D
                 is_zoho = "zoho" in (integration_id or "").lower()
                 is_hubspot = "hubspot" in (integration_id or "").lower()
                 is_salesforce = "salesforce" in (integration_id or "").lower()
-                
+                is_calendly = "calendly" in (integration_id or "").lower()
+                is_google_calendar = "google-calendar" in (integration_id or "").lower()
+                is_outlook = "outlook" in (integration_id or "").lower()
                 # Store the connection ID in the account
                 result = await call_handler.backend_service.store_nango_connection(
                     {
@@ -175,7 +176,10 @@ async def nango_webhook_callback(request: Request, call_handler: CallHandler = D
                         "integration_type": integration_id,
                         "is_zoho": is_zoho,
                         "is_hubspot": is_hubspot,
-                        "is_salesforce": is_salesforce
+                        "is_salesforce": is_salesforce,
+                        "is_calendly": is_calendly,
+                        "is_google_calendar": is_google_calendar,
+                        "is_outlook": is_outlook,
                     }
                 )
                 
