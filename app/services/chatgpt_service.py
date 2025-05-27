@@ -318,7 +318,7 @@ class ChatGPTService:
                         Escalate only when necessary.
                         Always maintain control of the conversation.
                 """
-    def resolve_prompt(prompt_from_frontend: str, is_existing: bool) -> str:
+    def resolve_prompt(self, prompt_from_frontend: str, is_existing: bool) -> str:
         if is_existing:
             # Remove <if new>...</if> block
             prompt = re.sub(r'<if new>[\s\S]*?</if>', '', prompt_from_frontend, flags=re.IGNORECASE)
