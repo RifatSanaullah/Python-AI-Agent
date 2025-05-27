@@ -12,7 +12,7 @@ from app.services.google_calendar_service import GoogleCalendarService
 from app.services.outlook_calendar_service import OutlookCalendarService
 from typing import Dict, Any, List
 from app.services.backend_service import BackendHandler
-
+import html
 import re, json
 
 class StreamingChunker:
@@ -319,15 +319,15 @@ class ChatGPTService:
                         Always maintain control of the conversation.
                 """
     def resolve_prompt(self, prompt_from_frontend: str, is_existing: bool) -> str:
+        # Step 1: Decode HTML entities
+        prompt = html.unescape(prompt_from_frontend)
+
+        # Step 2: Replace conditional blocks based on `is_existing`
         if is_existing:
-            # Remove <if new>...</if> block
-            prompt = re.sub(r'<if new>[\s\S]*?</if>', '', prompt_from_frontend, flags=re.IGNORECASE)
-            # Extract and keep <if existing>...</if> block content
+            prompt = re.sub(r'<if new>[\s\S]*?</if>', '', prompt, flags=re.IGNORECASE)
             prompt = re.sub(r'<if existing>([\s\S]*?)</if>', r'\1', prompt, flags=re.IGNORECASE)
         else:
-            # Remove <if existing>...</if> block
-            prompt = re.sub(r'<if existing>[\s\S]*?</if>', '', prompt_from_frontend, flags=re.IGNORECASE)
-            # Extract and keep <if new>...</if> block content
+            prompt = re.sub(r'<if existing>[\s\S]*?</if>', '', prompt, flags=re.IGNORECASE)
             prompt = re.sub(r'<if new>([\s\S]*?)</if>', r'\1', prompt, flags=re.IGNORECASE)
 
         return prompt.strip()
