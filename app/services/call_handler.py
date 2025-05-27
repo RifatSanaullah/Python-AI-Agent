@@ -867,6 +867,7 @@ class CallHandler:
         phone = result['phone']
         description = result['description']
         existing_appointment = result['existing_appointment']
+        print("existing_appointment: ", existing_appointment)
         await self.synthesize_response(greetings , stream_sid)
         await self.chatgpt_service.process_initial_message(stream_sid, self.get_agent_knowledge)
         self.chatgpt_service.add_message(stream_sid, "assistant", greetings)
