@@ -673,6 +673,7 @@ class CallHandler:
             "agentName" : self.agents[self.sessions[call_id]['call_sid']]['name'],
             "gender" : self.agents[self.sessions[call_id]['call_sid']]['voice']['gender'],
             "integrations" : self.agents[self.sessions[call_id]['call_sid']]['integrations'],
+            "new_knowledge" : self.agents[self.sessions[call_id]['call_sid']]['new_knowledge'],
         }
         self.agents[self.sessions[call_id]['call_sid']]['knowledge'] = None
         self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'] = None
@@ -814,6 +815,7 @@ class CallHandler:
         self.agents[call_id]['route_call'] = False
         self.agents[call_id]['from'] = data['from']
         self.agents[call_id]['previous_convo_summary'] = None
+        self.agents[call_id]['new_knowledge'] = False
 
         if 'appointment' in api_response['data'] and 'eventId' in api_response['data']['appointment']:
             self.agents[call_id]['event_id'] = api_response['data']['appointment']['eventId']
@@ -913,7 +915,7 @@ class CallHandler:
                 description = details['notes']
                 crmUserId = details['id']
                 greetings = self.modify_greeting(fullname, greetings)
-        
+                self.agents[call_sid]['new_knowledge'] = True
         elif self.agents[call_sid]['integrations']['salesforce_connection_id']:
 
             formatted_number = self.formatToSalesforceNumber(self.agents[call_sid]['from'])

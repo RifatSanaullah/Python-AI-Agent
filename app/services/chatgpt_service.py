@@ -286,18 +286,41 @@ class ChatGPTService:
         # self.conversations[conversation_id].append(
         #             {"role": "system", "content": "When the user asks about business or other information, respond only using the provided knowledge data and if the information is not available kindly notify the user. Do not ask for their details during this exchange. Once they have completed their query, you may resume asking for their details as needed."},
         # )
-                        
-        for item in knowledge_base['knowledge']:
-            if item['type'] != 'GREETINGS':
-                conversations[conversation_id].append(
-                    {"role": "system", "content": item['content']}
-                )
+
+        if knowledge_base['new_knowledge'] is True:
+            conversations[conversation_id].append(
+                {"role": "system", "content": self.get_senior_living_knowledge()}
+            )
+        else:       
+            for item in knowledge_base['knowledge']:
+                if item['type'] != 'GREETINGS':
+                    conversations[conversation_id].append(
+                        {"role": "system", "content": item['content']}
+                    )
 
         if knowledge_base['aiInstructions']:
             conversations[conversation_id].append(
                     {"role": "system", "content": knowledge_base['aiInstructions']}
                 )
-
+    def get_senior_living_knowledge(self):
+        return f"""You are the AI receptionist for BoomersHub. This caller is already in the CRM. Greet them by name and ask how you can assist.
+                    Call Flow:
+                        Greet & Ask Purpose
+                        Address the caller by name.
+                        Ask how you can help today.
+                    If Caller Requests Info:
+                        If you know the answer: Provide it clearly, referring to past call summaries if needed. Then ask if they need anything else.
+                        If you don't know: Let them know a human advisor will follow up within 24 hours. Flag for escalation.
+                    If Caller Wants to Update Info:
+                        Ask what details they want to change.
+                        Make the updates and confirm them.
+                        If no further help is needed, politely end the call.
+                    Rules:
+                        Never re-ask existing info unless confirming.
+                        Be concise, warm, and professional.
+                        Escalate only when necessary.
+                        Always maintain control of the conversation.
+                """
     async def process_initial_message(self, conversation_id, get_agent_knowledge):
 
         if conversation_id not in self.conversations:
