@@ -896,6 +896,7 @@ class CallHandler:
         email = None
         phoneNumber = None
         description = None
+        exisiting_appointment = None
         crmUserId = None
         isBoom = self.agents[call_sid]['isBoom']
 
@@ -1049,8 +1050,8 @@ class CallHandler:
                 
                 # Extract events from response format
                 events_collection = []
-                if events_result and 'items' in events_result:
-                    events_collection = events_result['items']
+                if events_result and 'records' in events_result:
+                    events_collection = events_result['records']
                 
                 if events_collection and len(events_collection) > 0:
                     # Print detailed information about each scheduled event
@@ -1058,14 +1059,19 @@ class CallHandler:
                     for i, event in enumerate(events_collection):
                         print(f"\nEvent #{i+1}:")
                         # Print key event details
-                        print(f"  Summary: {event.get('summary', 'N/A')}")
-                        print(f"  Status: {event.get('status', 'N/A')}")
-                        if 'start' in event:
-                            print(f"  Start time: {event['start'].get('dateTime', event['start'].get('date', 'N/A'))}")
-                        if 'end' in event:
-                            print(f"  End time: {event['end'].get('dateTime', event['end'].get('date', 'N/A'))}")
-                        if 'location' in event:
-                            print(f"  Location: {event.get('location', 'N/A')}")
+                        if 'start' in event and 'date' in event['start']:
+                            exisiting_appointment = '' + event['start']['date'] + ','
+                        
+                        if 'start' in event and 'dateTime' in event['start']:
+                            start = event['start'].get('dateTime', 'N/A')
+                            timezone = event['start'].get('timeZone', 'N/A')
+                            exisiting_appointment = '' + start + ' (' + timezone + '),'
+
+                        #     print(f"  Start time: {event['start'].get('dateTime', event['start'].get('date', 'N/A'))}")
+                        # if 'end' in event:
+                        #     print(f"  End time: {event['end'].get('dateTime', event['end'].get('date', 'N/A'))}")
+                        # if 'location' in event:
+                        #     print(f"  Location: {event.get('location', 'N/A')}")
                         
                     print("===============================\n")
                     
@@ -1105,6 +1111,7 @@ class CallHandler:
                     events_collection = events_result['records']
                 
                 if events_collection and len(events_collection) > 0:
+                    exisiting_appointment = ''
                     for i, event in enumerate(events_collection):
                         print(f"\nEvent #{i+1}:")
                         print(f"  Subject: {event.get('subject', 'N/A')}")
@@ -1112,6 +1119,7 @@ class CallHandler:
                         if 'start' in event:
                             start = event['start'].get('dateTime', 'N/A')
                             timezone = event['start'].get('timeZone', 'N/A')
+                            exisiting_appointment = '' + start + ' (' + timezone + '),'
                             print(f"  Start: {start} ({timezone})")
                             
                         if 'end' in event:
@@ -1124,15 +1132,6 @@ class CallHandler:
                         
                     print("===============================\n")
                     
-                    # Update description with events count
-                    events_count = len(events_collection)
-                    outlook_info = f"Has {events_count} upcoming Outlook Calendar event"
-                    outlook_info += "s" if events_count > 1 else ""
-                    
-                    if description:
-                        description += f" {outlook_info}."
-                    else:
-                        description = outlook_info + "."
                 else:
                     print("No upcoming Outlook Calendar events found.")
 
@@ -1144,7 +1143,7 @@ class CallHandler:
             self.agents[call_sid]['lead_id'] = crmUserId
             self.agents[call_sid]['previous_convo_summary'] = description
 
-        return {"greetings" : greetings , "email": email ,"phone": phoneNumber ,"description" : description, "fullname" : fullname }
+        return {"greetings" : greetings , "email": email ,"phone": phoneNumber ,"description" : description, "fullname" : fullname, "exisiting_appointment": exisiting_appointment}
     
     async def enable_background_sound(self ,call_id, status = False):
         self.sessions[call_id]['background_sound'] = status
