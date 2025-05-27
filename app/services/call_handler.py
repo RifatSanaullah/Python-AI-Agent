@@ -280,6 +280,8 @@ class CallHandler:
                 }
                 await self.chatgpt_service.hubspot_service.update_leads(integrations['hubspot_connection_id'], body)
             else:
+                if summary['phone'] == '' :
+                    summary['phone'] = self.format_us_number_simple(self.agents[call_id]['from'])
                 summary = self.remove_empty_values(summary)
                 body = {
                     'contact' : summary,
@@ -319,6 +321,8 @@ class CallHandler:
                     if summary['Company'] == '':
                         summary['Company'] = 'N/A'
                     if summary['LastName'] != '':
+                        if summary['Phone'] == '' :
+                            summary['Phone'] = self.formatToSalesforceNumber(self.agents[call_id]['from'])
                         summary = self.remove_empty_values(summary)
                         if summary['LastName'] == summary['FirstName']:
                             summary['FirstName'] = ''
@@ -382,6 +386,8 @@ class CallHandler:
                     if summary['Company'] == '':
                         summary['Company'] = 'N/A'
                     if summary['Last_Name'] != '':
+                        if summary['Phone'] == '' :
+                            summary['Phone'] = self.format_us_number_simple(self.agents[call_id]['from'])
                         summary = self.remove_empty_values(summary)
                         if summary['Last_Name'] == summary['First_Name']:
                             summary['First_Name'] = ''
@@ -884,6 +890,8 @@ class CallHandler:
         if phone is not None and phone != "":
             self.chatgpt_service.add_message(stream_sid, "user", f"My Phone Number is: {phone}")
             self.chatgpt_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Phone Number of the user you will use in this conversation: {phone}")
+        else:
+            self.chatgpt_service.add_system_message(stream_sid, "system", f"This is the Phone Number of the user you will use in this conversation and you can ask the user if he/she wants to change the phone number: {self.agents[call_sid]['from']}")
         if description is not None and description != "":
             self.chatgpt_service.add_system_message(stream_sid, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
 
