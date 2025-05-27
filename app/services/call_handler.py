@@ -45,7 +45,7 @@ class CallHandler:
         self.backend_service = BackendHandler()
         self.chatgpt_service = ChatGPTService()
         self.s3_service = S3Service()
-        self.playht_service = PlayHT()
+        # self.playht_service = PlayHT()
         self.elevenlabs_service = ElevenLabsService()
         self.zoho_service = ZohoService()
         self.hubspot_service = HubSpotService()
@@ -196,7 +196,6 @@ class CallHandler:
             session['deepgram_transcribe_service'].cancel_transmit()
             if session['stream_sid'] in self.chatgpt_service.conversations:
                 conversations = self.chatgpt_service.conversations[session['stream_sid']]
-                # conversations = convo
                 outputFile= f"recordings/{call_id}.wav"
                 await self.convert_mulaw_to_wav(f"recordings/{call_id}.mulaw", outputFile)
                 # os.remove(output_file)
@@ -223,13 +222,14 @@ class CallHandler:
                 }
 
                 try:
-                    response = await self.backend_service.update_conversation_info(data)
                     isBoom = self.agents[call_id]['isBoom']
                     if isBoom is not None or isBoom == True or isBoom == 'true':
-                        await self.backend_service.update_conversation_bh({"conversations": data['conversations']})
-                    elif 'summary' in response:
-                        summary = response['summary']
-                        await self.update_crm_data(call_id, data['lead_id'], data['integrations'], summary, response['appointment'], data['event_id'], data['previous_convo_summary'])
+                        await self.backend_service.update_conversation_bh({ "lead_id" : lead_id, "conversations": data['conversations']})
+                    else:
+                        response = await self.backend_service.update_conversation_info(data)
+                        if 'summary' in response:
+                            summary = response['summary']
+                            await self.update_crm_data(call_id, data['lead_id'], data['integrations'], summary, response['appointment'], data['event_id'], data['previous_convo_summary'])
                 except Exception as e:
                     print(f"Error updating conversation info: {str(e)}")
                     # Log the full exception traceback
@@ -257,14 +257,29 @@ class CallHandler:
 
         if integrations and integrations["hubspot_connection_id"] is not None and integrations["hubspot_connection_id"] != '':
             summary["email"] = summary['email'].replace(" ", "")
-            summary["phone"] = self.format_us_number_simple(summary["mobile_phone_number"])
+            summary["phone"] = self.format_us_number_simple(summary["phone"])
+            if summary['phone'] != self.agents[call_id]['from']:
+                summary['mobilephone'] = self.format_us_number_simple(self.agents[call_id]['from'])
+            notes  = summary['description']
+            summary['description'] = ''
             if lead_id:
             # Update CRM Contact
             # summary = await self.chatgpt_service.get_summary(hubspot_patch_format, conversations)
-                summary["id"] = lead_id
-                await self.chatgpt_service.hubspot_service.update_leads(integrations['hubspot_connection_id'], summary)
+                # summary["id"] = lead_id
+                summary = self.remove_empty_values(summary)
+                body = {
+                    'Id' : lead_id,
+                    'contact' : summary,
+                    'note' : notes
+                }
+                await self.chatgpt_service.hubspot_service.update_leads(integrations['hubspot_connection_id'], body)
             else:
-                await self.chatgpt_service.hubspot_service.store_leads(integrations['hubspot_connection_id'], summary)
+                summary = self.remove_empty_values(summary)
+                body = {
+                    'contact' : summary,
+                    'note' : notes
+                }
+                await self.chatgpt_service.hubspot_service.store_leads(integrations['hubspot_connection_id'], body)
                 
 
         if integrations and integrations["salesforce_connection_id"] is not None and integrations["salesforce_connection_id"] != '':
@@ -328,6 +343,54 @@ class CallHandler:
 
             except Exception as e:
                 print("Event Creation or update appointment Failed" , e)
+        if integrations and integrations["zoho_connection_id"] is not None and integrations["zoho_connection_id"] != '':
+            summary["Email"] = summary['Email'].replace(" ", "").replace(",",'')
+            summary["Phone"] = self.format_us_number_simple(summary["Phone"])
+            if summary['Phone'] != self.agents[call_id]['from']:
+                summary['Mobile'] = self.format_us_number_simple(self.agents[call_id]['from'])
+            # Update CRM Contact
+            try:
+                if lead_id:
+            # summary = await self.chatgpt_service.get_summary(hubspot_patch_format, conversations)
+                    # summary["Id"] = lead_id
+                    if summary['Last_Name'] == '' :
+                        summary['Last_Name'] = summary['First_Name']
+                    if summary['Company'] == '':
+                        summary['Company'] = 'N/A'
+                    if summary['Last_Name'] != '':
+                        summary = self.remove_empty_values(summary)
+                        if summary['Last_Name'] == summary['First_Name']:
+                            summary['First_Name'] = ''
+                        body = {
+                                'Id' : lead_id,
+                                'lead' : summary,
+                                'note' : {
+                                    'Note_Title' : 'Call Summary',
+                                    'Note_Content' : summary['Description']
+                                } 
+                        }
+                        await self.chatgpt_service.zoho_service.update_leads(integrations['zoho_connection_id'], body)
+                else:
+                    if summary['Last_Name'] == '' :
+                        summary['Last_Name'] = summary['First_Name']
+                    if summary['Company'] == '':
+                        summary['Company'] = 'N/A'
+                    if summary['Last_Name'] != '':
+                        summary = self.remove_empty_values(summary)
+                        if summary['Last_Name'] == summary['First_Name']:
+                            summary['First_Name'] = ''
+                        body = {
+                                'lead' : summary,
+                                'note' : {
+                                    'Note_Title' : 'Call Summary',
+                                    'Note_Content' : summary['Description'] 
+                                } 
+                        }
+                        await self.chatgpt_service.zoho_service.store_leads(integrations['zoho_connection_id'], body)
+            except Exception as e:
+                print("Lead Creat or Update failed" , e)
+
+
 
 
     def remove_empty_values(self, data: dict) -> dict:
@@ -639,7 +702,6 @@ class CallHandler:
             self.timer.start()
             return
         greetings = self.agents[call_sid]['greetings']
-
         result = await self.gather_contact_info(call_sid, greetings)
         fullname = result['fullname']
         greetings = result['greetings']
@@ -680,10 +742,17 @@ class CallHandler:
         isBoom = self.agents[call_sid]['isBoom']
 
         if isBoom is not None or isBoom == True or isBoom == 'true':
-
-            return {"greetings" : greetings , "email": email ,"phone": phoneNumber ,"description" : description, "fullname" : fullname }
+            result = await self.backend_service.get_lead_info_boom({"phone" : self.agents[call_sid]['from'] })
+            if result and 'data' in result and result['data'] is not None:
+                details = result['data']
+                fullname = details['firstName']
+                email = details['email']
+                phoneNumber = details['phone']
+                description = details['notes']
+                crmUserId = details['id']
+                greetings = self.modify_greeting(fullname, greetings)
         
-        if self.agents[call_sid]['integrations']['salesforce_connection_id']:
+        elif self.agents[call_sid]['integrations']['salesforce_connection_id']:
 
             formatted_number = self.formatToSalesforceNumber(self.agents[call_sid]['from'])
             result = await self.chatgpt_service.salesforce_service.get_lead_by_phone(self.agents[call_sid]['integrations']['salesforce_connection_id'], formatted_number)
@@ -699,7 +768,7 @@ class CallHandler:
                 description = details['Description']
                 greetings = self.modify_greeting(fullname, greetings)
 
-        if self.agents[call_sid]['integrations']['hubspot_connection_id']:
+        elif self.agents[call_sid]['integrations']['hubspot_connection_id']:
 
             result = await self.chatgpt_service.hubspot_service.get_contact_by_phone(self.agents[call_sid]['integrations']['hubspot_connection_id'], self.agents[call_sid]['from'])
             
@@ -710,6 +779,21 @@ class CallHandler:
                 phoneNumber = details['phone']
                 description = details['notes']
                 crmUserId = result['results'][0]['id']
+                greetings = self.modify_greeting(fullname, greetings)
+
+        elif self.agents[call_sid]['integrations']['zoho_connection_id']:
+
+            result = await self.chatgpt_service.zoho_service.get_lead_by_phone(self.agents[call_sid]['integrations']['zoho_connection_id'], self.agents[call_sid]['from'])
+            
+            if len(result) > 0:
+                details = result[0]
+                fullname = details['Last_Name']
+                if details['First_Name'] and details['First_Name'] is not None:
+                    fullname = details['First_Name']
+                crmUserId = details['Id']
+                email = details['Email']
+                phoneNumber = details['Phone']
+                description = details['Description']
                 greetings = self.modify_greeting(fullname, greetings)
 
         if crmUserId is not None:
