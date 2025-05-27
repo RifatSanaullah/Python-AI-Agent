@@ -866,6 +866,7 @@ class CallHandler:
         email = result['email']
         phone = result['phone']
         description = result['description']
+        existing_appointment = result['existing_appointment']
         await self.synthesize_response(greetings , stream_sid)
         await self.chatgpt_service.process_initial_message(stream_sid, self.get_agent_knowledge)
         self.chatgpt_service.add_message(stream_sid, "assistant", greetings)
@@ -883,7 +884,8 @@ class CallHandler:
         if description is not None and description != "":
             self.chatgpt_service.add_system_message(stream_sid, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
 
-        
+        if existing_appointment is not None and existing_appointment != "":
+            self.chatgpt_service.add_system_message(stream_sid, "system", f"When you mention appointments date and time don't mention given appointment times and tell user to pick another time. Already have appointment in these times: {existing_appointment}")
         return "OK", 200
     
     def modify_greeting(self, name, greetings):
@@ -896,7 +898,7 @@ class CallHandler:
         email = None
         phoneNumber = None
         description = None
-        exisiting_appointment = None
+        existing_appointment = None
         crmUserId = None
         isBoom = self.agents[call_sid]['isBoom']
 
@@ -1060,12 +1062,12 @@ class CallHandler:
                         print(f"\nEvent #{i+1}:")
                         # Print key event details
                         if 'start' in event and 'date' in event['start']:
-                            exisiting_appointment = '' + event['start']['date'] + ','
+                            existing_appointment = '' + event['start']['date'] + ','
                         
                         if 'start' in event and 'dateTime' in event['start']:
                             start = event['start'].get('dateTime', 'N/A')
                             timezone = event['start'].get('timeZone', 'N/A')
-                            exisiting_appointment = '' + start + ' (' + timezone + '),'
+                            existing_appointment = '' + start + ' (' + timezone + '),'
 
                         #     print(f"  Start time: {event['start'].get('dateTime', event['start'].get('date', 'N/A'))}")
                         # if 'end' in event:
@@ -1111,7 +1113,7 @@ class CallHandler:
                     events_collection = events_result['records']
                 
                 if events_collection and len(events_collection) > 0:
-                    exisiting_appointment = ''
+                    existing_appointment = ''
                     for i, event in enumerate(events_collection):
                         print(f"\nEvent #{i+1}:")
                         print(f"  Subject: {event.get('subject', 'N/A')}")
@@ -1119,7 +1121,7 @@ class CallHandler:
                         if 'start' in event:
                             start = event['start'].get('dateTime', 'N/A')
                             timezone = event['start'].get('timeZone', 'N/A')
-                            exisiting_appointment = '' + start + ' (' + timezone + '),'
+                            existing_appointment = '' + start + ' (' + timezone + '),'
                             print(f"  Start: {start} ({timezone})")
                             
                         if 'end' in event:
@@ -1143,7 +1145,7 @@ class CallHandler:
             self.agents[call_sid]['lead_id'] = crmUserId
             self.agents[call_sid]['previous_convo_summary'] = description
 
-        return {"greetings" : greetings , "email": email ,"phone": phoneNumber ,"description" : description, "fullname" : fullname, "exisiting_appointment": exisiting_appointment}
+        return {"greetings" : greetings , "email": email ,"phone": phoneNumber ,"description" : description, "fullname" : fullname, "existing_appointment": existing_appointment}
     
     async def enable_background_sound(self ,call_id, status = False):
         self.sessions[call_id]['background_sound'] = status
