@@ -808,7 +808,17 @@ class CallHandler:
         elif len(digits) == 11 and digits.startswith('1'):
             return '+' + digits
         else:
-            return number_str 
+            return number_str
+        
+    def format_us_phone(self, number: str):
+        number = self.format_us_number_simple(number)
+        if number.startswith("+1") and len(number) == 12:
+            area_code = number[2:5]
+            first_part = number[5:8]
+            second_part = number[8:]
+            return f"({area_code}) {first_part}-{second_part}"
+        else:
+            return number
         
     async def handle_call(self, call_id: str, data):
         print("Handling call...")
@@ -891,7 +901,7 @@ class CallHandler:
             self.chatgpt_service.add_message(stream_sid, "user", f"My Phone Number is: {phone}")
             self.chatgpt_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Phone Number of the user you will use in this conversation: {phone}")
         else:
-            self.chatgpt_service.add_system_message(stream_sid, "system", f"This is the Phone Number of the user you will use in this conversation and you can ask the user if he/she wants to change the phone number: {self.agents[call_sid]['from']}")
+            self.chatgpt_service.add_system_message(stream_sid, "system", f"This is the Phone Number of the user you will use in this conversation and you can ask the user if he/she wants to change the phone number: {self.format_us_phone(self.agents[call_sid]['from'])}")
         if description is not None and description != "":
             self.chatgpt_service.add_system_message(stream_sid, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
 
@@ -899,8 +909,13 @@ class CallHandler:
             self.chatgpt_service.add_system_message(stream_sid, "system", f"When you mention appointments date and time don't mention given appointment times and tell user to pick another time. Already have appointment in these times: {existing_appointment}")
         return "OK", 200
     
-    def modify_greeting(self, name, greetings):
+    def modify_greeting(self, name, greetings, call_sid):
         greetings = greetings.replace('Hello', '')
+        if call_sid in self.agents and "id" in self.agents[call_sid]:
+            agent_id = self.agents[call_sid]['id']
+            if agent_id == '17' or agent_id == 17:
+                greetings = f'Hi {name}, welcome back! This is Cindy — happy to assist you again with your senior living needs. How can I help you today?'
+                return greetings
         greetings= 'Hello ' + name + ', ' + greetings
         return greetings
     
@@ -922,7 +937,7 @@ class CallHandler:
                 phoneNumber = details['phone']
                 description = details['notes']
                 crmUserId = details['id']
-                greetings = self.modify_greeting(fullname, greetings)
+                greetings = self.modify_greeting(fullname, greetings,call_sid)
                 self.agents[call_sid]['new_knowledge'] = True
         elif self.agents[call_sid]['integrations']['salesforce_connection_id']:
 
@@ -938,7 +953,7 @@ class CallHandler:
                 email = details['Email']
                 phoneNumber = details['Phone']
                 description = details['Description']
-                greetings = self.modify_greeting(fullname, greetings)
+                greetings = self.modify_greeting(fullname, greetings, call_sid)
                 self.agents[call_sid]['new_knowledge'] = True
 
         elif self.agents[call_sid]['integrations']['hubspot_connection_id']:
@@ -952,7 +967,7 @@ class CallHandler:
                 phoneNumber = details['phone']
                 description = details['notes']
                 crmUserId = result['results'][0]['id']
-                greetings = self.modify_greeting(fullname, greetings)
+                greetings = self.modify_greeting(fullname, greetings, call_sid)
                 self.agents[call_sid]['new_knowledge'] = True
 
         elif self.agents[call_sid]['integrations']['zoho_connection_id']:
@@ -968,7 +983,7 @@ class CallHandler:
                 email = details['Email']
                 phoneNumber = details['Phone']
                 description = details['Description']
-                greetings = self.modify_greeting(fullname, greetings)
+                greetings = self.modify_greeting(fullname, greetings, call_sid)
                 self.agents[call_sid]['new_knowledge'] = True
 
 
