@@ -916,6 +916,9 @@ class CallHandler:
             if agent_id == '17' or agent_id == 17:
                 greetings = f'Hi {name}, welcome back! This is Cindy — happy to assist you again with your senior living needs. How can I help you today?'
                 return greetings
+            elif agent_id == '16' or agent_id == 16:
+                greetings = f'Hi {name}, welcome back! This is Sam — happy to assist you again with your real estate needs. How can I help you today?'
+                return greetings
         greetings= 'Hello ' + name + ', ' + greetings
         return greetings
     
