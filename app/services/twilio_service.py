@@ -122,7 +122,7 @@ class TwilioService:
 
     async def send_audio_stream(self, websocket, stream_sid, audio_data):
         """Send audio stream as a websocket media event to Twilio."""
-        print("Sending audio stream...")
+        # print("Sending audio stream...")
         # Encode audio data to base64 and remove filetype header
         encoded_audio_data = base64.b64encode(audio_data).decode('utf-8')
         await websocket.send_json({
