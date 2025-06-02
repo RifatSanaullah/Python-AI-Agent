@@ -417,11 +417,11 @@ class CallHandler:
                         "description": event.get("Description"),
                         "start": {
                             "dateTime": event.get("StartDateTime"),
-                            "timeZone": "America/New_York"  # Adjust time zone as needed
+                            "timeZone": event.get("timezone"),
                         },
                         "end": {
                             "dateTime": event.get("EndDateTime"),
-                            "timeZone": "America/New_York"  # Adjust time zone as needed      
+                            "timeZone": event.get("timezone")  # Adjust time zone as needed      
                         }
                         # Attendees can be added her?e if available in 'event'
                         # "attendees": event.get("attendees", []) 
@@ -469,7 +469,7 @@ class CallHandler:
                         "description": event.get("Description"),
                         "startDateTime": event.get("StartDateTime"), # Expected as ISO 8601 string
                         "endDateTime": event.get("EndDateTime"),     # Expected as ISO 8601 string
-                        "timeZone": event.get("timeZone", "America/New_York"), # Default if not in event
+                        "timeZone": event.get("timeZone"), # Default if not in event
                         "attendees": outlook_attendees # List of email strings
                         # Add other fields like 'location' if your Nango script handles them
                     }
@@ -832,6 +832,12 @@ class CallHandler:
         self.agents[call_id]['from'] = data['from']
         self.agents[call_id]['previous_convo_summary'] = None
         self.agents[call_id]['new_knowledge'] = False
+        
+        # Add user preference for allowing meeting conflicts
+        if 'userPreference' in api_response['data'] and 'allowMeetingConflict' in api_response['data']['userPreference']:
+            self.agents[call_id]['allowMeetingConflict'] = api_response['data']['userPreference']['allowMeetingConflict']
+        else:
+            self.agents[call_id]['allowMeetingConflict'] = False  # Default to False if not specified
 
         if 'appointment' in api_response['data'] and 'eventId' in api_response['data']['appointment']:
             self.agents[call_id]['event_id'] = api_response['data']['appointment']['eventId']
@@ -877,6 +883,7 @@ class CallHandler:
             self.timer = Timer(5, self.twilio_service.hangup_call, args=[call_sid])
             self.timer.start()
             return
+        print("agents: ", self.agents[call_sid])
         greetings = self.agents[call_sid]['greetings']
         result = await self.gather_contact_info(call_sid, greetings)
         fullname = result['fullname']
@@ -886,6 +893,8 @@ class CallHandler:
         description = result['description']
         existing_appointment = result['existing_appointment']
         print("existing_appointment: ", existing_appointment)
+        isConflict = self.agents[call_sid]['allowMeetingConflict']
+        print("isConflict: ", isConflict)
         await self.synthesize_response(greetings , stream_sid)
         await self.chatgpt_service.process_initial_message(stream_sid, self.get_agent_knowledge)
         self.chatgpt_service.add_message(stream_sid, "assistant", greetings)
@@ -904,9 +913,20 @@ class CallHandler:
             self.chatgpt_service.add_system_message(stream_sid, "system", f"This is the Phone Number of the user you will use in this conversation and you can ask the user if he/she wants to change the phone number: {self.format_us_phone(self.agents[call_sid]['from'])}")
         if description is not None and description != "":
             self.chatgpt_service.add_system_message(stream_sid, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
-
+       
         if existing_appointment is not None and existing_appointment != "":
-            self.chatgpt_service.add_system_message(stream_sid, "system", f"When you mention appointments date and time don't mention given appointment times and tell user to pick another time. Already have appointment in these times: {existing_appointment}")
+            self.chatgpt_service.add_system_message(
+                stream_sid, 
+                "system",
+                f"""Task: if user want to reschedule an appointment or meeting.
+
+                Specifics:
+                1. You are given a variable `existing_appointment` containing booked time slots: {existing_appointment}
+                2. You are also given a boolean variable `isConflict` with value: {isConflict}.
+                3. If `isConflict` is true, notify the user that the requested time may overlap with an existing appointment and allow them to either proceed or choose another time.
+                4. If `isConflict` is false, do not mention the existing appointment times. Simply tell the user that the time is unavailable and ask them to pick another one."""
+            )
+
         return "OK", 200
     
     def modify_greeting(self, name, greetings, call_sid):
@@ -1080,7 +1100,7 @@ class CallHandler:
                 )
                 
 
-                print(f"Google Calendar Events result: {json.dumps(events_result, indent=2)}")
+                # print(f"Google Calendar Events result: {json.dumps(events_result, indent=2)}")
                 
                 # Extract events from response format
                 events_collection = []

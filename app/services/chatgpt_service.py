@@ -290,7 +290,7 @@ class ChatGPTService:
         for item in knowledge_base['knowledge']:
                 if item['type'] != 'GREETINGS':
                     content = self.resolve_prompt(item['content'], knowledge_base['new_knowledge'])
-                    print(f"Adding system message: {content}")
+                    # print(f"Adding system message: {content}")
                     conversations[conversation_id].append(
                         {"role": "system", "content": content}
                     )
