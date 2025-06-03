@@ -34,7 +34,9 @@ from io import BytesIO
 import numpy as np
 import soundfile as sf
 import time , re
+import traceback
 from app.utils.responseformat import hubspot_patch_format
+from app.utils.datetime_formatter import format_datetime_human_readable, is_future_datetime
 import json
 # Configure logging
 logging.basicConfig(
@@ -469,7 +471,7 @@ class CallHandler:
                         "description": event.get("Description"),
                         "startDateTime": event.get("StartDateTime"), # Expected as ISO 8601 string
                         "endDateTime": event.get("EndDateTime"),     # Expected as ISO 8601 string
-                        "timeZone": event.get("timeZone"), # Default if not in event
+                        "timeZone": event.get("timezone"), # Default if not in event
                         "attendees": outlook_attendees # List of email strings
                         # Add other fields like 'location' if your Nango script handles them
                     }
@@ -883,7 +885,6 @@ class CallHandler:
             self.timer = Timer(5, self.twilio_service.hangup_call, args=[call_sid])
             self.timer.start()
             return
-        print("agents: ", self.agents[call_sid])
         greetings = self.agents[call_sid]['greetings']
         result = await self.gather_contact_info(call_sid, greetings)
         fullname = result['fullname']
@@ -892,9 +893,9 @@ class CallHandler:
         phone = result['phone']
         description = result['description']
         existing_appointment = result['existing_appointment']
-        print("existing_appointment: ", existing_appointment)
-        isConflict = self.agents[call_sid]['allowMeetingConflict']
-        print("isConflict: ", isConflict)
+        print("Existing appointment: ", existing_appointment)
+        isAllowMeetingConflict = self.agents[call_sid]['allowMeetingConflict']
+        print("isAllowMeetingConflict: ", isAllowMeetingConflict)
         await self.synthesize_response(greetings , stream_sid)
         await self.chatgpt_service.process_initial_message(stream_sid, self.get_agent_knowledge)
         self.chatgpt_service.add_message(stream_sid, "assistant", greetings)
@@ -914,18 +915,18 @@ class CallHandler:
         if description is not None and description != "":
             self.chatgpt_service.add_system_message(stream_sid, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
        
-        if existing_appointment is not None and existing_appointment != "":
+        if not isAllowMeetingConflict and existing_appointment is not None and existing_appointment != "":
+            print("Existing appointment found: ", existing_appointment)
             self.chatgpt_service.add_system_message(
-                stream_sid, 
-                "system",
-                f"""Task: if user want to reschedule an appointment or meeting.
+            stream_sid,
+            "system",
+            f"""Task: if user wants to reschedule an appointment or meeting.
 
-                Specifics:
-                1. You are given a variable `existing_appointment` containing booked time slots: {existing_appointment}
-                2. You are also given a boolean variable `isConflict` with value: {isConflict}.
-                3. If `isConflict` is true, notify the user that the requested time may overlap with an existing appointment and allow them to either proceed or choose another time.
-                4. If `isConflict` is false, do not mention the existing appointment times. Simply tell the user that the time is unavailable and ask them to pick another one."""
-            )
+            Specifics:
+            1. The booked time slots are: {existing_appointment}
+            2. do not mention the existing appointment times in your response and Simply tell the user that the time is unavailable and ask them to pick another one."""
+        )
+
 
         return "OK", 200
     
@@ -1020,8 +1021,6 @@ class CallHandler:
                     self.agents[call_sid]['integrations']['calendly_connection_id']
                 )
                 
-                print(f"Calendly User result: {json.dumps(user_result, indent=2)}")
-                
                 # Extract user info from response format
                 user_info = None
                 if user_result and 'records' in user_result and len(user_result['records']) > 0:
@@ -1038,13 +1037,11 @@ class CallHandler:
                     if not email and 'email' in user_info:
                         email = user_info['email']
                     
-                    # Now check for scheduled events with debug
+                    # Now check for scheduled events
                     try:
                         events_result = await self.calendly_service.get_events(
                             self.agents[call_sid]['integrations']['calendly_connection_id']
                         )
-                        
-                        print(f"Calendly Events result: {json.dumps(events_result, indent=2)}")
                         
                         # Extract events from response format
                         events_collection = []
@@ -1054,19 +1051,20 @@ class CallHandler:
                             events_collection = events_result['collection']
                         
                         if events_collection and len(events_collection) > 0:
-                            # Print detailed information about each scheduled event
-                            print("\n=== CALENDLY SCHEDULED EVENTS ===")
-                            for i, event in enumerate(events_collection):
-                                print(f"\nEvent #{i+1}:")
-                                # Print key event details
-                                print(f"  Name: {event.get('name', 'N/A')}")
-                                print(f"  Status: {event.get('status', 'N/A')}")
-                                print(f"  Start time: {event.get('start_time', 'N/A')}")
-                                print(f"  End time: {event.get('end_time', 'N/A')}")
-                                if 'location' in event:
-                                    print(f"  Location: {event['location'].get('type', 'N/A')}")
-                                
-                            print("===============================\n")
+                            # Set existing_appointment with formatted times
+                            appointment_times = []
+                            for event in events_collection:
+                                if 'start_time' in event:
+                                    # Only include future appointments
+                                    if is_future_datetime(event['start_time']):
+                                        formatted_time = format_datetime_human_readable(event['start_time'])
+                                        appointment_times.append(formatted_time)
+                            
+                            if appointment_times:
+                                if existing_appointment:
+                                    existing_appointment += ", " + ", ".join(appointment_times)
+                                else:
+                                    existing_appointment = ", ".join(appointment_times)
                             
                             # We have scheduled events, update description with this info
                             events_count = len(events_collection)
@@ -1099,45 +1097,46 @@ class CallHandler:
                     self.agents[call_sid]['integrations']['google_calendar_connection_id']
                 )
                 
-
-                # print(f"Google Calendar Events result: {json.dumps(events_result, indent=2)}")
-                
+                print("=== GOOGLE CALENDAR EVENTS ===",json.dumps(events_result, indent=2))
                 # Extract events from response format
                 events_collection = []
                 if events_result and 'records' in events_result:
                     events_collection = events_result['records']
                 
                 if events_collection and len(events_collection) > 0:
-                    # Print detailed information about each scheduled event
-                    print("\n=== GOOGLE CALENDAR SCHEDULED EVENTS ===")
-                    for i, event in enumerate(events_collection):
-                        print(f"\nEvent #{i+1}:")
-                        # Print key event details
-                        if 'start' in event and 'date' in event['start']:
-                            existing_appointment = '' + event['start']['date'] + ','
+                    appointment_times = []
+                    for event in events_collection:
+                        # Handle both all-day events (date) and timed events (dateTime)
+                        start_datetime = None
+                        if 'start' in event:
+                            if 'dateTime' in event['start']:
+                                start_datetime = event['start']['dateTime']
+                            elif 'date' in event['start']:
+                                start_datetime = event['start']['date']
                         
-                        if 'start' in event and 'dateTime' in event['start']:
-                            start = event['start'].get('dateTime', 'N/A')
-                            timezone = event['start'].get('timeZone', 'N/A')
-                            existing_appointment = '' + start + ' (' + timezone + '),'
-
-                        #     print(f"  Start time: {event['start'].get('dateTime', event['start'].get('date', 'N/A'))}")
-                        # if 'end' in event:
-                        #     print(f"  End time: {event['end'].get('dateTime', event['end'].get('date', 'N/A'))}")
-                        # if 'location' in event:
-                        #     print(f"  Location: {event.get('location', 'N/A')}")
-                        
-                    print("===============================\n")
+                        if start_datetime:
+                            # Only include future appointments
+                            if is_future_datetime(start_datetime):
+                                formatted_time = format_datetime_human_readable(start_datetime)
+                                appointment_times.append(formatted_time)
+                    
+                    # Set existing_appointment with formatted times
+                    if appointment_times:
+                        if existing_appointment:
+                            existing_appointment += ", " + ", ".join(appointment_times)
+                        else:
+                            existing_appointment = ", ".join(appointment_times)
                     
                     # We have scheduled events, update description with this info
-                    events_count = len(events_collection)
-                    calendar_info = f"Has {events_count} upcoming Google Calendar event"
-                    calendar_info += "s" if events_count > 1 else ""
-                    
-                    if description:
-                        description += f" {calendar_info}."
-                    else:
-                        description = calendar_info + "."
+                    events_count = len([t for t in appointment_times])  # Count only future events
+                    if events_count > 0:
+                        calendar_info = f"Has {events_count} upcoming Google Calendar event"
+                        calendar_info += "s" if events_count > 1 else ""
+                        
+                        if description:
+                            description += f" {calendar_info}."
+                        else:
+                            description = calendar_info + "."
                 else:
                     print("No upcoming Google Calendar events found.")
             except Exception as e:
@@ -1165,16 +1164,20 @@ class CallHandler:
                     events_collection = events_result['records']
                 
                 if events_collection and len(events_collection) > 0:
-                    existing_appointment = ''
-                    for i, event in enumerate(events_collection):
-                        print(f"\nEvent #{i+1}:")
+                    appointment_times = []
+                    for event in events_collection:
+                        print(f"\nEvent:")
                         print(f"  Subject: {event.get('subject', 'N/A')}")
                         
                         if 'start' in event:
                             start = event['start'].get('dateTime', 'N/A')
                             timezone = event['start'].get('timeZone', 'N/A')
-                            existing_appointment = '' + start + ' (' + timezone + '),'
                             print(f"  Start: {start} ({timezone})")
+                            if start != 'N/A':
+                                # Only include future appointments
+                                if is_future_datetime(start):
+                                    formatted_time = format_datetime_human_readable(start)
+                                    appointment_times.append(formatted_time)
                             
                         if 'end' in event:
                             end = event['end'].get('dateTime', 'N/A')
@@ -1185,6 +1188,13 @@ class CallHandler:
                         print(f"  Status: {event.get('showAs', 'N/A')}")
                         
                     print("===============================\n")
+                    
+                    # Set existing_appointment with formatted times
+                    if appointment_times:
+                        if existing_appointment:
+                            existing_appointment += ", " + ", ".join(appointment_times)
+                        else:
+                            existing_appointment = ", ".join(appointment_times)
                     
                 else:
                     print("No upcoming Outlook Calendar events found.")
