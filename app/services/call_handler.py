@@ -719,13 +719,18 @@ class CallHandler:
         #     audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
         elif tts_provider == "elevenlabs":
             audio_stream = await self.elevenlabs_service.stream_text_to_speech(text)
+            await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
+            await self.twilio_service.enqueue_audio(call_id, audio_stream, 'response_buffer')
+            result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
+            session['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
+            session['wait_duration'] = result['duration']
+
         else:
             raise ValueError(f"Unsupported TTS provider: {settings.tts_provider}")
 
         # end_time = datetime.now()
         # duration = (end_time - start_time).total_seconds() * 1000  # Calculate duration in milliseconds
 
-        # await self.twilio_service.enqueue_audio(call_id, audio_stream, 'response_buffer')
         # result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
         # session['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
         # session['wait_duration'] = result['duration']

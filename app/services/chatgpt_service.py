@@ -506,11 +506,10 @@ class ChatGPTService:
         # else:
             # Standard response without CRM integration
         response = openai.chat.completions.create(
-            model="gpt-4-turbo",
+            model="gpt-4.1",
             messages=self.system_convo[conversation_id],
             stream=True,
-            max_tokens=200,
-            temperature=0.2,
+            max_tokens=150,
 
         )
 
@@ -590,7 +589,7 @@ class ChatGPTService:
                     allmessages +=  f"{item['role']}:  {item['content']}\n\n"
                 
                 response = openai.chat.completions.create(
-                    model="gpt-4-turbo",
+                    model="gpt-4.1",
                     messages=[{"role" : "user" , "content" : allmessages}],
                 )
                 del self.system_convo[conversation_id][self.convo_index: len(self.system_convo[conversation_id])]
