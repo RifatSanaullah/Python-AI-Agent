@@ -181,7 +181,7 @@ def format_datetime_range_human_readable(start_datetime_str, end_datetime_str=No
         start_time_str = format_time(start_dt)
         end_time_str = format_time(end_dt)
         
-        return f'{month} {day}{suffix} {start_time_str}-{end_time_str}'
+        return f'{month} {day}{suffix} ({start_time_str} to {end_time_str})'
         
     except Exception as e:
         print(f"Error formatting datetime range {start_datetime_str} to {end_datetime_str}: {str(e)}")
