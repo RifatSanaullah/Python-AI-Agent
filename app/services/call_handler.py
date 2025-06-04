@@ -36,7 +36,7 @@ import soundfile as sf
 import time , re
 import traceback
 from app.utils.responseformat import hubspot_patch_format
-from app.utils.datetime_formatter import format_datetime_human_readable, is_future_datetime
+from app.utils.datetime_formatter import format_datetime_human_readable, format_datetime_range_human_readable, is_future_datetime
 import json
 # Configure logging
 logging.basicConfig(
@@ -946,11 +946,12 @@ class CallHandler:
             self.chatgpt_service.add_system_message(
             stream_sid,
             "system",
-            f"""Task: if user wants to reschedule an appointment or meeting.
+            f"""Task: if user wants to schedule an appointment or meeting.
 
             Specifics:
             1. The booked time slots are: {existing_appointment}
-            2. do not mention the existing appointment times in your response and Simply tell the user that the time is unavailable and ask them to pick another one."""
+            2. If the existing_appointment variable indicates the slot is booked, inform the user it's unavailable and ask them to choose another time or date
+            """
         )
 
 
@@ -1083,7 +1084,9 @@ class CallHandler:
                                 if 'start_time' in event:
                                     # Only include future appointments
                                     if is_future_datetime(event['start_time']):
-                                        formatted_time = format_datetime_human_readable(event['start_time'])
+                                        # Check if end_time is available in Calendly event
+                                        end_time = event.get('end_time', None)
+                                        formatted_time = format_datetime_range_human_readable(event['start_time'], end_time)
                                         appointment_times.append(formatted_time)
                             
                             if appointment_times:
@@ -1123,7 +1126,7 @@ class CallHandler:
                     self.agents[call_sid]['integrations']['google_calendar_connection_id']
                 )
                 
-                print("=== GOOGLE CALENDAR EVENTS ===",json.dumps(events_result, indent=2))
+                # print("=== GOOGLE CALENDAR EVENTS ===",json.dumps(events_result, indent=2))
                 # Extract events from response format
                 events_collection = []
                 if events_result and 'records' in events_result:
@@ -1134,16 +1137,23 @@ class CallHandler:
                     for event in events_collection:
                         # Handle both all-day events (date) and timed events (dateTime)
                         start_datetime = None
+                        end_datetime = None
                         if 'start' in event:
                             if 'dateTime' in event['start']:
                                 start_datetime = event['start']['dateTime']
                             elif 'date' in event['start']:
                                 start_datetime = event['start']['date']
                         
+                        if 'end' in event:
+                            if 'dateTime' in event['end']:
+                                end_datetime = event['end']['dateTime']
+                            elif 'date' in event['end']:
+                                end_datetime = event['end']['date']
+                        
                         if start_datetime:
                             # Only include future appointments
                             if is_future_datetime(start_datetime):
-                                formatted_time = format_datetime_human_readable(start_datetime)
+                                formatted_time = format_datetime_range_human_readable(start_datetime, end_datetime)
                                 appointment_times.append(formatted_time)
                     
                     # Set existing_appointment with formatted times
@@ -1195,20 +1205,27 @@ class CallHandler:
                         print(f"\nEvent:")
                         print(f"  Subject: {event.get('subject', 'N/A')}")
                         
+                        start_datetime = None
+                        end_datetime = None
+                        
                         if 'start' in event:
                             start = event['start'].get('dateTime', 'N/A')
                             timezone = event['start'].get('timeZone', 'N/A')
                             print(f"  Start: {start} ({timezone})")
                             if start != 'N/A':
-                                # Only include future appointments
-                                if is_future_datetime(start):
-                                    formatted_time = format_datetime_human_readable(start)
-                                    appointment_times.append(formatted_time)
+                                start_datetime = start
                             
                         if 'end' in event:
                             end = event['end'].get('dateTime', 'N/A')
                             timezone = event['end'].get('timeZone', 'N/A')
                             print(f"  End: {end} ({timezone})")
+                            if end != 'N/A':
+                                end_datetime = end
+                        
+                        # Only include future appointments
+                        if start_datetime and is_future_datetime(start_datetime):
+                            formatted_time = format_datetime_range_human_readable(start_datetime, end_datetime)
+                            appointment_times.append(formatted_time)
                             
                         print(f"  Location: {event.get('location', {}).get('displayName', 'N/A')}")
                         print(f"  Status: {event.get('showAs', 'N/A')}")
