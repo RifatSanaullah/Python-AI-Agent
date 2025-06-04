@@ -85,7 +85,7 @@ class CallHandler:
             # Compute RMS (Root Mean Square) to detect silence
             rms = np.sqrt(np.mean(np.square(audio)))
 
-            silence_threshold = 0.10  # Adjust as needed
+            silence_threshold = 0.20  # Adjust as needed
             is_silent = rms < silence_threshold
 
             return {"is_silent": is_silent, "duration": duration_seconds}
@@ -106,6 +106,7 @@ class CallHandler:
             "stream_sid": None,
             "background_sound": None,
             "end_call": False,
+            "last_transcript_time" : None,
         }
 
         output_file = f"recordings/{call_id}.mulaw"
@@ -124,7 +125,7 @@ class CallHandler:
                     self.sessions[data['streamSid']]['websocket'] = websocket
                     self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
                     session = self.sessions[data['streamSid']]
-                    session['deepgram_transcribe_service'].establish_dg_connection()
+                    # session['deepgram_transcribe_service'].establish_dg_connection()
                     # session['transcribe_service'].connect()
 
                 if data['streamSid'] not in self.sessions or 'call_sid' not in self.sessions[data['streamSid']]:
@@ -159,6 +160,7 @@ class CallHandler:
 
                     result = await self.is_silent_or_empty_mulaw_numpy(chunk_bytes)
                     is_audio_silent = result['is_silent']
+
                     # is_audio_silent = await self.is_mulaw_stream_silent_base64(chunk_bytes)
                     # is_audio_silent = result['is_silent']
 
@@ -177,15 +179,15 @@ class CallHandler:
 
 
                 if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'response_buffer'):
-                    print("Processing response buffers...")
+                    # print("Processing response buffers...")
                     response_audio = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'response_buffer')
+                    # await self.twilio_service.send_audio_stream(session['websocket'], data['streamSid'], response_audio)
                     # await self.twilio_service.send_control_command(session['websocket'], 'stop')
                     if self.sessions[data['streamSid']]['background_sound'] is True:
                         await self.stop_stream(data['streamSid'])
                     session['ai_speaking'] = True
                     with open(output_file, "ab") as f:
                         f.write(response_audio)
-                    await self.twilio_service.send_audio_stream(session['websocket'], data['streamSid'], response_audio)
 
                 if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'audio_buffer'):
                     audio_data = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'audio_buffer')
@@ -243,9 +245,6 @@ class CallHandler:
                     # Log the full exception traceback
                     import traceback
                     print(traceback.format_exc())
-                    self.chatgpt_service.close_conversation(session['stream_sid'])
-                    self.twilio_service.remove_stream_from_queue(session['stream_sid'])
-                    del self.sessions[session['stream_sid']]
 
                 self.chatgpt_service.close_conversation(session['stream_sid'])
                 self.twilio_service.remove_stream_from_queue(session['stream_sid'])
@@ -253,7 +252,7 @@ class CallHandler:
                 self.agents[call_id]['websocket_closed'] = True
                 # self.flush_agent(call_id)
 
-            session['deepgram_transcribe_service'].disconnect()
+            await session['deepgram_transcribe_service'].disconnect()
             # session['transcribe_service'].close()  # Close the transcriber service
             try:
                 await websocket.close()
@@ -585,12 +584,13 @@ class CallHandler:
             self.sessions[call_id]['wait_duration'] = 12
             self.sessions[call_id]['ai_interrupt'] = False
 
-    def initialize_transcriber(self, call_id: str, Service : TranscribeService | DeepgramService):
+    def initialize_transcriber(self, call_sid, call_id: str, Service : TranscribeService | DeepgramService):
         """Initialize transcriber with bound methods for handling transcripts and user speech."""
         return Service(
             on_transcript=self.create_on_transcript_handler(call_id),
             on_start=self.create_on_user_speech_handler(call_id),
             loop= self.loop,
+            speak_model = self.agents[call_sid]['voice']['model']
         )
 
     def create_on_transcript_handler(self, call_id: str):
@@ -607,7 +607,8 @@ class CallHandler:
                
     async def stop_stream(self,call_id):
         # await asyncio.sleep(1)  # Wait for 1 second
-        # self.sessions[call_id]['ai_interrupt'] =  True
+        self.sessions[call_id]['ai_interrupt'] =  True
+        self.chatgpt_service.update_interrupt_status(call_id, True)
         # self.sessions[call_id]['ai_speaking'] =  True
         # message = self.get_interrupt_message()
         await self.twilio_service.stop_audio_stream(self.sessions[call_id]['websocket'], call_id)
@@ -636,15 +637,18 @@ class CallHandler:
         # await self.enable_background_sound(call_id, True)
         if call_id not in self.sessions or 'call_sid' not in self.sessions[call_id]:
             return
+        self.sessions[call_id]['ai_interrupt'] =  False
+        self.chatgpt_service.update_interrupt_status(call_id, False)
 
-        response = await self.chatgpt_service.generate_response(call_id, transcript, self.synthesize_response)
+        response = await self.chatgpt_service.generate_response(call_id, transcript, self.synthesize_response, self.sessions[call_id]['deepgram_transcribe_service'].flush_sp_ws)
+
         if 'End Call Message' in response or self.contains_any_word(transcript) or  self.contains_any_word(response):
             self.agents[self.sessions[call_id]['call_sid']]['end_call'] = True
             response = response.replace('End Call Message', '')
             # Schedule the call to end after 2 seconds
-            wait_time = self.sessions[call_id]['wait_duration']
-            if len(response) >= 200:
-                wait_time = self.sessions[call_id]['wait_duration'] + self.sessions[call_id]['prev_wait_duration']
+            # wait_time = self.sessions[call_id]['wait_duration']
+            # if self.sessions[call_id]['last_transcript_time']:
+            wait_time = self.sessions[call_id]['wait_duration'] + self.sessions[call_id]['prev_wait_duration']
             print("wait_time: ", wait_time)
             self.clear_timer()
             self.timer = Timer(wait_time, self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
@@ -662,7 +666,9 @@ class CallHandler:
                             ]
                         )
             self.timer.start()
-
+        self.sessions[call_id]['last_transcript_time'] = None
+        self.sessions[call_id]['prev_wait_duration'] = 0
+        self.sessions[call_id]['wait_duration'] = 0
         print(f"Response: {response}")
         # await self.synthesize_response(response, call_id)
 
@@ -705,33 +711,50 @@ class CallHandler:
         session = self.sessions.get(call_id)
         if not session or not text or text == '':
             return
-
-        start_time = datetime.now()
-
+        # start_time = datetime.now()
+        model = self.agents[self.sessions[call_id]['call_sid']]['voice']['model']
         # Select TTS provider based on environment variable
         tts_provider = settings.tts_provider.lower()
         if tts_provider == "deepgram":
-            audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text)
+            audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text, model, call_id, self.queue_audio)
         # elif tts_provider == "playht":
         #     audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
         elif tts_provider == "elevenlabs":
             audio_stream = await self.elevenlabs_service.stream_text_to_speech(text)
+            await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
+            await self.twilio_service.enqueue_audio(call_id, audio_stream, 'response_buffer')
+            result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
+            session['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
+            session['wait_duration'] = result['duration']
+
         else:
             raise ValueError(f"Unsupported TTS provider: {settings.tts_provider}")
 
-        end_time = datetime.now()
-        duration = (end_time - start_time).total_seconds() * 1000  # Calculate duration in milliseconds
-        logging.info(f"Total TTS duration: {duration:.3f} ms")
+        # end_time = datetime.now()
+        # duration = (end_time - start_time).total_seconds() * 1000  # Calculate duration in milliseconds
 
-        await self.twilio_service.enqueue_audio(call_id, audio_stream, 'response_buffer')
-        result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
-        session['prev_wait_duration'] = session['wait_duration']
-        session['wait_duration'] = result['duration'] + 4
+        # result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
+        # session['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
+        # session['wait_duration'] = result['duration']
         session['last_user_audio_time'] = time.time()
-        print('audio streamed', session['last_user_audio_time'])
+        return
+
+        # print('audio streamed', session['last_user_audio_time'])
 
     async def queue_audio(self, call_id, audio_stream):
-        await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
+        session = self.sessions.get(call_id)
+        if not session :
+            return
+        ai_interupted = session.get('ai_interrupt', False)
+        if not ai_interupted:
+            
+            await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
+            await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
+            result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
+            session['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
+            session['wait_duration'] = result['duration']
+        # else:
+        #     self.sessions[call_id]['ai_interrupt'] = False
 
     def get_interrupt_message(self , type = 'check_availability'):
         arrayObj = {
@@ -780,8 +803,8 @@ class CallHandler:
         # Initialize a session for this specific call
         if stream_sid not in self.sessions:
             self.sessions[stream_sid]={
-                "deepgram_transcribe_service": self.initialize_transcriber(stream_sid, DeepgramService),
-                "transcribe_service" : self.initialize_transcriber(stream_sid, TranscribeService),
+                "deepgram_transcribe_service": self.initialize_transcriber(call_sid, stream_sid, DeepgramService),
+                "transcribe_service" : self.initialize_transcriber(call_sid, stream_sid, TranscribeService),
                 "ai_speaking": False,
                 "ai_interrupt": False,
                 "wait_counter": 0,
@@ -872,6 +895,8 @@ class CallHandler:
         call_sid = data.get("CallSid")
         print(f"Stream SID: {stream_sid}, Call SID: {call_sid}")
         self.initialize_session_info(stream_sid, call_sid)
+        await self.sessions[stream_sid]['deepgram_transcribe_service'].establish_dg_connection()
+
         # self.sessions[call_sid]['stream_sid'] = stream_sid
         updaedata= {
             "stream_sid" : stream_sid,
@@ -897,6 +922,7 @@ class CallHandler:
         isAllowMeetingConflict = self.agents[call_sid]['allowMeetingConflict']
         print("isAllowMeetingConflict: ", isAllowMeetingConflict)
         await self.synthesize_response(greetings , stream_sid)
+        await self.sessions[stream_sid]['deepgram_transcribe_service'].flush_sp_ws()
         await self.chatgpt_service.process_initial_message(stream_sid, self.get_agent_knowledge)
         self.chatgpt_service.add_message(stream_sid, "assistant", greetings)
         self.chatgpt_service.add_system_message(stream_sid, "assistant", greetings)
