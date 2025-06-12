@@ -2,8 +2,8 @@ import base64
 from sqlalchemy.orm import Session
 from app.services.playht_service import PlayHT
 from app.services.twilio_service import TwilioService
-from app.services.chatgpt_service import ChatGPTService
-# from app.services.chatgpt_service_v2 import ChatGPTService
+from app.services.ai_service import AIService
+# from app.services.ai_service_v2 import AIService
 from app.services.s3_service import S3Service
 from app.services.backend_service import BackendHandler
 from app.services.polly_service import PollyService
@@ -11,23 +11,19 @@ from app.services.deepgram_service import DeepgramService
 from app.services.assembly_ai_transcribe_service import TranscribeService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 import logging
-from datetime import datetime
-from docx import Document
-from PyPDF2 import PdfReader
-from fastapi import UploadFile, WebSocketDisconnect
-import wave
+from datetime import datetime_CAPI
+from app.helpers.utils import get_interrupt_message, convert_mulaw_to_wav
 from app.config import settings
 from pydub import AudioSegment
 from threading import Timer
 import numpy as np
-import audioop
-import os
-import asyncio
-import random
+
 from io import BytesIO
 import numpy as np
 import soundfile as sf
 import time
+
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -39,7 +35,7 @@ class CallHandler:
     def __init__(self):
         self.twilio_service = TwilioService()
         self.backend_service = BackendHandler()
-        self.chatgpt_service = ChatGPTService()
+        self.ai_service = AIService()
         self.s3_service = S3Service()
         self.playht_service = PlayHT()
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
@@ -80,7 +76,7 @@ class CallHandler:
     async def process_input(self, call_id, websocket):
         await websocket.accept()
         session = {
-            "deepgram_transcribe_service": None,
+            "synthesis_service": None,
             "transcribe_service": None,
             "ai_interrupt": False,
             "ai_speaking": False,
@@ -106,8 +102,9 @@ class CallHandler:
                     self.sessions[data['streamSid']]['websocket'] = websocket
                     self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
                     session = self.sessions[data['streamSid']]
-                    session['deepgram_transcribe_service'].establish_dg_connection()
-                    session['transcribe_service'].connect()
+                    if self.agents[data['streamSid']['call_sid']]['STT']['name'] == 'Deepgram':
+                        session['transcribe_service'].establish_dg_connection(self.agents[data['streamSid']['call_sid']]['STT']['model'])
+                    else: session['transcribe_service'].connect()
 
                 if data['streamSid'] not in self.sessions or 'call_sid' not in self.sessions[data['streamSid']]:
                     continue
@@ -118,8 +115,8 @@ class CallHandler:
 
                     if data['streamSid'] and self.sessions[data['streamSid']]['wait_counter'] >= 2:
                         self.sessions[data['streamSid']]['wait_counter'] = 0
-                        message = self.get_interrupt_message('end_call')
-                        self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
+                        message = get_interrupt_message('end_call')
+                        self.ai_service.add_message(data['streamSid'], "assistant", message)
                         await self.synthesize_response(message, data['streamSid'])
                         # Schedule the call to end after 2 seconds
                         self.clear_timer()
@@ -127,8 +124,8 @@ class CallHandler:
                         self.timer.start()
                         return
                     
-                    message = self.get_interrupt_message()
-                    self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
+                    message = get_interrupt_message()
+                    self.ai_service.add_message(data['streamSid'], "assistant", message)
                     await self.synthesize_response(message, data['streamSid'])
                     self.sessions[data['streamSid']]['wait_counter'] += 1
 
@@ -169,7 +166,7 @@ class CallHandler:
                 if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'audio_buffer'):
                     audio_data = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'audio_buffer')
                     # await self.transcribe_service.transcribe(audio_data)
-                    # await session['deepgram_transcribe_service'].transcribe(audio_data)
+                    # await session['synthesis_service'].transcribe(audio_data)
                     await session['transcribe_service'].transcribe(audio_data)
 
         except ConnectionClosedError as e:
@@ -180,10 +177,10 @@ class CallHandler:
             print("Unexpected error:", e)
         finally:
             print("WebSocket connection closed.")
-            if session['stream_sid'] in self.chatgpt_service.conversations:
-                conversations = self.chatgpt_service.conversations[session['stream_sid']]
+            if session['stream_sid'] in self.ai_service.conversations:
+                conversations = self.ai_service.conversations[session['stream_sid']]
                 outputFile= f"recordings/{call_id}.wav"
-                await self.convert_mulaw_to_wav(f"recordings/{call_id}.mulaw", outputFile)
+                await convert_mulaw_to_wav(f"recordings/{call_id}.mulaw", outputFile)
                 # os.remove(output_file)
                 recordingUrl = await self.s3_service.uploadToS3(outputFile)
                 agent_id = self.agents[call_id]['id']
@@ -193,7 +190,7 @@ class CallHandler:
                     "recording_url" : recordingUrl,
                     "agent_id" : agent_id
                 }
-                self.chatgpt_service.close_conversation(session['stream_sid'])
+                self.ai_service.close_conversation(session['stream_sid'])
                 self.twilio_service.remove_stream_from_queue(session['stream_sid'])
                 del self.sessions[session['stream_sid']]
 
@@ -205,8 +202,11 @@ class CallHandler:
                 self.agents[call_id]['websocket_closed'] = True
                 self.flush_agent(call_id)
 
-            session['deepgram_transcribe_service'].disconnect()
-            session['transcribe_service'].close()  # Close the transcriber service
+            session['synthesis_service'].disconnect()
+            if self.agents[data['streamSid']['call_sid']]['STT']['name'] == 'Deepgram':
+                session['transcribe_service'].disconnect()
+            elif self.agents[data['streamSid']['call_sid']]['STT']['name'] == 'AssemblyAI':
+                session['transcribe_service'].close()  # Close the transcriber service
             try:
                 await websocket.close()
             except Exception as e:
@@ -268,7 +268,7 @@ class CallHandler:
         if call_id not in self.sessions or 'call_sid' not in self.sessions[call_id]:
             return
 
-        response = await self.chatgpt_service.generate_response(call_id, transcript, self.synthesize_response)
+        response = await self.ai_service.generate_response(call_id, transcript, self.synthesize_response, self.agents[self.sessions[call_id]['call_sid']]['aiClient'])
         if 'End Call Message' in response or self.contains_any_word(transcript) or  self.contains_any_word(response):
             self.agents[self.sessions[call_id]['call_sid']]['end_call'] = True
             response = response.replace('End Call Message', '')
@@ -349,55 +349,32 @@ class CallHandler:
     async def queue_audio(self, call_id, audio_stream):
         await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
 
-    def get_interrupt_message(self , type = 'check_availability'):
-        arrayObj = {
-            'interrupt': [
-                "Go ahead",
-                "Please, go ahead."
-                "Yes, do continue."
-                "Yes, please go on."
-                "I'm listening, please."
-                "Yes, please continue. "
-                "Of course, go ahead."
-                "Go ahead, I'm listening."
-                "Okay, I'm listening."
-                "Sure, please continue."
-            ],
-            'check_availability': [
-                "Are you around?",
-                "Still with me?",
-                "You there?",
-                "Did I lose you?",
-                "Are you gone?",
-                "Can you hear me?",
-                "Are you still online?",
-                "Just checking if you're still here.",
-                "Are you still listening?",
-                "Hello? Still there?"
-            ],
-            'end_call': [
-                "I understand you might be tied up. Feel free to message me when you're available. Wishing you a great day!",
-                "No worries if you're busy. Just reach out when you have a moment. Take care!",
-                "You may be caught up with something. Ping me whenever you're free. Have a wonderful day!",
-                "Totally fine if you're busy. Let's connect when you get a chance. Hope your day is going well!",
-                "If you're occupied, that's okay. Reach out anytime you're free. Have an awesome day!",
-                "I get that things can get hectic. Connect with me whenever you're free. Take it easy!",
-                "It seems like you might be busy. Just drop a message when you’re free. Enjoy your day!",
-                "All good if you’re swamped. Let’s talk whenever you have time. Wishing you a nice day!",
-                "You might have your hands full. Reach out whenever it works for you. Hope your day’s great!",
-                "Understandable if you're unavailable right now. Let's chat when you're free. Have a great one!"
-                ]
-        } 
-
-
-        return random.choice(arrayObj[type])
-
     def initialize_session_info(self, stream_sid, call_sid):
         # Initialize a session for this specific call
+        
+        self.sessions[stream_sid] = {}
+        if self.agents[call_sid]['STT']['name'] == 'Deepgram':
+            self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
+            self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
+        elif self.agents[call_sid]['STT']['name'] == 'AssemblyAI':
+            self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(stream_sid, TranscribeService)
+            self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
+        else :
+            self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
+            self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
+
+
+        # if self.agents[call_sid]['TTS'] == 'Deepgram':
+        #     if self.agents[call_sid]['STT']['name'] == 'Deepgram':
+        #         self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
+        #     else :
+        #         self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
+        # elif self.agents[call_sid]['TTS'] == 'PlayHT':
+        #     self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(stream_sid, PlayHT)
+
         if stream_sid not in self.sessions:
             self.sessions[stream_sid]={
-                "deepgram_transcribe_service": self.initialize_transcriber(stream_sid, DeepgramService),
-                "transcribe_service" : self.initialize_transcriber(stream_sid, TranscribeService),
+
                 "ai_speaking": False,
                 "ai_interrupt": False,
                 "wait_counter": 0,
@@ -450,9 +427,9 @@ class CallHandler:
 
         greetings = self.agents[call_sid]['greetings']
         await self.synthesize_response(greetings , stream_sid)
-        await self.chatgpt_service.process_initial_message(stream_sid, self.get_agent_knowledge)
-        self.chatgpt_service.add_message(stream_sid, "assistant", greetings)
-        self.chatgpt_service.add_system_message(stream_sid, "assistant", greetings)
+        await self.ai_service.process_initial_message(stream_sid, self.get_agent_knowledge)
+        self.ai_service.add_message(stream_sid, "assistant", greetings)
+        self.ai_service.add_system_message(stream_sid, "assistant", greetings)
         
         return "OK", 200
     
@@ -463,62 +440,6 @@ class CallHandler:
                 audio_stream = await self.twilio_service.get_background_sound()
                 self.twilio_service.background_sound = audio_stream
             await self.twilio_service.send_audio_stream(self.sessions[call_id]['websocket'], call_id, self.twilio_service.background_sound)
-
-    async def process_file(self, file: UploadFile):
-        """
-        Process the uploaded file based on its MIME type and content.
-
-        Supports: TXT, DOC/DOCX, PDF
-        """
-        # Read the file content
-        file_content = await file.read()
-
-        # Process based on MIME type
-        if file.content_type == "text/plain":
-            # Process TXT file
-            return file_content.decode("utf-8")
-
-        elif file.content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            # Process DOCX file
-            from io import BytesIO
-            doc = Document(BytesIO(file_content))
-            return "\n".join([paragraph.text for paragraph in doc.paragraphs])
-
-        elif file.content_type == "application/pdf":
-            # Process PDF file
-            from io import BytesIO
-            pdf_reader = PdfReader(BytesIO(file_content))
-            text = ""
-            for page in pdf_reader.pages:
-                text += page.extract_text()
-            return text
-
-        else:
-            # Unsupported file type
-            print("Unsupported file type. Please upload TXT, DOC/DOCX, or PDF files.")
-            return None
-
-    async def convert_mulaw_to_wav(self, mulaw_file, wav_file):
-        # Define WAV file settings
-        wav_fp = wave.open(wav_file, 'wb')
-        wav_fp.setnchannels(1)  # Mono channel
-        wav_fp.setsampwidth(2)  # 16-bit samples
-        wav_fp.setframerate(8000)  # 8 kHz sampling rate
-
-        # Read the μ-law file
-        with open(mulaw_file, 'rb') as mulaw_fp:
-            while True:
-                chunk = mulaw_fp.read(1024)
-                if not chunk:
-                    break
-
-                # Convert μ-law to linear PCM
-                pcm_chunk = audioop.ulaw2lin(chunk, 2)
-
-                # Write the PCM chunk to the WAV file
-                wav_fp.writeframes(pcm_chunk)
-
-        wav_fp.close()
 
     async def complete_status_callback(self, data):
         """Handle the stream callback to get the streamSid."""

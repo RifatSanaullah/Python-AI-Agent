@@ -61,13 +61,13 @@ class DeepgramService:
             raise
 
 
-    def establish_dg_connection(self):
+    def establish_dg_connection(self , model = "nova-3"):
         print("Establishing Deepgram Connection....")
         if self.dg_connection:
             self.dg_connection.finish()
         self.dg_connection = self.deepgram.listen.websocket.v("1")
         self.dg_connection.on(LiveTranscriptionEvents.Open, self.on_open)
-
+        self.transcribeOptions['model'] = model
         self.dg_connection.start(options=self.transcribeOptions)
         self.dg_connection.keep_alive()
 
