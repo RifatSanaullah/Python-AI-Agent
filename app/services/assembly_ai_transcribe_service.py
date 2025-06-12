@@ -2,7 +2,7 @@ import assemblyai as aai
 import asyncio
 
 class TranscribeService:
-    def __init__(self, on_transcript=None,on_start=None):
+    def __init__(self, on_transcript=None,on_start=None,loop=None, speak_model=None):
         self.api_key = "9576f4ea99e14b90a1c6ee4100b4536f"
         aai.settings.api_key = self.api_key
         self.on_transcript = on_transcript  # Store the callback function

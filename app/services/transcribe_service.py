@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 from app.config import settings
 
 class TranscribeService:
-    def __init__(self, language_code: str = "en-US"):
+    def __init__(self, language_code: str = "en-US", loop=None):
         self.region = settings.aws_region
         self.language_code = language_code
         self.websocket = None
