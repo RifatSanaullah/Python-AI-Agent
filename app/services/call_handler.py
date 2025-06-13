@@ -336,6 +336,8 @@ class CallHandler:
                     new_appointment = appointment['newAppointment']
                     update_appointment = appointment['updateAppointment']
                     delete_appointment = appointment['deleteAppointment']
+                    if event['timezone']:
+                        del event['timezone']
                     if prev_event_id is not None and prev_event_id != '':
                         if update_appointment:
                             body = {
