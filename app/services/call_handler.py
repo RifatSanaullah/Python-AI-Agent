@@ -1,6 +1,6 @@
 import base64
 from sqlalchemy.orm import Session
-from app.services.playht_service import PlayHT
+# from app.services.playht_service import PlayHT
 from app.services.twilio_service import TwilioService
 from app.services.chatgpt_service import ChatGPTService
 from app.services.s3_service import S3Service
@@ -45,7 +45,7 @@ class CallHandler:
         self.backend_service = BackendHandler()
         self.chatgpt_service = ChatGPTService()
         self.s3_service = S3Service()
-        self.playht_service = PlayHT()
+        # self.playht_service = PlayHT()
         self.elevenlabs_service = ElevenLabsService()
         self.zoho_service = ZohoService()
         self.hubspot_service = HubSpotService()
@@ -484,8 +484,8 @@ class CallHandler:
         tts_provider = settings.tts_provider.lower()
         if tts_provider == "deepgram":
             audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text)
-        elif tts_provider == "playht":
-            audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
+        # elif tts_provider == "playht":
+        #     audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
         elif tts_provider == "elevenlabs":
             audio_stream = await self.elevenlabs_service.stream_text_to_speech(text)
         else:
