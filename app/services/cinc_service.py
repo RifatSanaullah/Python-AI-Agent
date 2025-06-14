@@ -23,9 +23,12 @@ async def store_cinc_tokens(user_id: str, token_data: Dict[str, Any]):
         # Add 'issued_at' timestamp before storing, CINC provides 'expires_in'
         token_data['issued_at'] = int(time.time()) # Current time as Unix timestamp
         await _backend_handler.store_cinc_token_in_db(user_id, token_data)
+    except HTTPException as e: # Catch HTTPException specifically if backend_handler raises it
+        print(f"HTTPException during token storage process for user {user_id}: {e.detail}")
+        raise e # Re-raise it, it's already an HTTPException
     except Exception as e:
-        print(f"Error in store_cinc_tokens: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to store CINC tokens")
+        print(f"Unexpected error in store_cinc_tokens for user {user_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Unexpected error storing CINC tokens: {str(e)}")
 
 async def get_cinc_tokens(user_id: str) -> Optional[Dict[str, Any]]:
     """
@@ -157,7 +160,8 @@ async def exchange_code_for_token(auth_code: str, user_id_for_storage: str) -> D
 async def refresh_access_token(user_id_for_storage: str) -> Dict[str, Any]:
     """
     Refreshes the CINC access token using the stored refresh token.
-    Updates the stored tokens with the new ones (CINC may return a new refresh token).
+    Updates the stored tokens with the new ones. If CINC doesn't return a new
+    refresh_token, the existing one is preserved.
     """
     tokens = await get_cinc_tokens(user_id_for_storage)
     if not tokens or not tokens.get('refresh_token'):
@@ -170,8 +174,8 @@ async def refresh_access_token(user_id_for_storage: str) -> Dict[str, Any]:
         'refresh_token': tokens['refresh_token'],
         'client_id': settings.cinc_client_id,
         'client_secret': settings.cinc_client_secret,
-        'redirect_uri': settings.cinc_redirect_uri, # Required by CINC for refresh
-        'scope': tokens.get('scope', 'api:read api:create api:update api:event') # Include original scopes
+        'redirect_uri': settings.cinc_redirect_uri,
+        'scope': tokens.get('scope', 'api:read api:create api:update api:event')
     }
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded'
@@ -182,23 +186,37 @@ async def refresh_access_token(user_id_for_storage: str) -> Dict[str, Any]:
             print(f"Refreshing CINC token for user {user_id_for_storage} with payload: {payload}")
             response = await client.post(token_url, data=payload, headers=headers)
             response.raise_for_status()
-            new_token_data = response.json()
+            new_token_data_from_cinc = response.json()
 
-            # CINC OAuth2 standard: upon refresh, the auth server CAN return a new refresh token.
-            # If so, you should replace the stored refresh token with the new one.
-            # We will always update the stored tokens with the full response from the refresh.
-            await store_cinc_tokens(user_id_for_storage, new_token_data)
+            # Prepare the data to be stored. Start with new data from CINC.
+            data_to_store = new_token_data_from_cinc.copy()
+
+            # If CINC did not return a new refresh_token, use the old (existing) one.
+            if 'refresh_token' not in data_to_store or data_to_store['refresh_token'] is None:
+                if tokens.get('refresh_token'): # Ensure the old token had one
+                    print(f"CINC refresh response for user {user_id_for_storage} did not include a new refresh_token. Using the existing one.")
+                    data_to_store['refresh_token'] = tokens['refresh_token']
+                else:
+                    # This case implies the original tokens['refresh_token'] was also None or missing,
+                    # which should have been caught earlier. If not, validation in store_cinc_token_in_db will fail.
+                    print(f"Warning: CINC refresh response for user {user_id_for_storage} missing refresh_token, and no old one available/valid in current context.")
+
+            # The store_cinc_tokens function will add/update 'issued_at'.
+            await store_cinc_tokens(user_id_for_storage, data_to_store)
             print(f"CINC token refreshed and stored for user {user_id_for_storage}")
-            return new_token_data
+            return data_to_store # Return the data that was processed for storage
         except httpx.HTTPStatusError as e:
             print(f"HTTP error refreshing CINC token for user {user_id_for_storage}: {e.response.status_code} - {e.response.text}")
-            # If refresh fails (e.g. refresh token expired or revoked), delete stored tokens
-            # to force re-authentication.
-            await delete_cinc_tokens(user_id_for_storage)
-            raise HTTPException(status_code=e.response.status_code, detail=f"CINC token refresh failed: {e.response.text}. Please re-authenticate.")
+            if e.response.status_code == 400 or e.response.status_code == 401: # Bad request or Unauthorized (e.g. invalid refresh token)
+                print(f"CINC refresh token likely invalid for user {user_id_for_storage}. Deleting stored tokens.")
+                await delete_cinc_tokens(user_id_for_storage) # Delete tokens to force re-auth
+                raise HTTPException(status_code=e.response.status_code, detail=f"CINC token refresh failed: {e.response.text}. Please re-authenticate.")
+            raise HTTPException(status_code=e.response.status_code, detail=f"CINC token refresh failed: {e.response.text}")
         except Exception as e:
             print(f"Error refreshing CINC token for user {user_id_for_storage}: {e}")
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to refresh CINC access token.")
+            # Consider if deleting tokens is appropriate here too, or if it's a transient network issue.
+            # For now, raising a generic 500.
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to refresh CINC access token: {str(e)}")
 
 async def _make_cinc_request(method: str, endpoint: str, user_id: str, params: Optional[Dict[str, Any]] = None, json_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     access_token = await get_cinc_access_token(user_id)
@@ -224,9 +242,10 @@ async def _make_cinc_request(method: str, endpoint: str, user_id: str, params: O
             return response.json()
         except httpx.HTTPStatusError as e:
             print(f"CINC API request failed: {e.response.status_code} - {e.response.text} for URL: {url}")
-            if e.response.status_code == 401: # Unauthorized, token might be truly invalid despite refresh attempt
-                 await delete_cinc_tokens(user_id) # Clean up potentially invalid tokens
-                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="CINC API request unauthorized. Token may be invalid. Please re-authenticate.")
+            # Removed token deletion on 401 to avoid forcing re-authentication on transient errors.
+            # if e.response.status_code == 401: 
+            #     await delete_cinc_tokens(user_id) # Clean up potentially invalid tokens
+            #     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="CINC API request unauthorized. Token may be invalid. Please re-authenticate.")
             raise HTTPException(status_code=e.response.status_code, detail=f"CINC API request error: {e.response.text}")
         except Exception as e:
             print(f"Error making CINC API request: {e} for URL: {url}")

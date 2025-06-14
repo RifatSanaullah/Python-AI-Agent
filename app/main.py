@@ -367,7 +367,7 @@ async def create_cinc_lead_for_user(user_id: str, lead_data: dict): # FastAPI pa
         print(f"Error creating CINC lead for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create CINC lead: {str(e)}")
 
-@app.put("/cinc/user/{user_id}/leads/{lead_id}")
+@app.post("/cinc/user/{user_id}/leads/{lead_id}") # Changed from @app.patch
 async def update_cinc_lead_for_user(user_id: str, lead_id: str, lead_data: dict):
     """Updates an existing lead in CINC for the specified user and lead_id."""
     try:

@@ -1,7 +1,7 @@
 import httpx
 from app.config import settings
 from typing import Any, Dict, Optional
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, HTTPException # Added HTTPException
 
 class BackendHandler:
     def __init__(self):
