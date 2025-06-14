@@ -1,50 +1,35 @@
-import httpx # Ensure httpx is imported
+import httpx 
 import time
 from fastapi import HTTPException, status
 from app.config import settings
 from typing import Optional, Dict, Any, List
 from app.services.backend_service import BackendHandler
-import requests # Added for requests.Request
+import requests 
 
 CINC_AUTH_BASE_URL = "https://authv2.cincapi.com/integrator"
 CINC_API_BASE_URL = "https://public.cincapi.com/v2"
 
-# Initialize BackendHandler instance to be used by CINC service
-# This assumes BackendHandler doesn't require async context for initialization
-# If it does, this needs to be handled differently (e.g., dependency injection in FastAPI routes)
 _backend_handler = BackendHandler()
 
 async def store_cinc_tokens(user_id: str, token_data: Dict[str, Any]):
-    """
-    Stores CINC tokens for a user via BackendHandler.
-    Adds 'issued_at' timestamp to token_data before storing.
-    """
     try:
-        # Add 'issued_at' timestamp before storing, CINC provides 'expires_in'
         token_data['issued_at'] = int(time.time()) # Current time as Unix timestamp
         await _backend_handler.store_cinc_token_in_db(user_id, token_data)
-    except HTTPException as e: # Catch HTTPException specifically if backend_handler raises it
+    except HTTPException as e:
         print(f"HTTPException during token storage process for user {user_id}: {e.detail}")
-        raise e # Re-raise it, it's already an HTTPException
+        raise e 
     except Exception as e:
         print(f"Unexpected error in store_cinc_tokens for user {user_id}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Unexpected error storing CINC tokens: {str(e)}")
 
 async def get_cinc_tokens(user_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Retrieves CINC tokens for a user via BackendHandler.
-    """
     try:
         return await _backend_handler.get_cinc_token_from_db(user_id)
     except Exception as e:
         print(f"Error in get_cinc_tokens: {e}")
-        # Optionally, re-raise or handle as appropriate
         return None
 
 async def delete_cinc_tokens(user_id: str):
-    """
-    Deletes CINC tokens for a user via BackendHandler.
-    """
     try:
         await _backend_handler.delete_cinc_token_from_db(user_id)
     except Exception as e:
@@ -52,10 +37,6 @@ async def delete_cinc_tokens(user_id: str):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete CINC tokens")
 
 async def get_cinc_access_token(user_id: str) -> str:
-    """
-    Retrieves a valid CINC access token for the user.
-    Handles token refresh if necessary.
-    """
     tokens = await get_cinc_tokens(user_id)
     if not tokens or not tokens.get("access_token"):
         print(f"No CINC tokens found for user_id: {user_id}")
@@ -65,11 +46,7 @@ async def get_cinc_access_token(user_id: str) -> str:
     issued_at = tokens.get("issued_at")
     expires_in = tokens.get("expires_in")
 
-    # Ensure issued_at and expires_in are numbers for comparison
     try:
-        # The stored issued_at is already a timestamp (number). expires_in is also a number.
-        # If they are stored as strings in the DB, they need conversion here.
-        # Assuming they are retrieved as numbers from backend_service/DB
         current_time = int(time.time())
         if isinstance(issued_at, (str, bytes)):
             issued_at = int(issued_at)
@@ -100,14 +77,10 @@ async def get_cinc_access_token(user_id: str) -> str:
     return tokens["access_token"]
 
 def get_authorization_url(state: Optional[str] = None, user_id: Optional[str] = None) -> str:
-    """
-    Generates the CINC authorization URL to redirect the user to.
-    Includes user_id in the state if provided.
-    """
     auth_url = f"{CINC_AUTH_BASE_URL}/authorize"
 
     # Combine state (CSRF token from frontend) and user_id
-    final_composite_state = state if state else "default_csrf_state" # Base CSRF state
+    final_composite_state = state if state else "default_csrf_state"
     if user_id:
         final_composite_state = f"{final_composite_state}:UID:{user_id}"
 
@@ -115,19 +88,17 @@ def get_authorization_url(state: Optional[str] = None, user_id: Optional[str] = 
         'client_id': settings.cinc_client_id,
         'response_type': 'code',
         'redirect_uri': settings.cinc_redirect_uri,
-        'scope': 'api:read api:create api:update api:event', # Ensure all needed scopes
+        'scope': 'api:read api:create api:update api:event',
     }
     if final_composite_state:
         params['state'] = final_composite_state
     
-    # Using requests.Request to prepare the URL, as was in the original summarized code
-    # This is fine for URL construction.
     prepared_request = requests.Request('GET', auth_url, params=params).prepare()
     if prepared_request.url is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not prepare CINC authorization URL")
     return prepared_request.url
 
-async def exchange_code_for_token(auth_code: str, user_id_for_storage: str) -> Dict[str, Any]: # Added user_id_for_storage
+async def exchange_code_for_token(auth_code: str, user_id_for_storage: str) -> Dict[str, Any]: 
     """
     Exchanges an authorization code for an access token and stores it via BackendHandler.
     """
@@ -214,8 +185,6 @@ async def refresh_access_token(user_id_for_storage: str) -> Dict[str, Any]:
             raise HTTPException(status_code=e.response.status_code, detail=f"CINC token refresh failed: {e.response.text}")
         except Exception as e:
             print(f"Error refreshing CINC token for user {user_id_for_storage}: {e}")
-            # Consider if deleting tokens is appropriate here too, or if it's a transient network issue.
-            # For now, raising a generic 500.
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to refresh CINC access token: {str(e)}")
 
 async def _make_cinc_request(method: str, endpoint: str, user_id: str, params: Optional[Dict[str, Any]] = None, json_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -251,9 +220,9 @@ async def _make_cinc_request(method: str, endpoint: str, user_id: str, params: O
             print(f"Error making CINC API request: {e} for URL: {url}")
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to make CINC API request.")
 
-async def get_leads(user_id: str, offset: int = 0, limit: int = 10, next_page: Optional[str] = None, from_lead_id: Optional[str] = None) -> Dict[str, Any]: # Changed access_token to user_id
+async def get_leads(user_id: str, offset: int = 0, limit: int = 10, next_page: Optional[str] = None, from_lead_id: Optional[str] = None) -> Dict[str, Any]:
     endpoint = "/site/leads"
-    params: Dict[str, Any] = {"offset": offset, "limit": limit} # Explicitly type params
+    params: Dict[str, Any] = {"offset": offset, "limit": limit} 
     if next_page:
         params["next"] = next_page
     if from_lead_id:
@@ -262,7 +231,7 @@ async def get_leads(user_id: str, offset: int = 0, limit: int = 10, next_page: O
 
 async def get_lead_details(user_id: str, lead_id: str, fields: Optional[List[str]] = None) -> Dict[str, Any]:    
     endpoint = f"/site/leads/{lead_id}"
-    params: Dict[str, Any] = {} # Explicitly type params
+    params: Dict[str, Any] = {} 
     if fields:
         params["fields"] = ",".join(fields)
     return await _make_cinc_request("GET", endpoint, user_id, params=params)
@@ -276,11 +245,10 @@ async def create_lead(user_id: str, lead_data: Dict[str, Any]) -> Dict[str, Any]
 
 async def update_lead(user_id: str, lead_id: str, lead_data: Dict[str, Any]) -> Dict[str, Any]:    
     endpoint = f"/site/leads/{lead_id}"
-    # CINC docs state: "The field email is required to uniquely identify the lead on that site and cannot be changed."
-    # However, the POST /site/leads (upsert) mentions username can be used for email change.
-    # For POST /site/leads/{lead_id}, it's safer to assume email in payload is for identification if not changing, or not include if not changing.
-    # The example for POST /site/leads/{lead_id} includes email in the payload.
     return await _make_cinc_request("POST", endpoint, user_id, json_data=lead_data) # CINC uses POST for updates to specific lead ID
+
+
+
 
 # OAuth Flow Notes:
 # 1. Your FastAPI app needs an endpoint that calls `get_authorization_url()` and redirects the user.

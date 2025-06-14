@@ -211,9 +211,6 @@ class BackendHandler:
 
     # CINC Token Management Methods
     async def store_cinc_token_in_db(self, user_id: str, token_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Stores CINC token data in the database via the Express backend.
-        """
         try:
             url = f"{self.OTHER_BACKEND_URL}/cinc/tokens"
 
@@ -221,13 +218,11 @@ class BackendHandler:
             access_token = token_data.get("access_token")
             refresh_token = token_data.get("refresh_token")
             expires_in = token_data.get("expires_in")
-            issued_at_ts = token_data.get("issued_at") # This is added by our Python's store_cinc_tokens
+            issued_at_ts = token_data.get("issued_at") # 
 
             if not access_token or not isinstance(access_token, str):
                 raise ValueError(f"access_token from CINC is missing, empty, or not a string. Value: {access_token}")
             if not refresh_token or not isinstance(refresh_token, str):
-                # Depending on OAuth flow, refresh_token might be optional on some grants, but usually not for auth code flow.
-                # For CINC, it seems expected.
                 raise ValueError(f"refresh_token from CINC is missing, empty, or not a string. Value: {refresh_token}")
             if expires_in is None or not isinstance(expires_in, int) or expires_in <= 0:
                 # expires_in should be a positive integer (duration in seconds)
@@ -241,42 +236,36 @@ class BackendHandler:
                 "access_token": access_token,
                 "refresh_token": refresh_token,
                 "expires_in": expires_in,
-                "issued_at": str(issued_at_ts), # Convert Unix timestamp to string for backend
+                "issued_at": str(issued_at_ts),
                 "scope": token_data.get("scope"),
                 "token_type": token_data.get("token_type"),
-                # account_id is optional in CincToken entity and controller
             }
 
             if not user_id or not user_id.strip():
                 raise ValueError("user_id for storing token is empty or invalid.")
 
-            print(f"Attempting to store CINC token with payload: {payload}") # Log payload
+            print(f"Attempting to store CINC token with payload: {payload}")
 
             async with httpx.AsyncClient() as client:
                 response = await client.post(url, json=payload)
             
-            print(f"Response from backend store token: {response.status_code} - {response.text}") # Log response
+            print(f"Response from backend store token: {response.status_code} - {response.text}")
             response.raise_for_status()
             return response.json()
 
         except httpx.HTTPStatusError as e:
             print(f"HTTP error while storing CINC token: {e.response.status_code} {e.response.text}")
-            # Consider logging e.request.content as well if debugging payload issues
             raise
         except httpx.RequestError as e:
             print(f"Request error while storing CINC token: {str(e)}")
             raise
-        except ValueError as ve: # Catch our validation errors
+        except ValueError as ve:
             print(f"Validation error before storing CINC token: {ve}")
-            # Re-raise as HTTPException or let it propagate if appropriate
             raise HTTPException(status_code=400, detail=str(ve))
 
     async def get_cinc_token_from_db(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Retrieves CINC token data from the database via the Express backend.
-        """
         try:
-            url = f"{self.OTHER_BACKEND_URL}/cinc/tokens/{user_id}" # Assuming Express backend endpoint
+            url = f"{self.OTHER_BACKEND_URL}/cinc/tokens/{user_id}"
             async with httpx.AsyncClient() as client:
                 response = await client.get(url)
             if response.status_code == 404:
@@ -285,7 +274,6 @@ class BackendHandler:
             return response.json()
         except httpx.HTTPStatusError as e:
             print(f"HTTP error while fetching CINC token: {e.response.status_code} {e.response.text}")
-            # Potentially return None or raise a custom error
             if e.response.status_code == 404:
                 return None
             raise
@@ -294,15 +282,12 @@ class BackendHandler:
             raise
 
     async def delete_cinc_token_from_db(self, user_id: str) -> Dict[str, Any]:
-        """
-        Deletes CINC token data from the database via the Express backend.
-        """
         try:
-            url = f"{self.OTHER_BACKEND_URL}/cinc/tokens/{user_id}" # Assuming Express backend endpoint
+            url = f"{self.OTHER_BACKEND_URL}/cinc/tokens/{user_id}"
             async with httpx.AsyncClient() as client:
                 response = await client.delete(url)
             response.raise_for_status()
-            return response.json() # Or simply return a success status/message
+            return response.json()
         except httpx.HTTPStatusError as e:
             print(f"HTTP error while deleting CINC token: {e.response.status_code} {e.response.text}")
             raise
