@@ -28,7 +28,12 @@ class Settings(BaseSettings):
     elevenlabs_apikey: str = os.getenv("ELEVENLABS_API_KEY")
     elevenlabs_voice_id: str = os.getenv("ELEVENLABS_VOICE_ID", "8LVfoRdkh4zgjr8v5ObE") 
     tts_provider: str = os.getenv("TTS_PROVIDER", "deepgram") # or elevenlabs or playht
-    nango_secret_key: str = os.getenv("NANGO_SECRET_KEY")
+    nango_secret_key: str = os.getenv("NANGO_SECRET_KEY", "")
     nango_base_url: str = os.getenv("NANGO_BASE_URL", "https://api.nango.dev")
+    cinc_client_id: str = os.getenv("CINC_CLIENT_ID", "09d1df90-5d42-48f8-9f34-5caf6c766873") # Updated
+    cinc_client_secret: str = os.getenv("CINC_CLIENT_SECRET", "8f0bca42ac2140b583a5e4148e262ce2ba5ca348a0a348dcb862c2982c12bd7b") # Updated
+    cinc_redirect_uri: str = os.getenv("CINC_REDIRECT_URI", "http://localhost:8000/cinc/callback") # Ensure this is the backend callback
+    frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000") # Updated base frontend URL
+    frontend_cinc_callback_path: str = os.getenv("FRONTEND_CINC_CALLBACK_PATH", "/dashboard/account/api-integration") # New: Path for CINC callback on frontend
 
 settings = Settings()
