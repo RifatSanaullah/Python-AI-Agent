@@ -1,0 +1,120 @@
+\
+### Create CINC Lead (Minimal - only required fields as per docs page 71)
+# Replace {your_user_id} with the actual user ID.
+POST http://localhost:8000/cinc/user/2/leads
+Content-Type: application/json
+
+{
+  "info": {
+    "contact": {
+      "email": "minimal.lead.test2@example.com"
+    }
+  }
+}
+
+### Create CINC Lead (Comprehensive - with optional fields)
+# Replace {your_user_id} with the actual user ID.
+POST http://localhost:8000/cinc/user/2/leads
+Content-Type: application/json
+
+{
+  "registered_date": "2025-06-14T13:01:59Z",
+  "created_by": "AGENT_MDID0",
+  "info": {
+    "is_buyer": true,
+    "is_seller": false,
+    "source": "API Integration - Comprehensive",
+    "status": "unworked",
+    "buyer": {
+      "average_price": 350000,
+      "favorite_city": "Atlanta",
+      "timeline": "3 to 6 months",
+      "is_pre_qualified": true
+    },
+    "contact": {
+      "first_name": "John",
+      "last_name": "DoeFromAPI-Comprehensive",
+      "email": "john.doecomp.test2@example.com",
+      "phone_numbers": {
+        "cell_phone": "4045551234",
+        "home_phone": "7705554321"
+      },
+      "mailing_address": {
+        "street": "123 Peachtree St NE",
+        "city": "Atlanta",
+        "state": "GA",
+        "postal_or_zip": "30303"
+      }
+    },
+    "secondary": {
+      "relation": "spouse",
+      "contact": {
+        "first_name": "Jane",
+        "last_name": "DoeFromAPI-Comprehensive",
+        "email": "jane.doecomp.spouse2@example.com",
+        "phone_numbers": {
+          "cell_phone": "4045551235"
+        }
+      }
+    }
+  },
+  "pipeline": {
+    "stage": "New Lead"
+  },
+  "assigned_agents": {
+    "primary_agent": {
+      "id": "AGENT3"
+    },
+    "listing_agent": {
+      "id": "AGENT5"
+    }
+  },
+  "notes": [
+    {
+      "content": "Initial lead created via API (Comprehensive). Interested in 3-bed, 2-bath homes in the Atlanta area.",
+      "category": "info",
+      "is_pinned": true,
+      "created_by": "AGENT_MDID0",
+      "notified_agents": ["AGENT3"]
+    }
+  ]
+}
+
+### Update CINC Lead
+# Replace {your_user_id} with the actual user ID.
+# Replace {lead_id_to_update} with the ID of the lead you want to update.
+POST http://localhost:8000/cinc/user/2/leads/MMEFE012186B6044A19706E2D38FD1FD5D
+Content-Type: application/json
+
+{
+  "info": {
+    "contact": {
+      "first_name": "Johnathanxxxxxx",
+      "phone_numbers": {
+        "cell_phone": "4045558899"
+      }
+    },
+    "buyer": {
+      "timeline": "1 to 3 months",
+      "average_price": 375000
+    },
+    "status": "inprogress"
+  },
+  "pipeline": {
+    "stage": "Attempted Contact"
+  },
+  "assigned_agents": {
+    "primary_agent": {
+      "id": "AGENT8"
+    }
+  }
+}
+
+### Get CINC Leads
+# Replace {your_user_id} with the actual user ID.
+GET http://localhost:8000/cinc/user/2/leads?limit=5
+
+### Get CINC Connection Status
+# Replace {your_user_id} with the actual user ID.
+GET http://localhost:8000/cinc/user/2/status
+
