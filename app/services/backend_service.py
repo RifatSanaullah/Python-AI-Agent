@@ -7,6 +7,7 @@ class BackendHandler:
     def __init__(self):
         # Define the URL of the other backend server
         self.OTHER_BACKEND_URL = settings.ai_backend_url  # Replace with your backend server URL
+        self.NODE_BACKEND_BASE_URL = settings.ai_backend_url # Assuming this is the base URL for the Node.js backend
 
     async def fetch_agent(self, phoneNumber: str) -> Dict[str, Any]:
 
@@ -210,87 +211,117 @@ class BackendHandler:
             raise
 
     # CINC Token Management Methods
-    async def store_cinc_token_in_db(self, user_id: str, token_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def store_cinc_token_in_db(self, user_id: str, token_data: Dict[str, Any]) -> None:
+        """
+        Calls the Node.js backend to store CINC token data.
+        """
+        # The Node.js backend CincTokenController.storeToken is mounted at /v1/cinc/tokens (POST)
+        # The payload for that endpoint is { user_id, access_token, refresh_token, expires_in, account_id }
+        # where account_id is CINC's specific account ID.
+        
+        # Construct the payload for the Node.js backend
+        node_backend_payload = {
+            "user_id": user_id, # Ensure this is a string if the backend expects it, or handle conversion
+            "access_token": token_data.get("access_token"),
+            "refresh_token": token_data.get("refresh_token"),
+            "expires_in": token_data.get("expires_in"),
+            "account_id": token_data.get("account_id") # This is CINC's specific account_id
+        }
+
+        # Validate required fields before sending
+        if not all([node_backend_payload["user_id"], 
+                    node_backend_payload["access_token"], 
+                    node_backend_payload["refresh_token"], 
+                    node_backend_payload["expires_in"]]):
+            # This should ideally be caught before calling this function, but good to double check
+            raise HTTPException(status_code=400, detail="Missing essential token data for Node.js backend.")
+
+        # The URL for the Node.js backend endpoint
+        # Based on AI-Agent-Backend/src/routes/v1/cincToken.ts, the route is POST /cinc/tokens (relative to /v1 base)
+        url = f"{self.NODE_BACKEND_BASE_URL}/cinc/tokens"
+
         try:
-            url = f"{self.OTHER_BACKEND_URL}/cinc/tokens"
-
-            # Validate data received from CINC/token_data before constructing payload
-            access_token = token_data.get("access_token")
-            refresh_token = token_data.get("refresh_token")
-            expires_in = token_data.get("expires_in")
-            issued_at_ts = token_data.get("issued_at") # 
-
-            if not access_token or not isinstance(access_token, str):
-                raise ValueError(f"access_token from CINC is missing, empty, or not a string. Value: {access_token}")
-            if not refresh_token or not isinstance(refresh_token, str):
-                raise ValueError(f"refresh_token from CINC is missing, empty, or not a string. Value: {refresh_token}")
-            if expires_in is None or not isinstance(expires_in, int) or expires_in <= 0:
-                # expires_in should be a positive integer (duration in seconds)
-                raise ValueError(f"expires_in from CINC is missing, not a positive integer, or zero. Value: {expires_in}")
-            if issued_at_ts is None or not isinstance(issued_at_ts, int):
-                 raise ValueError(f"issued_at timestamp is missing or not an integer. Value: {issued_at_ts}")
-
-
-            payload = {
-                "user_id": user_id,
-                "access_token": access_token,
-                "refresh_token": refresh_token,
-                "expires_in": expires_in,
-                "issued_at": str(issued_at_ts),
-                "scope": token_data.get("scope"),
-                "token_type": token_data.get("token_type"),
-            }
-
-            if not user_id or not user_id.strip():
-                raise ValueError("user_id for storing token is empty or invalid.")
-
-            print(f"Attempting to store CINC token with payload: {payload}")
-
             async with httpx.AsyncClient() as client:
-                response = await client.post(url, json=payload)
+                response = await client.post(url, json=node_backend_payload, timeout=10.0)
             
-            print(f"Response from backend store token: {response.status_code} - {response.text}")
-            response.raise_for_status()
-            return response.json()
+            response.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
+            # If successful, the Node.js backend returns 201 with a JSON body.
+            # We don't necessarily need to return its body unless specified.
+            print(f"Successfully stored CINC token in Node.js backend for user {user_id}. Response: {response.json()}")
 
         except httpx.HTTPStatusError as e:
-            print(f"HTTP error while storing CINC token: {e.response.status_code} {e.response.text}")
-            raise
+            # Log the error and re-raise as an HTTPException to be handled by the caller in cinc_service.py
+            error_message = f"Failed to store CINC token in DB via backend: {e.response.status_code} - {e.response.text}. Payload: {node_backend_payload}"
+            print(error_message)
+            raise HTTPException(status_code=e.response.status_code, detail=error_message)
         except httpx.RequestError as e:
-            print(f"Request error while storing CINC token: {str(e)}")
-            raise
-        except ValueError as ve:
-            print(f"Validation error before storing CINC token: {ve}")
-            raise HTTPException(status_code=400, detail=str(ve))
+            # Network or other request-related errors
+            error_message = f"Request error while calling Node.js backend to store CINC token: {str(e)}. Payload: {node_backend_payload}"
+            print(error_message)
+            raise HTTPException(status_code=500, detail=error_message)
+        except Exception as e:
+            # Catch any other unexpected errors
+            error_message = f"Unexpected error storing CINC token via Node.js backend: {str(e)}. Payload: {node_backend_payload}"
+            print(error_message)
+            raise HTTPException(status_code=500, detail=error_message)
 
     async def get_cinc_token_from_db(self, user_id: str) -> Optional[Dict[str, Any]]:
-        try:
-            url = f"{self.OTHER_BACKEND_URL}/cinc/tokens/{user_id}"
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url)
-            if response.status_code == 404:
-                return None
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPStatusError as e:
-            print(f"HTTP error while fetching CINC token: {e.response.status_code} {e.response.text}")
-            if e.response.status_code == 404:
-                return None
-            raise
-        except httpx.RequestError as e:
-            print(f"Request error while fetching CINC token: {str(e)}")
-            raise
+        """
+        Calls the Node.js backend to retrieve CINC token data.
+        """
+        # The Node.js backend CincTokenController.getToken is mounted at /cinc/tokens/:user_id (relative to /v1 base)
+        url = f"{self.NODE_BACKEND_BASE_URL}/cinc/tokens/{user_id}"
 
-    async def delete_cinc_token_from_db(self, user_id: str) -> Dict[str, Any]:
         try:
-            url = f"{self.OTHER_BACKEND_URL}/cinc/tokens/{user_id}"
             async with httpx.AsyncClient() as client:
-                response = await client.delete(url)
-            response.raise_for_status()
-            return response.json()
+                response = await client.get(url, timeout=10.0)
+            
+            if response.status_code == 404:
+                print(f"CINC token not found in Node.js backend for user {user_id}.")
+                return None # Consistent with how cinc_service.py handles not found
+            
+            response.raise_for_status() # Raise an exception for other HTTP errors
+            token_data = response.json()
+            print(f"Successfully retrieved CINC token from Node.js backend for user {user_id}.")
+            return token_data
+
         except httpx.HTTPStatusError as e:
-            print(f"HTTP error while deleting CINC token: {e.response.status_code} {e.response.text}")
-            raise
+            error_message = f"Failed to get CINC token from DB via backend: {e.response.status_code} - {e.response.text}"
+            print(error_message)
+            # Propagate the status code from the backend if it's an HTTP error
+            raise HTTPException(status_code=e.response.status_code, detail=error_message)
         except httpx.RequestError as e:
-            print(f"Request error while deleting CINC token: {str(e)}")
-            raise
+            error_message = f"Request error while calling Node.js backend to get CINC token: {str(e)}"
+            print(error_message)
+            raise HTTPException(status_code=500, detail=error_message)
+        except Exception as e:
+            error_message = f"Unexpected error retrieving CINC token via Node.js backend: {str(e)}"
+            print(error_message)
+            raise HTTPException(status_code=500, detail=error_message)
+
+    async def delete_cinc_token_from_db(self, user_id: str) -> None:
+        """
+        Calls the Node.js backend to delete/invalidate CINC token data.
+        """
+        # The Node.js backend CincTokenController.deleteToken is mounted at /cinc/tokens/:user_id (relative to /v1 base)
+        url = f"{self.NODE_BACKEND_BASE_URL}/cinc/tokens/{user_id}"
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.delete(url, timeout=10.0)
+            
+            response.raise_for_status() # Raise an exception for HTTP errors
+            print(f"Successfully deleted/invalidated CINC token in Node.js backend for user {user_id}. Response: {response.json()}")
+
+        except httpx.HTTPStatusError as e:
+            error_message = f"Failed to delete CINC token from DB via backend: {e.response.status_code} - {e.response.text}"
+            print(error_message)
+            raise HTTPException(status_code=e.response.status_code, detail=error_message)
+        except httpx.RequestError as e:
+            error_message = f"Request error while calling Node.js backend to delete CINC token: {str(e)}"
+            print(error_message)
+            raise HTTPException(status_code=500, detail=error_message)
+        except Exception as e:
+            error_message = f"Unexpected error deleting CINC token via Node.js backend: {str(e)}"
+            print(error_message)
+            raise HTTPException(status_code=500, detail=error_message)

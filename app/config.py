@@ -34,6 +34,6 @@ class Settings(BaseSettings):
     cinc_client_secret: str = os.getenv("CINC_CLIENT_SECRET", "8f0bca42ac2140b583a5e4148e262ce2ba5ca348a0a348dcb862c2982c12bd7b") # Updated
     cinc_redirect_uri: str = os.getenv("CINC_REDIRECT_URI", "http://localhost:8000/cinc/callback") # Ensure this is the backend callback
     frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000") # Updated base frontend URL
-    frontend_cinc_callback_path: str = os.getenv("FRONTEND_CINC_CALLBACK_PATH", "/dashboard/account/api-integration") # New: Path for CINC callback on frontend
+    frontend_cinc_callback_path: str = os.getenv("FRONTEND_CINC_CALLBACK_PATH", "/dashboard/account/api-integration") # Corrected path
 
 settings = Settings()

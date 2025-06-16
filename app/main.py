@@ -2,17 +2,17 @@
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Depends, WebSocket, HTTPException
-from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse, RedirectResponse # Keep RedirectResponse
 from app.services.call_handler import CallHandler
 from contextlib import asynccontextmanager
 from fastapi import UploadFile, File
 from pathlib import Path
-from app.config import settings
+from app.config import settings # Ensure settings is imported to access frontend_url
 from app.services.backend_service import BackendHandler
 from fastapi.middleware.cors import CORSMiddleware
-from app.services.nango_service import NangoService
-from app.services import cinc_service # Added CINC service import
-from typing import Optional # Added for optional query parameters
+from app.services.nango_service import NangoService # Added NangoService import back
+from app.services import cinc_service
+from typing import Optional, Dict, Any # Added Dict and Any for type hinting
 
 load_dotenv()
 
@@ -257,78 +257,112 @@ async def remove_session(request: Request, call_handler: CallHandler = Depends(g
 # CINC OAuth Endpoints
 @app.get("/cinc/login")
 async def cinc_login(request: Request, state: Optional[str] = None, user_id: Optional[str] = None):
+    # Ensure user_id is provided if your flow requires it to be embedded in the state or for logging
     if not user_id:
-        return JSONResponse(
-            status_code=400,
-            content={"message": "user_id query parameter is required for /cinc/login"}
-        )
-    if not state:
-        return JSONResponse(
-            status_code=400,
-            content={"message": "state (CSRF token) query parameter is required for /cinc/login"}
-        )
+        # Depending on your UX, you might redirect to an error page or the frontend to get user_id
+        raise HTTPException(status_code=400, detail="user_id is required for CINC login flow initiation")
+    
+    # Pass both state (from frontend for CSRF) and user_id to the authorization URL generator
+    # The cinc_service.get_authorization_url should handle combining these into the final state parameter for CINC
+    auth_url = cinc_service.get_authorization_url(state=state, user_id=user_id) 
+    return RedirectResponse(url=auth_url)
 
-    authorization_url = cinc_service.get_authorization_url(state=state, user_id=user_id)
-    return RedirectResponse(authorization_url)
-
-@app.get("/cinc/callback")
-async def cinc_callback(request: Request, code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None, error_description: Optional[str] = None):
-    original_csrf_state = None
+@app.get("/cinc/callback", tags=["CINC Integration"])
+async def cinc_callback(
+    request: Request, 
+    code: Optional[str] = None, 
+    error: Optional[str] = None, 
+    error_description: Optional[str] = None, 
+    state: Optional[str] = None # This is the composite_state from CINC
+):
+    # Use the corrected path from settings
+    base_redirect_url = settings.frontend_url.rstrip('/') + settings.frontend_cinc_callback_path 
+    
     user_id_from_state = None
+    original_csrf_state = None
 
     if state:
-        parts = state.split(":UID:")
-        if len(parts) == 2:
-            original_csrf_state = parts[0]
-            user_id_from_state = parts[1]
-        else:
-            print(f"Warning: CINC callback state format unexpected: {state}")
-            error_redirect_url = f"{settings.frontend_url}{settings.frontend_cinc_callback_path}?cinc_status=error&detail=Invalid state format received from CINC"
-            return RedirectResponse(error_redirect_url)
-    else:
-        # This should not happen if CINC is redirecting correctly, even with an error
-        print("Error: CINC callback received no state parameter.")
-        error_redirect_url = f"{settings.frontend_url}{settings.frontend_cinc_callback_path}?cinc_status=error&detail=Missing state parameter from CINC"
-        return RedirectResponse(error_redirect_url)
+        state_parts = state.split("__")
+        if len(state_parts) == 2:
+            original_csrf_state = state_parts[0]
+            user_id_from_state = state_parts[1]
+        elif len(state_parts) == 1:
+            # This could be just the CSRF token if user_id wasn't appended,
+            # or just user_id if CSRF wasn't used/appended.
+            # For now, let's assume if it's one part, and we need user_id, it might be it.
+            # This part depends on how `get_authorization_url` constructs the state.
+            # Let's assume cinc_service.exchange_code_for_token will handle state parsing for user_id
+            pass # exchange_code_for_token will handle extracting user_id
 
-    if not user_id_from_state: 
-        error_redirect_url = f"{settings.frontend_url}{settings.frontend_cinc_callback_path}?cinc_status=error&detail=User ID missing in state&state={original_csrf_state}"
-        return RedirectResponse(error_redirect_url)
+    redirect_params = {}
+    if original_csrf_state: # Pass back the original CSRF state if present
+        redirect_params['state'] = original_csrf_state
+    if user_id_from_state: # Pass back user_id if extracted
+        redirect_params['user_id'] = user_id_from_state
 
-    # Handle CINC authorization errors (e.g., user denied access)
     if error:
-        error_detail = error_description or error
-        print(f"CINC authorization error for user {user_id_from_state}: {error_detail}")
-        error_redirect_url = f"{settings.frontend_url}{settings.frontend_cinc_callback_path}?cinc_status=error&detail={error_detail}&user_id={user_id_from_state}&state={original_csrf_state}"
-        return RedirectResponse(error_redirect_url)
+        if error == "access_denied":
+            redirect_params['cinc_status'] = 'cancelled'
+            redirect_params['detail'] = 'User denied access in CINC.'
+        else:
+            redirect_params['cinc_status'] = 'error'
+            redirect_params['detail'] = error_description or error
+        
+        query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
+        return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
 
     if not code:
-        print(f"CINC callback for user {user_id_from_state} missing authorization code and no error reported.")
-        error_redirect_url = f"{settings.frontend_url}{settings.frontend_cinc_callback_path}?cinc_status=error&detail=Missing authorization code from CINC&user_id={user_id_from_state}&state={original_csrf_state}"
-        return RedirectResponse(error_redirect_url)
+        redirect_params['cinc_status'] = 'error'
+        redirect_params['detail'] = 'Authorization code not found in CINC callback.'
+        query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
+        return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
 
     try:
-        await cinc_service.exchange_code_for_token(auth_code=code, user_id_for_storage=user_id_from_state)
-        success_redirect_url = f"{settings.frontend_url}{settings.frontend_cinc_callback_path}?cinc_status=success&user_id={user_id_from_state}&state={original_csrf_state}"
-        return RedirectResponse(success_redirect_url)
+        # exchange_code_for_token will use the composite_state to get user_id for storage
+        token_response = await cinc_service.exchange_code_for_token(auth_code=code, composite_state=state)
+        
+        # If successful, token_response contains the tokens and user_id used for storage.
+        # We need to ensure user_id is passed back to the frontend.
+        # The user_id for the redirect should be the one associated with the token.
+        stored_user_id = token_response.get("user_id_for_storage") # Assuming exchange_code_for_token returns this
+
+        redirect_params['cinc_status'] = 'success'
+        if stored_user_id:
+             redirect_params['user_id'] = stored_user_id # Prioritize user_id from successful token exchange
+        elif user_id_from_state: # Fallback to user_id from state if not in token_response
+            redirect_params['user_id'] = user_id_from_state
+        
+        query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
+        return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
+    
     except HTTPException as e:
-        error_redirect_url = f"{settings.frontend_url}{settings.frontend_cinc_callback_path}?cinc_status=error&detail={e.detail}&user_id={user_id_from_state}&state={original_csrf_state}"
-        return RedirectResponse(error_redirect_url)
+        redirect_params['cinc_status'] = 'error'
+        redirect_params['detail'] = str(e.detail)
+        if user_id_from_state: # Add user_id if available, even on error
+             redirect_params['user_id'] = user_id_from_state
+
+        query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
+        return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
+        
     except Exception as e:
-        print(f"Error in CINC callback during token exchange for user {user_id_from_state}: {e}")
-        error_redirect_url = f"{settings.frontend_url}{settings.frontend_cinc_callback_path}?cinc_status=error&detail=Internal Server Error during token exchange&user_id={user_id_from_state}&state={original_csrf_state}"
-        return RedirectResponse(error_redirect_url)
+        print(f"Unexpected error in CINC callback processing: {str(e)}") 
+        redirect_params['cinc_status'] = 'error'
+        redirect_params['detail'] = "An unexpected error occurred while finalizing CINC authorization."
+        if user_id_from_state: # Add user_id if available, even on error
+             redirect_params['user_id'] = user_id_from_state
+        
+        query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
+        return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
 
 @app.post("/cinc/user/{user_id}/disconnect")
 async def disconnect_cinc_integration(user_id: str):
     try:
-        await cinc_service.delete_cinc_tokens(user_id)
-        return {"message": "CINC integration disconnected successfully", "user_id": user_id}
+        await cinc_service.delete_cinc_tokens(user_id=user_id)
+        return JSONResponse(status_code=200, content={"message": "CINC integration disconnected successfully"})
     except HTTPException as e:
         raise e
     except Exception as e:
-        print(f"Error disconnecting CINC for user {user_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to disconnect CINC integration")
+        raise HTTPException(status_code=500, detail=f"Failed to disconnect CINC integration: {str(e)}")
 
 @app.get("/cinc/user/{user_id}/leads")
 async def get_cinc_leads_for_user(user_id: str, offset: int = 0, limit: int = 10, next_page: Optional[str] = None, from_lead_id: Optional[str] = None):
