@@ -59,7 +59,7 @@ async def incoming_call(request: Request, call_handler: CallHandler = Depends(ge
     application_sid = data.get('ApplicationSid')
     direction = data.get('Direction')
     fromNumber = data.get('From')
-    dialed_number = "+16692000795"
+    dialed_number =  data.get('To')
     call_id = data.get("CallSid")
     print(data.get("IsBoom"))
     data = {
@@ -256,10 +256,10 @@ async def remove_session(request: Request, call_handler: CallHandler = Depends(g
 
 # CINC OAuth Endpoints
 @app.get("/cinc/login")
-async def cinc_login(request: Request, state: Optional[str] = None, user_id: Optional[str] = None):
-    if not user_id:
-        raise HTTPException(status_code=400, detail="user_id is required for CINC login flow initiation")
-    auth_url = cinc_service.get_authorization_url(state=state, user_id=user_id) 
+async def cinc_login(request: Request, state: Optional[str] = None, account_id: Optional[str] = None):
+    if not account_id:
+        raise HTTPException(status_code=400, detail="account_id is required for CINC login flow initiation")
+    auth_url = cinc_service.get_authorization_url(state=state, account_id=account_id) 
     return RedirectResponse(url=auth_url)
 
 @app.get("/cinc/callback", tags=["CINC Integration"])
@@ -272,22 +272,22 @@ async def cinc_callback(
 ):
     base_redirect_url = settings.frontend_url.rstrip('/') + settings.frontend_cinc_callback_path 
     
-    user_id_from_state = None
+    account_id_from_state = None
     original_csrf_state = None
 
     if state:
         state_parts = state.split("__")
         if len(state_parts) == 2:
             original_csrf_state = state_parts[0]
-            user_id_from_state = state_parts[1]
+            account_id_from_state = state_parts[1]
         elif len(state_parts) == 1:
             pass 
 
     redirect_params = {}
     if original_csrf_state: 
         redirect_params['state'] = original_csrf_state
-    if user_id_from_state: 
-        redirect_params['user_id'] = user_id_from_state
+    if account_id_from_state: 
+        redirect_params['account_id'] = account_id_from_state
 
     if error:
         if error == "access_denied":
@@ -311,13 +311,13 @@ async def cinc_callback(
         token_response = await cinc_service.exchange_code_for_token(auth_code=code, composite_state=state)
         
         
-        stored_user_id = token_response.get("user_id_for_storage") 
+        stored_account_id = token_response.get("account_id_for_storage") 
 
         redirect_params['cinc_status'] = 'success'
-        if stored_user_id:
-             redirect_params['user_id'] = stored_user_id 
-        elif user_id_from_state: 
-            redirect_params['user_id'] = user_id_from_state
+        if stored_account_id:
+             redirect_params['account_id'] = stored_account_id 
+        elif account_id_from_state: 
+            redirect_params['account_id'] = account_id_from_state
         
         query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
         return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
@@ -325,8 +325,8 @@ async def cinc_callback(
     except HTTPException as e:
         redirect_params['cinc_status'] = 'error'
         redirect_params['detail'] = str(e.detail)
-        if user_id_from_state: 
-             redirect_params['user_id'] = user_id_from_state
+        if account_id_from_state: 
+             redirect_params['account_id'] = account_id_from_state
 
         query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
         return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
@@ -335,21 +335,21 @@ async def cinc_callback(
         print(f"Unexpected error in CINC callback processing: {str(e)}") 
         redirect_params['cinc_status'] = 'error'
         redirect_params['detail'] = "An unexpected error occurred while finalizing CINC authorization."
-        if user_id_from_state:
-             redirect_params['user_id'] = user_id_from_state
+        if account_id_from_state:
+             redirect_params['account_id'] = account_id_from_state
         
         query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
         return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
 
-@app.post("/cinc/user/{user_id}/disconnect")
-async def disconnect_cinc_integration(user_id: str):
+@app.post("/cinc/account/{account_id}/disconnect")
+async def disconnect_cinc_integration(account_id: str):
     try:
-        await cinc_service.delete_cinc_tokens(user_id=user_id)
-        return JSONResponse(status_code=200, content={"message": "CINC integration disconnected successfully"})
+        await cinc_service.delete_cinc_tokens(account_id=int(account_id))
+        return JSONResponse(status_code=200, content={"message": "CINC connection deleted successfully"})
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to disconnect CINC integration: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete CINC connection: {str(e)}")
 
 
 if __name__ == "__main__":

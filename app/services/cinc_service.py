@@ -95,13 +95,13 @@ async def get_cinc_access_token(account_id: int, connection_id: Optional[str] = 
 
     return tokens["access_token"]
 
-def get_authorization_url(state: Optional[str] = None, user_id: Optional[str] = None) -> str:
+def get_authorization_url(state: Optional[str] = None, account_id: Optional[str] = None) -> str:
     auth_url = f"{CINC_AUTH_BASE_URL}/authorize" 
     composite_state_parts = []
     if state:
         composite_state_parts.append(state)
-    if user_id:
-        composite_state_parts.append(user_id)
+    if account_id:
+        composite_state_parts.append(account_id)
     
     final_composite_state = "__".join(composite_state_parts) if composite_state_parts else "default_state"
 
@@ -121,19 +121,19 @@ def get_authorization_url(state: Optional[str] = None, user_id: Optional[str] = 
 
 async def exchange_code_for_token(auth_code: str, composite_state: Optional[str]) -> Dict[str, Any]: 
     token_url = f"{CINC_AUTH_BASE_URL}/token"
-    user_id_for_storage = None
+    account_id_for_storage = None
     original_csrf_state = None 
 
     if composite_state:
         state_parts = composite_state.split("__")
         if len(state_parts) == 2:
             original_csrf_state = state_parts[0]
-            user_id_for_storage = state_parts[1]
+            account_id_for_storage = state_parts[1]
         elif len(state_parts) == 1:
-            user_id_for_storage = state_parts[-1]
+            account_id_for_storage = state_parts[-1]
 
-    if not user_id_for_storage:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User ID could not be determined from state. Cannot store token.")
+    if not account_id_for_storage:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Account ID could not be determined from state. Cannot store token.")
 
     payload = {
         'grant_type': 'authorization_code',
@@ -156,19 +156,17 @@ async def exchange_code_for_token(auth_code: str, composite_state: Optional[str]
                 "account_id": token_data.get("account_id") # CINC's account_id should come from token response
             }
 
-            # For OAuth flow, we need to convert user_id to account_id
-            # In a real system, you'd look up the account_id from user_id
-            # For now, assuming user_id_for_storage can be used as account_id or convert it
+            # For OAuth flow, the account_id is passed directly from the state
+            # In a real system, you might still need to validate the account_id
             try:
-                account_id_for_storage = int(user_id_for_storage)  # Assuming user_id can be converted to account_id
+                account_id_int = int(account_id_for_storage)  # Convert to int for storage
             except ValueError:
-                # If user_id is not a number, we might need to look it up from the backend
-                # For now, raise an error - this should be handled properly in production
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot determine account_id for token storage")
+                # If account_id is not a number, raise an error
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid account_id format for token storage")
 
-            await store_cinc_tokens(account_id=account_id_for_storage, token_data=storage_payload)
+            await store_cinc_tokens(account_id=account_id_int, token_data=storage_payload)
             
-            return {**token_data, "user_id_for_storage": user_id_for_storage, "original_csrf_state": original_csrf_state}
+            return {**token_data, "account_id_for_storage": account_id_for_storage, "original_csrf_state": original_csrf_state}
         except httpx.HTTPStatusError as e:
             error_detail = f"CINC token exchange failed: {e.response.status_code} - {e.response.text}"
             print(error_detail)
@@ -246,7 +244,6 @@ async def _make_cinc_request(method: str, endpoint: str, account_id: int, connec
     print(f"DEBUG - CINC API Request:")
     print(f"  Method: {method}")
     print(f"  URL: {url}")
-    print(f"  Headers: {headers}")
     if json_data:
         print(f"  JSON Data: {json_data}")
     if params:
@@ -350,11 +347,6 @@ async def update_lead(account_id: int, lead_id: str, lead_data: Dict[str, Any], 
     return await _make_cinc_request("POST", endpoint, account_id, connection_id=connection_id, json_data=lead_data)
 
 async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    """
-    Search for CINC leads by phone number.
-    Since CINC doesn't have a direct phone search endpoint, we'll get all leads and filter by phone.
-    For better performance in production, you might want to implement server-side filtering if CINC API supports it.
-    """
     try:
         # Clean phone number to match different formats
         clean_phone = ''.join(filter(str.isdigit, phone))
@@ -362,7 +354,6 @@ async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optiona
         # For testing purposes, use a placeholder phone when invalid phone is passed
         if len(clean_phone) == 0 or phone == "client:Anonymous":
             print(f"DEBUG - Using placeholder phone for testing. Original phone: {phone}")
-            clean_phone = "1234567899"  # Use placeholder phone for testing
         elif len(clean_phone) == 11 and clean_phone.startswith('1'):
             clean_phone = clean_phone[1:]  # Remove leading '1'
         elif len(clean_phone) == 10:
@@ -370,7 +361,6 @@ async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optiona
         else:
             # If phone format is unexpected, use placeholder for testing
             print(f"DEBUG - Invalid phone format, using placeholder. Original: {phone}, Cleaned: {clean_phone}")
-            # clean_phone = "1234567899"
 
         print(f"DEBUG - Searching CINC leads for phone: {clean_phone}")
 
