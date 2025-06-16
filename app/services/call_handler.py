@@ -358,17 +358,19 @@ class CallHandler:
                     if summary.get("is_seller") is not None: 
                         cinc_lead_data["info"]["is_seller"] = summary["is_seller"]
 
-                    # Buyer details
+                    # Buyer details - Always include buyer object with all expected fields
                     buyer = {}
-                    if summary.get("average_price"): buyer["average_price"] = summary["average_price"]
-                    if summary.get("favorite_city"): buyer["favorite_city"] = summary["favorite_city"]
-                    if summary.get("timeline") and summary["timeline"].strip(): buyer["timeline"] = summary["timeline"]
-                    if summary.get("is_pre_qualified") is not None: buyer["is_pre_qualified"] = summary["is_pre_qualified"]
-                    if buyer: cinc_lead_data["info"]["buyer"] = buyer
+                    buyer["average_price"] = summary.get("average_price", 0)
+                    buyer["favorite_city"] = summary.get("favorite_city", "")
+                    buyer["timeline"] = summary.get("timeline", "")
+                    buyer["is_pre_qualified"] = summary.get("is_pre_qualified", False)
+                    # Always add buyer object for CINC
+                    cinc_lead_data["info"]["buyer"] = buyer
 
-                    # Pipeline stage
-                    if summary.get("pipeline_stage") and summary["pipeline_stage"].strip(): 
-                        cinc_lead_data["pipeline"] = {"stage": summary["pipeline_stage"]}
+                    # Pipeline stage - Always include pipeline object
+                    cinc_lead_data["pipeline"] = {
+                        "stage": summary.get("pipeline_stage", "")
+                    }
 
                 # Handle notes (works for both CINC format and flat format)
                 notes = []
@@ -378,12 +380,28 @@ class CallHandler:
                     # Filter out empty notes
                     notes.extend([note for note in cinc_lead_data["notes"] if note.get("content", "").strip()])
                 
-                # Add description as note if available in flat format
-                if summary.get("description") and summary["description"].strip() and not any(note.get("content", "").startswith("Call summary:") for note in notes):
-                    notes.append({
-                        "content": f"Call summary: {summary['description']}",
-                        "category": "info"
-                    })
+                # Add conversation summary as the main note if available
+                if summary.get("description") and summary["description"].strip():
+                    # Check if we already have a call summary note to avoid duplicates
+                    has_call_summary = any(note.get("content", "").startswith("Call summary:") for note in notes)
+                    if not has_call_summary:
+                        notes.append({
+                            "content": f"Call summary: {summary['description']}",
+                            "category": "info",
+                            "is_pinned": True,
+                            "created_by": "AI_AGENT"
+                        })
+                
+                # Add individual notes from the conversation if they exist in the summary
+                if summary.get("notes") and isinstance(summary["notes"], list):
+                    for note_item in summary["notes"]:
+                        if isinstance(note_item, dict) and note_item.get("content", "").strip():
+                            notes.append({
+                                "content": note_item["content"],
+                                "category": note_item.get("category", "info"),
+                                "is_pinned": note_item.get("is_pinned", False),
+                                "created_by": "AI_AGENT"
+                            })
                 
                 # Add appointment note if exists
                 if appointment and appointment.get("start_time") and appointment.get("end_time"):
@@ -393,28 +411,62 @@ class CallHandler:
                     if appointment_time_str.strip():
                         notes.append({
                             "content": f"Appointment scheduled: {appointment_time_str}. Details: {appointment.get('summary', 'N/A')}",
-                            "category": "info"
+                            "category": "appointment",
+                            "is_pinned": True,
+                            "created_by": "AI_AGENT"
+                        })
+                
+                # Add a default conversation note if no other notes exist but we have basic info
+                if not notes and (summary.get("first_name") or summary.get("email")):
+                    contact_info = []
+                    if summary.get("first_name"):
+                        contact_info.append(f"Name: {summary.get('first_name', '')} {summary.get('last_name', '')}")
+                    if summary.get("email"):
+                        contact_info.append(f"Email: {summary['email']}")
+                    if summary.get("phone"):
+                        contact_info.append(f"Phone: {summary['phone']}")
+                    
+                    if contact_info:
+                        notes.append({
+                            "content": f"Contact captured via AI assistant. {', '.join(contact_info)}",
+                            "category": "info",
+                            "is_pinned": True,
+                            "created_by": "AI_AGENT"
                         })
                 
                 # Only add notes if there are any
                 if notes: 
                     cinc_lead_data["notes"] = notes
-                else:
-                    # Remove empty notes array if it exists
-                    if "notes" in cinc_lead_data:
-                        del cinc_lead_data["notes"]
                 
                 # Remove empty/null fields that might cause issues with CINC API
-                def clean_empty_fields(obj):
+                # For CINC, we need to be more careful about what we send
+                def clean_for_cinc_update(obj):
+                    """Clean data for CINC API - only include fields with actual values for updates"""
                     if isinstance(obj, dict):
-                        return {k: clean_empty_fields(v) for k, v in obj.items() 
-                               if v is not None and v != "" and v != {}}
+                        cleaned = {}
+                        for k, v in obj.items():
+                            if v is None:
+                                continue
+                            elif isinstance(v, str) and v.strip() == "":
+                                # For CINC updates, skip empty strings entirely
+                                continue
+                            elif isinstance(v, dict):
+                                nested_cleaned = clean_for_cinc_update(v)
+                                if nested_cleaned:  # Only add if the dict has content
+                                    cleaned[k] = nested_cleaned
+                            elif isinstance(v, list):
+                                cleaned_list = [clean_for_cinc_update(item) for item in v if item is not None]
+                                if cleaned_list:  # Only add if the list has content
+                                    cleaned[k] = cleaned_list
+                            else:
+                                cleaned[k] = v
+                        return cleaned
                     elif isinstance(obj, list):
-                        return [clean_empty_fields(item) for item in obj if item is not None]
+                        return [clean_for_cinc_update(item) for item in obj if item is not None]
                     else:
                         return obj
                 
-                cinc_lead_data = clean_empty_fields(cinc_lead_data)
+                cinc_lead_data = clean_for_cinc_update(cinc_lead_data)
 
                 # Debug: Print the final CINC lead data structure
                 print(f"DEBUG - CINC lead data to be sent: {cinc_lead_data}")
@@ -423,14 +475,96 @@ class CallHandler:
                 int_account_id = int(account_id)
 
                 if lead_id:
-                    # Update existing lead
-                    await cinc_service_module.update_lead(
-                        account_id=int_account_id, 
-                        lead_id=lead_id, 
-                        lead_data=cinc_lead_data,
-                        connection_id=cinc_connection_id
-                    )
-                    logging.info(f"CINC lead {lead_id} updated for account {account_id} via connection {cinc_connection_id}")
+                    # For CINC updates, we should only send fields that actually changed
+                    # This is more efficient and follows CINC best practices
+                    update_data = {}
+                    
+                    # Only include fields that have meaningful values to update
+                    if cinc_lead_data.get("info"):
+                        info_updates = {}
+                        info = cinc_lead_data["info"]
+                        
+                        # Contact updates (email, name, phone)
+                        if info.get("contact"):
+                            contact_updates = {}
+                            contact = info["contact"]
+                            if contact.get("email"):
+                                contact_updates["email"] = contact["email"]
+                            if contact.get("first_name"):
+                                contact_updates["first_name"] = contact["first_name"]
+                            if contact.get("last_name"):
+                                contact_updates["last_name"] = contact["last_name"]
+                            if contact.get("phone_numbers"):
+                                contact_updates["phone_numbers"] = contact["phone_numbers"]
+                            
+                            if contact_updates:
+                                info_updates["contact"] = contact_updates
+                        
+                        # Buyer updates (only if there are actual values)
+                        if info.get("buyer"):
+                            buyer_updates = {}
+                            buyer = info["buyer"]
+                            if buyer.get("average_price") and buyer["average_price"] > 0:
+                                buyer_updates["average_price"] = buyer["average_price"]
+                            if buyer.get("favorite_city") and buyer["favorite_city"].strip():
+                                buyer_updates["favorite_city"] = buyer["favorite_city"]
+                            if buyer.get("timeline") and buyer["timeline"].strip():
+                                buyer_updates["timeline"] = buyer["timeline"]
+                            if buyer.get("is_pre_qualified") is not None:
+                                buyer_updates["is_pre_qualified"] = buyer["is_pre_qualified"]
+                            
+                            if buyer_updates:
+                                info_updates["buyer"] = buyer_updates
+                        
+                        # Other info updates
+                        if info.get("is_buyer") is not None:
+                            info_updates["is_buyer"] = info["is_buyer"]
+                        if info.get("is_seller") is not None:
+                            info_updates["is_seller"] = info["is_seller"]
+                        if info.get("status"):
+                            info_updates["status"] = info["status"]
+                        
+                        if info_updates:
+                            update_data["info"] = info_updates
+                    
+                    # Pipeline updates
+                    if cinc_lead_data.get("pipeline") and cinc_lead_data["pipeline"].get("stage"):
+                        update_data["pipeline"] = {"stage": cinc_lead_data["pipeline"]["stage"]}
+                    
+                    # Notes updates
+                    if cinc_lead_data.get("notes") and len(cinc_lead_data["notes"]) > 0:
+                        # Filter out empty notes and ensure proper CINC format
+                        valid_notes = []
+                        for note in cinc_lead_data["notes"]:
+                            if note.get("content") and note["content"].strip():
+                                # Ensure each note has the required CINC format
+                                formatted_note = {
+                                    "content": note["content"],
+                                    "category": note.get("category", "info"),
+                                    "created_by": note.get("created_by", "AI_AGENT")
+                                }
+                                # Add optional fields if they exist
+                                if note.get("is_pinned") is not None:
+                                    formatted_note["is_pinned"] = note["is_pinned"]
+                                
+                                valid_notes.append(formatted_note)
+                        
+                        if valid_notes:
+                            update_data["notes"] = valid_notes
+                    
+                    # Only proceed with update if we have data to update
+                    if update_data:
+                        print(f"DEBUG - CINC update data (filtered): {update_data}")
+                        await cinc_service_module.update_lead(
+                            account_id=int_account_id, 
+                            lead_id=lead_id, 
+                            lead_data=update_data,
+                            connection_id=cinc_connection_id
+                        )
+                        logging.info(f"CINC lead {lead_id} updated for account {account_id} via connection {cinc_connection_id}")
+                    else:
+                        print(f"DEBUG - No meaningful updates to send to CINC for lead {lead_id}")
+                        logging.info(f"CINC lead {lead_id} - no updates needed for account {account_id}")
                 else:
                     # Create new lead - check for email in nested structure
                     contact_info = cinc_lead_data.get("info", {}).get("contact", {})

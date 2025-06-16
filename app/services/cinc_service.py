@@ -307,7 +307,32 @@ async def get_leads(account_id: int, connection_id: Optional[str] = None, offset
         params["next"] = next_page
     if from_lead_id:
         params["from"] = f"id:{from_lead_id}"
-    return await _make_cinc_request("GET", endpoint, account_id, connection_id=connection_id, params=params)
+    
+    # Get raw response from CINC API
+    response = await _make_cinc_request("GET", endpoint, account_id, connection_id=connection_id, params=params)
+    
+    # Filter out trash leads from the response
+    if response and 'leads' in response:
+        filtered_leads = []
+        trash_count = 0
+        
+        for lead in response['leads']:
+            lead_status = lead.get('info', {}).get('status', '').lower()
+            if lead_status == 'trash':
+                trash_count += 1
+                continue
+            filtered_leads.append(lead)
+        
+        # Update the response with filtered leads
+        response['leads'] = filtered_leads
+        
+        # Update count if available
+        if 'paging' in response and 'count' in response['paging']:
+            response['paging']['count'] = len(filtered_leads)
+        
+        print(f"DEBUG - Filtered out {trash_count} trash leads, returning {len(filtered_leads)} active leads")
+    
+    return response
 
 async def get_lead_details(account_id: int, lead_id: str, connection_id: Optional[str] = None, fields: Optional[List[str]] = None) -> Dict[str, Any]:    
     endpoint = f"/site/leads/{lead_id}"
