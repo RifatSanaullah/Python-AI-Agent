@@ -1063,7 +1063,6 @@ class CallHandler:
     async def handle_call(self, call_id: str, data):
         print("Handling call...")
         api_response = await self.backend_service.create_call_info(data)
-        print(f"DEBUG - Full backend response: {json.dumps(api_response, indent=2)}")
         self.agents[call_id] = api_response['data']['agent']
         self.agents[call_id]['isBoom'] = data['isBoom']
         self.agents[call_id]['complete_call'] = False
@@ -1110,8 +1109,6 @@ class CallHandler:
         elif 'agent' in api_response['data'] and 'userId' in api_response['data']['agent']:
             self.agents[call_id]['user_id'] = api_response['data']['agent']['userId']
         else:
-            print("DEBUG - No user_id found in backend response")
-            # Set user_id to None explicitly for debugging
             self.agents[call_id]['user_id'] = None
         
         print(f"DEBUG - Final agent integrations: {self.agents[call_id]['integrations']}")
@@ -1276,6 +1273,61 @@ class CallHandler:
                 description = details['Description']
                 greetings = self.modify_greeting(fullname, greetings, call_sid)
                 self.agents[call_sid]['new_knowledge'] = True
+
+        elif self.agents[call_sid]['integrations']['cinc_connection_id']:
+            try:
+                # Get account_id from agent info
+                account_id = self.agents[call_sid].get('account_id')
+                if account_id:
+                    result = await self.cinc_service.get_leads_by_phone(
+                        account_id=account_id, 
+                        phone=self.agents[call_sid]['from'],
+                        connection_id=self.agents[call_sid]['integrations']['cinc_connection_id']
+                    )
+                    
+                    if result and len(result) > 0:
+                        # Use the first matching lead
+                        lead = result[0]
+                        contact_info = lead.get('info', {}).get('contact', {})
+                        
+                        # Extract contact information
+                        first_name = contact_info.get('first_name', '')
+                        last_name = contact_info.get('last_name', '')
+                        
+                        if first_name and last_name:
+                            fullname = f"{first_name} {last_name}"
+                        elif first_name:
+                            fullname = first_name
+                        elif last_name:
+                            fullname = last_name
+                        
+                        email = contact_info.get('email')
+                        
+                        # Get phone number from the lead
+                        phone_numbers = contact_info.get('phone_numbers', {})
+                        if phone_numbers.get('cell_phone'):
+                            phoneNumber = phone_numbers['cell_phone']
+                        elif phone_numbers.get('home_phone'):
+                            phoneNumber = phone_numbers['home_phone']
+                        
+                        # Extract description from notes if available
+                        notes = lead.get('notes', [])
+                        if notes:
+                            # Combine all note contents
+                            description = '; '.join([note.get('content', '') for note in notes if note.get('content')])
+                        
+                        # Set CINC lead ID for future updates
+                        crmUserId = lead.get('id')
+                        if crmUserId:
+                            self.agents[call_sid]['cinc_lead_id'] = crmUserId
+                        
+                        greetings = self.modify_greeting(fullname, greetings, call_sid)
+                        self.agents[call_sid]['new_knowledge'] = True
+                        
+                        print(f"DEBUG - Found CINC lead: {fullname}, Email: {email}, Phone: {phoneNumber}")
+                        
+            except Exception as e:
+                print(f"Error fetching CINC lead by phone {self.agents[call_sid]['from']}: {e}")
 
 
         if self.agents[call_sid]['integrations'].get('calendly_connection_id'):

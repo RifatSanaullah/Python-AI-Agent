@@ -252,7 +252,7 @@ async def _make_cinc_request(method: str, endpoint: str, account_id: int, connec
     if params:
         print(f"  Params: {params}")
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             if method.upper() == 'GET':
                 response = await client.get(url, headers=headers, params=params)
@@ -271,6 +271,15 @@ async def _make_cinc_request(method: str, endpoint: str, account_id: int, connec
             response_data = response.json()
             print(f"DEBUG - CINC API Response Data: {response_data}")
             return response_data
+        except httpx.TimeoutException as e:
+            print(f"CINC API request timed out after 30 seconds for URL: {url}")
+            raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="CINC API request timed out")
+        except httpx.ConnectError as e:
+            print(f"CINC API connection error for URL: {url} - {e}")
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Unable to connect to CINC API")
+        except httpx.RequestError as e:
+            print(f"CINC API request error for URL: {url} - {e}")
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="CINC API request failed")
         except httpx.HTTPStatusError as e:
             error_text = e.response.text
             print(f"CINC API request failed: {e.response.status_code} - {error_text} for URL: {url}")
@@ -313,9 +322,66 @@ async def create_lead(account_id: int, lead_data: Dict[str, Any], connection_id:
 
 async def update_lead(account_id: int, lead_id: str, lead_data: Dict[str, Any], connection_id: Optional[str] = None) -> Dict[str, Any]:    
     endpoint = f"/site/leads/{lead_id}"
-    return await _make_cinc_request("PATCH", endpoint, account_id, connection_id=connection_id, json_data=lead_data)
+    return await _make_cinc_request("POST", endpoint, account_id, connection_id=connection_id, json_data=lead_data)
 
+async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Search for CINC leads by phone number.
+    Since CINC doesn't have a direct phone search endpoint, we'll get all leads and filter by phone.
+    For better performance in production, you might want to implement server-side filtering if CINC API supports it.
+    """
+    try:
+        # Clean phone number to match different formats
+        clean_phone = ''.join(filter(str.isdigit, phone))
+        
+        # For testing purposes, use a placeholder phone when invalid phone is passed
+        if len(clean_phone) == 0 or phone == "client:Anonymous":
+            print(f"DEBUG - Using placeholder phone for testing. Original phone: {phone}")
+            clean_phone = "1234567899"  # Use placeholder phone for testing
+        elif len(clean_phone) == 11 and clean_phone.startswith('1'):
+            clean_phone = clean_phone[1:]  # Remove leading '1'
+        elif len(clean_phone) == 10:
+            pass  # Already in correct format
+        else:
+            # If phone format is unexpected, use placeholder for testing
+            print(f"DEBUG - Invalid phone format, using placeholder. Original: {phone}, Cleaned: {clean_phone}")
+            # clean_phone = "1234567899"
 
+        print(f"DEBUG - Searching CINC leads for phone: {clean_phone}")
+
+        # Get leads from CINC (we'll start with a reasonable limit)
+        leads_response = await get_leads(account_id, connection_id=connection_id, limit=100)
+        if not leads_response or 'leads' not in leads_response:
+            return []
+        
+        matching_leads = []
+        for lead in leads_response['leads']:
+            # Check if lead has contact info with phone numbers
+            if (lead.get('info', {}).get('contact', {}).get('phone_numbers')):
+                phone_numbers = lead['info']['contact']['phone_numbers']
+                
+                # Check cell phone
+                if phone_numbers.get('cell_phone'):
+                    lead_phone = ''.join(filter(str.isdigit, phone_numbers['cell_phone']))
+                    if lead_phone == clean_phone:
+                        print(f"DEBUG - Found matching lead by cell phone: {lead.get('id')} - {lead_phone}")
+                        matching_leads.append(lead)
+                        continue
+                
+                # Check home phone
+                if phone_numbers.get('home_phone'):
+                    lead_phone = ''.join(filter(str.isdigit, phone_numbers['home_phone']))
+                    if lead_phone == clean_phone:
+                        print(f"DEBUG - Found matching lead by home phone: {lead.get('id')} - {lead_phone}")
+                        matching_leads.append(lead)
+                        continue
+        
+        print(f"DEBUG - Found {len(matching_leads)} matching leads for phone {clean_phone}")
+        return matching_leads
+        
+    except Exception as e:
+        print(f"Error searching CINC leads by phone {phone}: {e}")
+        return []
 
 
 # OAuth Flow Notes:
