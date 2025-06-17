@@ -1041,7 +1041,7 @@ class CallHandler:
                 self.agents[call_sid]['new_knowledge'] = True
 
 
-        if self.agents[call_sid]['integrations']['calendly_connection_id']:
+        if self.agents[call_sid]['integrations'].get('calendly_connection_id'):
             # Check if there are any scheduled events for this user in Calendly
             print(f"Calendly connection ID: {self.agents[call_sid]['integrations']['calendly_connection_id']}")
 
@@ -1119,7 +1119,7 @@ class CallHandler:
                 import traceback
                 print(traceback.format_exc())
                 
-        if self.agents[call_sid]['integrations']['google_calendar_connection_id']:
+        if self.agents[call_sid]['integrations'].get('google_calendar_connection_id'):
             # Check if there are any scheduled events for this user in Google Calendar
             print(f"Google Calendar connection ID: {self.agents[call_sid]['integrations']['google_calendar_connection_id']}")
 
