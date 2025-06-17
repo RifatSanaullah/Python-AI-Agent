@@ -82,7 +82,10 @@ class HubSpotService(NangoService):
         return await self.post_data(connection_id, "contacts", payload, 'hubspot', True)
     
     async def update_leads(self, connection_id: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return await self.post_data(connection_id, "update-lead", payload, 'hubspot', True)
+        return await self.post_data(connection_id, "update-contact", payload, 'hubspot', True)
     
     async def store_leads(self, connection_id: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return await self.post_data(connection_id, "create-lead", payload, 'hubspot')
+        return await self.post_data(connection_id, "create-contact", payload, 'hubspot')
+    
+    async def get_properties(self, connection_id: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return await self.fetch_data(connection_id, "get-properties", params, 'hubspot')

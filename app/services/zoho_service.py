@@ -65,3 +65,13 @@ class ZohoService(NangoService):
        
         params = {"id": user_id}
         return await self.fetch_data(connection_id, "get-user-by-id", params, 'zoho-crm')
+    
+    async def update_leads(self, connection_id: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return await self.post_data(connection_id, "update-lead", payload, 'zoho-crm', True)
+    
+    async def store_leads(self, connection_id: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return await self.post_data(connection_id, "create-lead", payload, 'zoho-crm')
+    
+    async def get_lead_by_phone(self, connection_id: str, phone: str) -> Dict[str, Any]:
+        params = {"phone": phone}
+        return await self.post_data(connection_id, "get-lead", params, 'zoho-crm')

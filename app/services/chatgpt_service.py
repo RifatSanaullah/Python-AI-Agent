@@ -7,18 +7,21 @@ from app.services.nango_openai_service import NangoOpenAIService
 from app.services.zoho_service import ZohoService
 from app.services.hubspot_service import HubSpotService
 from app.services.salesforce_service import SalesforceService
+from app.services.calendly_service import CalendlyService
+from app.services.google_calendar_service import GoogleCalendarService
+from app.services.outlook_calendar_service import OutlookCalendarService
 from typing import Dict, Any, List
 from app.services.backend_service import BackendHandler
-
-import re, json
+import html
+import re, json, threading, queue
 
 class StreamingChunker:
-    def __init__(self, max_length=200, onTTS=None, conversation_id=None):
+    def __init__(self, max_length=200, onTTS=None, conversation_id=None,flush_ws =None):
         self.buffer = ""  # Store incoming characters
         self.max_length = max_length
         self.send_to_tts= onTTS
         self.conversation_id= conversation_id
-
+        self.flush_ws = flush_ws
     async def add_stream_data(self, char):
         self.buffer = char  # Append incoming characters
         
@@ -39,6 +42,7 @@ class StreamingChunker:
             print("chunk : ", chunk)
             await self.send_to_tts(chunk, self.conversation_id)
             self.buffer = ""
+            # self.flush_ws()
 
     def _split_at_sentence(self):
         """Find the nearest full sentence before max_length."""
@@ -65,19 +69,24 @@ class ChatGPTService:
         openai.api_key = settings.chatgpt_api_key
         self.conversations = {}
         self.integrations= {}
-        self.max_chunk_size = 200
+        self.max_chunk_size = 40
         self.system_convo = {}
         self.convo_index = 0
         self.nango_openai_service = NangoOpenAIService()
         self.zoho_service = ZohoService()
         self.hubspot_service = HubSpotService()
         self.salesforce_service = SalesforceService()
+        self.calendly_service = CalendlyService()
+        self.google_calendar_service = GoogleCalendarService()
+        self.outlook_calendar_service = OutlookCalendarService()
         self.backend_service = BackendHandler()
                 # Set the integration type
         # Initialize integration services and endpoints
         self.endpoints = {}
         self.method_mappings = {}
-        
+        self.summary_queue = queue.Queue()
+        self.worker_thread = threading.Thread(target=self.summary_worker, daemon=True)
+        self.ai_interrupt = {}
         # Initialize service-specific components based on integration type
         
     # Function to add messages to a conversation
@@ -151,7 +160,29 @@ class ChatGPTService:
                 "get-campaign-by-id"
             ]
             self._map_service_methods(integration_type, service)
+            
+        elif integration_type == "calendly":
+            service = CalendlyService()
+            self.endpoints[integration_type] = [
+                "users",
+                "events",
+            ]
+            self._map_service_methods(integration_type, service)
         
+        elif integration_type == "google-calendar":
+            service = GoogleCalendarService()
+            self.endpoints[integration_type] = [
+                "events",
+            ]
+            self._map_service_methods(integration_type, service)
+            
+        elif integration_type == "outlook":
+            service = OutlookCalendarService()
+            self.endpoints[integration_type] = [
+                "events",
+            ]
+            self._map_service_methods(integration_type, service)
+    
         # Future integrations can be added here without changing the core logic
     
     def _map_service_methods(self, integration_type: str, service: Any):
@@ -230,6 +261,18 @@ class ChatGPTService:
         if 'integration' in knowledge_base and knowledge_base['integration']['salesforce_connection_id'] is not None:
             integration = 'Salesforce'
             connection_id = knowledge_base['integration']['salesforce_connection_id']
+            
+        if 'integration' in knowledge_base and knowledge_base['integration']['calendly_connection_id'] is not None:
+            integration = 'Calendly'
+            connection_id = knowledge_base['integration']['calendly_connection_id']
+            
+        if 'integration' in knowledge_base and knowledge_base['integration']['google_calendar_connection_id'] is not None:
+            integration = 'Google Calendar'
+            connection_id = knowledge_base['integration']['google_calendar_connection_id']
+            
+        if 'integration' in knowledge_base and knowledge_base['integration']['outlook_connection_id'] is not None:
+            integration = 'Outlook Calendar'
+            connection_id = knowledge_base['integration']['outlook_connection_id']
 
         if connection_id is not None:
             conversations[conversation_id].append(
@@ -246,18 +289,51 @@ class ChatGPTService:
         # self.conversations[conversation_id].append(
         #             {"role": "system", "content": "When the user asks about business or other information, respond only using the provided knowledge data and if the information is not available kindly notify the user. Do not ask for their details during this exchange. Once they have completed their query, you may resume asking for their details as needed."},
         # )
-                        
+   
         for item in knowledge_base['knowledge']:
-            if item['type'] != 'GREETINGS':
-                conversations[conversation_id].append(
-                    {"role": "system", "content": item['content']}
-                )
+                if item['type'] != 'GREETINGS':
+                    content = self.resolve_prompt(item['content'], knowledge_base['new_knowledge'])
+                    # print(f"Adding system message: {content}")
+                    conversations[conversation_id].append(
+                        {"role": "system", "content": content}
+                    )
 
         if knowledge_base['aiInstructions']:
             conversations[conversation_id].append(
                     {"role": "system", "content": knowledge_base['aiInstructions']}
                 )
+    def get_senior_living_knowledge(self):
+        return f"""You are the AI receptionist for BoomersHub. This caller is already in the CRM. Greet them by name and ask how you can assist.
+                    Call Flow:
+                        1. Greet & Ask Purpose
+                            - Address the caller by name.
+                            - Ask how you can help today.
+                        2. If Caller Requests Info:
+                            - If you know the answer: Provide it clearly, referring to past call summaries if needed. Then ask if they need anything else.
+                            - If you don't know: Let them know a human advisor will follow up within 24 hours. Flag for escalation.
+                        3. If Caller Wants to Update Info:
+                            - Ask what details they want to change.
+                            - Make the updates and confirm them.
+                            - If no further help is needed, politely end the call.
+                    Rules:
+                        Never re-ask existing info unless confirming.
+                        Be concise, warm, and professional.
+                        Escalate only when necessary.
+                        Always maintain control of the conversation.
+                """
+    def resolve_prompt(self, prompt_from_frontend: str, is_existing: bool) -> str:
+        # Step 1: Decode HTML entities
+        prompt = html.unescape(prompt_from_frontend)
 
+        # Step 2: Replace conditional blocks based on `is_existing`
+        if is_existing:
+            prompt = re.sub(r'<if new>[\s\S]*?</if>', '', prompt, flags=re.IGNORECASE)
+            prompt = re.sub(r'<if existing>([\s\S]*?)</if>', r'\1', prompt, flags=re.IGNORECASE)
+        else:
+            prompt = re.sub(r'<if existing>[\s\S]*?</if>', '', prompt, flags=re.IGNORECASE)
+            prompt = re.sub(r'<if new>([\s\S]*?)</if>', r'\1', prompt, flags=re.IGNORECASE)
+
+        return prompt.strip()
     async def process_initial_message(self, conversation_id, get_agent_knowledge):
 
         if conversation_id not in self.conversations:
@@ -265,11 +341,15 @@ class ChatGPTService:
             # self.initial_message(self.conversations, conversation_id, knowledge)
             self.initial_message(self.system_convo, conversation_id, knowledge)
             self.conversations[conversation_id] = []
+            self.ai_interrupt[conversation_id] = False
             self.convo_index = len(self.system_convo[conversation_id])
             self.integrations[conversation_id] = {
                 "hubspot_connection_id": None,
                 "zoho_connection_id": None,
-                "salesforce_connection_id": None
+                "salesforce_connection_id": None,
+                "calendly_connection_id": None,
+                "google_calendar_connection_id": None,
+                "outlook_connection_id": None
             }
             # Check if this conversation has a CRM connection ID in the database
             try:
@@ -386,8 +466,14 @@ class ChatGPTService:
             )
             assistant_reply = response.choices[0].message.content
         return assistant_reply
-            
-    async def generate_response(self, conversation_id, message: str, synthesize_response):
+    
+    def update_interrupt_status(self, conversation_id, status: bool):
+        """Update the AI interrupt status for a conversation"""
+        if conversation_id not in self.ai_interrupt:
+            self.ai_interrupt[conversation_id] = False
+        self.ai_interrupt[conversation_id] = status
+        
+    async def generate_response(self, conversation_id, message: str, synthesize_response, flush_ws):
 
         
         # Add user input to conversation history
@@ -420,60 +506,100 @@ class ChatGPTService:
         # else:
             # Standard response without CRM integration
         response = openai.chat.completions.create(
-            model="gpt-4-turbo",
-            messages=self.system_convo[conversation_id]
+            model="gpt-4.1",
+            messages=self.system_convo[conversation_id],
+            stream=True,
+            max_tokens=150,
+
         )
+
         print("Assistant: ", end="", flush=True)  # Print the assistant's response incrementally
-        assistant_reply = response.choices[0].message.content
+        # assistant_reply = response.choices[0].message.content
     
         # Process the response for speech synthesis
-        assistant_reply = assistant_reply.replace('*', '')
+        # assistant_reply = assistant_reply.replace('*', '')
         chunk_reply = ""
-        chunker = StreamingChunker(max_length=200, onTTS=synthesize_response, conversation_id=conversation_id)
-        await chunker.add_stream_data(assistant_reply)  # Simulating stream input
+        chunker = StreamingChunker(max_length=50, onTTS=synthesize_response, conversation_id=conversation_id, flush_ws=flush_ws)
+        # await chunker.add_stream_data(assistant_reply)  # Simulating stream input
+        end_call_prefix = "End Call Message"
+        prefix_buffer = ""
+        post_prefix_mode = False
+        post_prefix_text = ""
+        for chunk in response:
+            if chunk.choices and chunk.choices[0].delta:
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    val = delta.content
+                    chunk_reply += val  # Save the full assistant response
 
-        # for chunk in response:
-        #     if chunk.choices and chunk.choices[0].delta:
-        #         delta = chunk.choices[0].delta
-        #         if delta.content:
-        #             val = delta.content
-        #             print(val, end="", flush=True)  # Display the streamed text
-        #             assistant_reply += val  # Save the full assistant response
-        #             await chunker.add_stream_data(val)
-        #             # chunk_reply += val  # Save the full assistant response
-        #             # if len(chunk_reply) > self.max_chunk_size:
-        #             #     chunk_reply = self.filter_message(chunk_reply)
-        #             #     await synthesize_response(chunk_reply, conversation_id)
-        #             #     chunk_reply=''
-        await chunker.flush()
+                    print(val, end="", flush=True)  # Display the streamed text
+                    assistant_reply += val  # Save the full assistant response
+                    if not post_prefix_mode:
+                        # Build up prefix buffer
+                        prefix_buffer += val
+
+                        if end_call_prefix in prefix_buffer:
+                            post_prefix_mode = True
+                            # Split at prefix
+                            post_prefix_text = prefix_buffer.split(end_call_prefix, 1)[1]
+                            if post_prefix_text.strip() and not self.ai_interrupt[conversation_id]:
+                                await synthesize_response(post_prefix_text, conversation_id)
+                        elif not end_call_prefix.startswith(prefix_buffer) and not self.ai_interrupt[conversation_id]:
+                            # Prefix was never part of stream, flush buffer to TTS
+                            await synthesize_response(prefix_buffer, conversation_id)
+
+                            prefix_buffer = ""
+                    elif not self.ai_interrupt[conversation_id]:
+                            await synthesize_response(val, conversation_id)                 
+
+                    # await chunker.add_stream_data(val)
+
+        # await chunker.flush()
+        await flush_ws()
         # if chunk_reply and chunk_reply != '':
-        #     chunk_reply = self.filter_message(chunk_reply)
+        #     chunk_reply = chunker.filter_message(chunk_reply)
         #     await synthesize_response(chunk_reply, conversation_id)
+
+            
                     
         self.add_message(conversation_id, "assistant", assistant_reply)
         self.add_system_message(conversation_id, "assistant", assistant_reply)
-
-
         if (conversation_id in self.system_convo and len(self.system_convo[conversation_id]) >= 6 + self.convo_index):
-
-            allmessages = 'Give me a summary with every context of below conversations: '
-            for index in range(self.convo_index, len(self.system_convo[conversation_id])) :
-                item = self.system_convo[conversation_id][index]
-                allmessages +=  f"{item['role']}:  {item['content']}\n\n"
-            
-            response = openai.chat.completions.create(
-                model="gpt-4-turbo",
-                messages=[{"role" : "user" , "content" : allmessages}],
-            )
-            del self.system_convo[conversation_id][self.convo_index: len(self.system_convo[conversation_id])]
-
-            self.convo_index += 1
-            summary = response.choices[0].message.content
-            self.add_system_message(conversation_id, "system", summary)
+            self.summary_queue.put(conversation_id)
 
         return assistant_reply
     
+    def summary_worker(self):
+        while True:
+            conversation_id = self.summary_queue.get()
+            try:
+                self.generate_summary_in_background(conversation_id)
+            except Exception as e:
+                print(f"[Worker Error] {e}")
+            self.summary_queue.task_done()
+    
         # Function to close a conversation
+    def generate_summary_in_background(self, conversation_id):
+        try:
+            if (conversation_id in self.system_convo and len(self.system_convo[conversation_id]) >= 6 + self.convo_index):
+
+                allmessages = 'Give me a summary with every context of below conversations: '
+                for index in range(self.convo_index, len(self.system_convo[conversation_id])) :
+                    item = self.system_convo[conversation_id][index]
+                    allmessages +=  f"{item['role']}:  {item['content']}\n\n"
+                
+                response = openai.chat.completions.create(
+                    model="gpt-4.1",
+                    messages=[{"role" : "user" , "content" : allmessages}],
+                )
+                del self.system_convo[conversation_id][self.convo_index: len(self.system_convo[conversation_id])]
+
+                self.convo_index += 1
+                summary = response.choices[0].message.content
+                self.add_system_message(conversation_id, "system", summary)
+        except Exception as e:
+            print(f"[Summary Generation Error] {e}")
+
     def close_conversation(self, conversation_id):
         self.convo_index = 0
         if conversation_id in self.conversations:
@@ -568,6 +694,6 @@ class ChatGPTService:
 
 
 
-   
+
 
 

@@ -67,6 +67,21 @@ class BackendHandler:
             print(f"HTTP error while calling backend: {e.response.status_code} {e.response.text}")
         except httpx.RequestError as e:
             print(f"Request error while calling backend: {str(e)}")
+            
+    async def get_lead_info_boom(self, data: Dict[str, Any]) -> Dict[str, Any]:
+
+        try:
+            url = f"{settings.boom_backend_url}/lead/get-lead-by-phone"
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=data, timeout=20.0)
+
+            response.raise_for_status()  # Raise an exception for HTTP errors
+            return response.json()
+
+        except httpx.HTTPStatusError as e:
+            print(f"HTTP error while calling backend: {e.response.status_code} {e.response.text}")
+        except httpx.RequestError as e:
+            print(f"Request error while calling backend: {str(e)}")
 
     async def fallback_status_callback(data: Dict[str, Any]) -> Dict[str, Any]:
 

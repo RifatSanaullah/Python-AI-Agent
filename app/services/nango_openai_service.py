@@ -6,6 +6,9 @@ from app.services.nango_service import NangoService
 from app.services.zoho_service import ZohoService
 from app.services.hubspot_service import HubSpotService
 from app.services.salesforce_service import SalesforceService
+from app.services.calendly_service import CalendlyService
+from app.services.google_calendar_service import GoogleCalendarService
+from app.services.outlook_calendar_service import OutlookCalendarService
 import logging
 from typing import List, Optional
 
@@ -99,7 +102,29 @@ class NangoOpenAIService:
                 "get-campaign-by-id"
             ]
             self._map_service_methods(integration_type, service)
-    
+            
+        elif integration_type == "calendly":
+            service = CalendlyService()
+            self.endpoints[integration_type] = [
+                "users",
+                "events",
+            ]
+            self._map_service_methods(integration_type, service)
+            
+        elif integration_type == "google-calendar":
+            service = GoogleCalendarService()
+            self.endpoints[integration_type] = [
+                "events",
+            ]
+            self._map_service_methods(integration_type, service)
+            
+        elif integration_type == "outlook":
+            service = OutlookCalendarService()
+            self.endpoints[integration_type] = [
+                "events",
+            ]
+            self._map_service_methods(integration_type, service)
+
     def _map_service_methods(self, integration_type: str, service: Any):
        
         # Initialize method mappings for this integration if not exists
@@ -243,11 +268,11 @@ class NangoOpenAIService:
     async def get_available_integrations(self) -> List[str]:
         """
         Get a list of available integrations based on the current configuration.
-        Currently returns hardcoded values for Zoho, HubSpot, and Salesforce.
+        Currently returns hardcoded values for Zoho, HubSpot, Salesforce, Calendly, Google Calendar and Outlook.
         
         Returns:
             List of integration IDs
         """
         # In a real implementation, this might fetch from Nango API or configuration
-        # For now, we'll return the hardcoded values for Zoho, HubSpot, and Salesforce
-        return ["zoho-crm", "hubspot", "salesforce"]
+        # For now, we'll return the hardcoded values for the supported integrations
+        return ["zoho-crm", "hubspot", "salesforce", "calendly", "google-calendar", "outlook"]
