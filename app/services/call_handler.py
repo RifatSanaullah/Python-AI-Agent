@@ -651,7 +651,7 @@ class CallHandler:
             # wait_time = self.sessions[call_id]['wait_duration']
             # if self.sessions[call_id]['last_transcript_time']:
             # wait_time = self.sessions[call_id]['wait_duration'] + self.sessions[call_id]['prev_wait_duration']
-            wait_time = 23
+            wait_time = 15
             print("wait_time: ", wait_time)
             self.clear_timer()
             self.timer = Timer(wait_time, self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
