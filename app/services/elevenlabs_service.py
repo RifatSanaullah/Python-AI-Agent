@@ -5,9 +5,9 @@ class ElevenLabsService:
     def __init__(self):
         """Initialize the ElevenLabs service with API key from settings"""
         self.client = ElevenLabs(api_key=settings.elevenlabs_apikey)
-        self.voice_id = settings.elevenlabs_voice_id
+        # self.voice_id = settings.elevenlabs_voice_id
 
-    async def stream_text_to_speech(self, text: str):
+    async def stream_text_to_speech(self, text: str, voice: str, model: str = "eleven_multilingual_v1"):
         """
         Convert text to speech using ElevenLabs API and return complete μ-law encoded audio.
         
@@ -23,8 +23,8 @@ class ElevenLabsService:
             # Get audio data from ElevenLabs in μ-law format
             audio_generator = self.client.text_to_speech.convert(
                 text=text,
-                voice_id=self.voice_id,
-                model_id="eleven_monolingual_v1",
+                voice_id=voice,
+                model_id=model,
                 output_format="ulaw_8000"
             )
             
