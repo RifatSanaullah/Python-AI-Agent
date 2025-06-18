@@ -236,6 +236,8 @@ class CallHandler:
                 try:
                     response = await self.backend_service.update_conversation_info(data)
                     isBoom = self.agents[call_id]['isBoom']
+                    print("isBoom" , isBoom)
+                    print({ "lead_id" : lead_id, "conversations": data['conversations']})
                     if isBoom is not None or isBoom == True or isBoom == 'true':
                         await self.backend_service.update_conversation_bh({ "lead_id" : lead_id, "conversations": data['conversations']})
                     else:
@@ -1068,7 +1070,6 @@ class CallHandler:
         # start_time = datetime.now()
         model = self.agents[self.sessions[call_id]['call_sid']]['TTS']['voice']['model']
         # Select TTS provider based on environment variable
-        print(self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'])
         if self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Deepgram':
             audio_stream = await session['synthesis_service'].stream_text_to_speech(text, call_id, self.queue_audio)
         # elif tts_provider == "playht":
