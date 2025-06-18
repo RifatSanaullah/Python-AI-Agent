@@ -2,7 +2,8 @@ import base64
 from sqlalchemy.orm import Session
 # from app.services.playht_service import PlayHT
 from app.services.twilio_service import TwilioService
-from app.services.chatgpt_service import ChatGPTService
+from app.services.ai_service import AIService
+# from app.services.ai_service_v2 import AIService
 from app.services.s3_service import S3Service
 from app.services.backend_service import BackendHandler
 from app.services.polly_service import PollyService
@@ -17,19 +18,13 @@ from app.services.google_calendar_service import GoogleCalendarService
 from app.services.outlook_calendar_service import OutlookCalendarService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 import logging
-from datetime import datetime
-from docx import Document
-from PyPDF2 import PdfReader
-from fastapi import UploadFile, WebSocketDisconnect
-import wave
+from datetime import datetime_CAPI
+from app.helpers.utils import get_interrupt_message, convert_mulaw_to_wav
 from app.config import settings
 from pydub import AudioSegment
 from threading import Timer
 import numpy as np
-import audioop
-import os
-import asyncio
-import random
+
 from io import BytesIO
 import numpy as np
 import soundfile as sf
@@ -37,7 +32,7 @@ import time , re
 import traceback
 from app.utils.responseformat import hubspot_patch_format
 from app.utils.datetime_formatter import format_datetime_human_readable, format_datetime_range_human_readable, is_future_datetime
-import json
+import json, asyncio
 from app.services import cinc_service as cinc_service_module # Added CINC service module
 from typing import Dict, Any # Ensure Dict and Any are imported for type hinting
 
@@ -51,7 +46,7 @@ class CallHandler:
     def __init__(self):
         self.twilio_service = TwilioService()
         self.backend_service = BackendHandler()
-        self.chatgpt_service = ChatGPTService()
+        self.ai_service = AIService()
         self.s3_service = S3Service()
         # self.playht_service = PlayHT()
         self.elevenlabs_service = ElevenLabsService()
@@ -101,7 +96,7 @@ class CallHandler:
     async def process_input(self, call_id, websocket):
         await websocket.accept()
         session = {
-            "deepgram_transcribe_service": None,
+            "synthesis_service": None,
             "transcribe_service": None,
             "ai_interrupt": False,
             "ai_speaking": False,
@@ -129,8 +124,9 @@ class CallHandler:
                     self.sessions[data['streamSid']]['websocket'] = websocket
                     self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
                     session = self.sessions[data['streamSid']]
-                    # session['deepgram_transcribe_service'].establish_dg_connection()
-                    # session['transcribe_service'].connect()
+                    # if self.agents[data['streamSid']['call_sid']]['STT']['name'] == 'Deepgram':
+                    #     session['transcribe_service'].establish_dg_connection(self.agents[data['streamSid']['call_sid']]['STT']['model'])
+                    # else: session['transcribe_service'].connect()
 
                 if data['streamSid'] not in self.sessions or 'call_sid' not in self.sessions[data['streamSid']]:
                     continue
@@ -139,21 +135,21 @@ class CallHandler:
                 # and self.sessions[data['streamSid']]['last_user_audio_time'] 
                 # and time.time() - self.sessions[data['streamSid']]['last_user_audio_time'] > self.sessions[data['streamSid']]['wait_duration']):
 
-                #     if data['streamSid'] and self.sessions[data['streamSid']]['wait_counter'] >= 2:
-                #         self.sessions[data['streamSid']]['wait_counter'] = 0
-                #         message = self.get_interrupt_message('end_call')
-                #         self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
-                #         await self.synthesize_response(message, data['streamSid'])
-                #         # Schedule the call to end after 2 seconds
-                #         self.clear_timer()
-                #         self.timer = Timer(5, self.twilio_service.hangup_call, args=[self.sessions[data['streamSid']]['call_sid']])
-                #         self.timer.start()
-                #         return
+                    # if data['streamSid'] and self.sessions[data['streamSid']]['wait_counter'] >= 2:
+                    #     self.sessions[data['streamSid']]['wait_counter'] = 0
+                    #     message = get_interrupt_message('end_call')
+                    #     self.ai_service.add_message(data['streamSid'], "assistant", message)
+                    #     await self.synthesize_response(message, data['streamSid'])
+                    #     # Schedule the call to end after 2 seconds
+                    #     self.clear_timer()
+                    #     self.timer = Timer(5, self.twilio_service.hangup_call, args=[self.sessions[data['streamSid']]['call_sid']])
+                    #     self.timer.start()
+                    #     return
                     
-                #     message = self.get_interrupt_message()
-                #     self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
-                #     await self.synthesize_response(message, data['streamSid'])
-                #     self.sessions[data['streamSid']]['wait_counter'] += 1
+                    # message = get_interrupt_message()
+                    # self.ai_service.add_message(data['streamSid'], "assistant", message)
+                    # await self.synthesize_response(message, data['streamSid'])
+                    # self.sessions[data['streamSid']]['wait_counter'] += 1
 
                 if data["event"] == "media":
                     media = data["media"]
@@ -196,8 +192,8 @@ class CallHandler:
                 if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'audio_buffer'):
                     audio_data = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'audio_buffer')
                     # await self.transcribe_service.transcribe(audio_data)
-                    await session['deepgram_transcribe_service'].transcribe(audio_data)
-                    # await session['transcribe_service'].transcribe(audio_data)
+                    # await session['synthesis_service'].transcribe(audio_data)
+                    await session['transcribe_service'].transcribe(audio_data)
 
         except ConnectionClosedError as e:
             print(f"Connection closed with error: {e.code} - {e.reason}")
@@ -207,11 +203,13 @@ class CallHandler:
             print("Unexpected error:", e)
         finally:
             print("WebSocket connection closed.")
-            session['deepgram_transcribe_service'].cancel_transmit()
-            if session['stream_sid'] in self.chatgpt_service.conversations:
-                conversations = self.chatgpt_service.conversations[session['stream_sid']]
+            if self.agents[call_id]['STT']['name'] == 'Deepgram' and session['transcribe_service']:
+                session['transcribe_service'].cancel_transmit()
+            if session['stream_sid'] in self.ai_service.conversations:
+                conversations = self.ai_service.conversations[session['stream_sid']]
+
                 outputFile= f"recordings/{call_id}.wav"
-                await self.convert_mulaw_to_wav(f"recordings/{call_id}.mulaw", outputFile)
+                await convert_mulaw_to_wav(f"recordings/{call_id}.mulaw", outputFile)
                 # os.remove(output_file)
                 recordingUrl = await self.s3_service.uploadToS3(outputFile)
                 agent_id = self.agents[call_id]['id']
@@ -250,14 +248,18 @@ class CallHandler:
                     import traceback
                     print(traceback.format_exc())
 
-                self.chatgpt_service.close_conversation(session['stream_sid'])
+                self.ai_service.close_conversation(session['stream_sid'])
                 self.twilio_service.remove_stream_from_queue(session['stream_sid'])
                 del self.sessions[session['stream_sid']]
                 self.agents[call_id]['websocket_closed'] = True
                 # self.flush_agent(call_id)
-
-            await session['deepgram_transcribe_service'].disconnect()
-            # session['transcribe_service'].close()  # Close the transcriber service
+                
+            if self.agents[data['streamSid']['call_sid']]['TTS'] == 'Deepgram':
+                await session['synthesis_service'].disconnect()
+            if self.agents[data['streamSid']['call_sid']]['STT']['name'] == 'Deepgram':
+                await session['transcribe_service'].disconnect()
+            elif self.agents[data['streamSid']['call_sid']]['STT']['name'] == 'AssemblyAI':
+                session['transcribe_service'].close()  # Close the transcriber service
             try:
                 await websocket.close()
             except Exception as e:
@@ -627,7 +629,7 @@ class CallHandler:
                     'contact' : summary,
                     'note' : notes
                 }
-                await self.chatgpt_service.hubspot_service.update_leads(integrations['hubspot_connection_id'], body)
+                await self.ai_service.hubspot_service.update_leads(integrations['hubspot_connection_id'], body)
             else:
                 if summary['phone'] == '' :
                     summary['phone'] = self.format_us_number_simple(self.agents[call_id]['from'])
@@ -636,7 +638,7 @@ class CallHandler:
                     'contact' : summary,
                     'note' : notes
                 }
-                await self.chatgpt_service.hubspot_service.store_leads(integrations['hubspot_connection_id'], body)
+                await self.ai_service.hubspot_service.store_leads(integrations['hubspot_connection_id'], body)
                 
 
         if integrations and integrations["salesforce_connection_id"] is not None and integrations["salesforce_connection_id"] != '':
@@ -663,7 +665,7 @@ class CallHandler:
                                 'Id' : lead_id,
                                 'lead' : summary
                             }
-                        await self.chatgpt_service.salesforce_service.update_leads(integrations['salesforce_connection_id'], body)
+                        await self.ai_service.salesforce_service.update_leads(integrations['salesforce_connection_id'], body)
                 else:
                     if summary['LastName'] == '' :
                         summary['LastName'] = summary['FirstName']
@@ -675,7 +677,7 @@ class CallHandler:
                         summary = self.remove_empty_values(summary)
                         if summary['LastName'] == summary['FirstName']:
                             summary['FirstName'] = ''
-                        await self.chatgpt_service.salesforce_service.store_leads(integrations['salesforce_connection_id'], summary)
+                        await self.ai_service.salesforce_service.store_leads(integrations['salesforce_connection_id'], summary)
             except Exception as e:
                 print("Lead Creat or Update failed" , e)
 
@@ -692,11 +694,11 @@ class CallHandler:
                                 'Id' : prev_event_id,
                                 'event' : event
                             }
-                            response = await self.chatgpt_service.salesforce_service.update_event(integrations['salesforce_connection_id'], body)
+                            response = await self.ai_service.salesforce_service.update_event(integrations['salesforce_connection_id'], body)
                         elif delete_appointment:
-                            response = await self.chatgpt_service.salesforce_service.delete_event(integrations['salesforce_connection_id'], {"Id" : prev_event_id})
+                            response = await self.ai_service.salesforce_service.delete_event(integrations['salesforce_connection_id'], {"Id" : prev_event_id})
                     else:
-                        response = await self.chatgpt_service.salesforce_service.create_event(integrations['salesforce_connection_id'], event)
+                        response = await self.ai_service.salesforce_service.create_event(integrations['salesforce_connection_id'], event)
                         if response and 'id' in response and 'id' in appointment:
                             appointment_id = appointment['id']
                             await self.backend_service.update_appointment({"appointment_id" : appointment_id, "event_id" : response['id']})
@@ -730,7 +732,7 @@ class CallHandler:
                                     'Note_Content' : summary['Description']
                                 } 
                         }
-                        await self.chatgpt_service.zoho_service.update_leads(integrations['zoho_connection_id'], body)
+                        await self.ai_service.zoho_service.update_leads(integrations['zoho_connection_id'], body)
                 else:
                     if summary['Last_Name'] == '' :
                         summary['Last_Name'] = summary['First_Name']
@@ -749,7 +751,7 @@ class CallHandler:
                                     'Note_Content' : summary['Description'] 
                                 } 
                         }
-                        await self.chatgpt_service.zoho_service.store_leads(integrations['zoho_connection_id'], body)
+                        await self.ai_service.zoho_service.store_leads(integrations['zoho_connection_id'], body)
             except Exception as e:
                 print("Lead Creat or Update failed" , e)
 
@@ -940,7 +942,7 @@ class CallHandler:
             on_transcript=self.create_on_transcript_handler(call_id),
             on_start=self.create_on_user_speech_handler(call_id),
             loop= self.loop,
-            speak_model = self.agents[call_sid]['voice']['model']
+            speak_model = self.agents[call_sid]['TTS']['voice']['model']
         )
 
     def create_on_transcript_handler(self, call_id: str):
@@ -958,7 +960,7 @@ class CallHandler:
     async def stop_stream(self,call_id):
         # await asyncio.sleep(1)  # Wait for 1 second
         self.sessions[call_id]['ai_interrupt'] =  True
-        self.chatgpt_service.update_interrupt_status(call_id, True)
+        self.ai_service.update_interrupt_status(call_id, True)
         # self.sessions[call_id]['ai_speaking'] =  True
         # message = self.get_interrupt_message()
         await self.twilio_service.stop_audio_stream(self.sessions[call_id]['websocket'], call_id)
@@ -988,10 +990,11 @@ class CallHandler:
         if call_id not in self.sessions or 'call_sid' not in self.sessions[call_id]:
             return
         self.sessions[call_id]['ai_interrupt'] =  False
-        self.chatgpt_service.update_interrupt_status(call_id, False)
-
-        response = await self.chatgpt_service.generate_response(call_id, transcript, self.synthesize_response, self.sessions[call_id]['deepgram_transcribe_service'].flush_sp_ws)
-
+        self.ai_service.update_interrupt_status(call_id, False)
+        streamingResponse = True
+        if self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Elevenlabs':
+            streamingResponse = False
+        response = await self.ai_service.generate_response(call_id, transcript, self.synthesize_response, self.agents[self.sessions[call_id]['call_sid']]['aiClient'], self.sessions[call_id]['synthesis_service'].flush_sp_ws, streamingResponse)
         if 'End Call Message' in response or self.contains_any_word(transcript) or  self.contains_any_word(response):
             self.agents[self.sessions[call_id]['call_sid']]['end_call'] = True
             response = response.replace('End Call Message', '')
@@ -1036,7 +1039,7 @@ class CallHandler:
             "knowledge" : self.agents[self.sessions[call_id]['call_sid']]['knowledge'],
             "aiInstructions" : self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'],
             "agentName" : self.agents[self.sessions[call_id]['call_sid']]['name'],
-            "gender" : self.agents[self.sessions[call_id]['call_sid']]['voice']['gender'],
+            "gender" : self.agents[self.sessions[call_id]['call_sid']]['TTS']['voice']['gender'],
             "integrations" : self.agents[self.sessions[call_id]['call_sid']]['integrations'],
             "new_knowledge" : self.agents[self.sessions[call_id]['call_sid']]['new_knowledge'],
         }
@@ -1063,20 +1066,22 @@ class CallHandler:
         if not session or not text or text == '':
             return
         # start_time = datetime.now()
-        model = self.agents[self.sessions[call_id]['call_sid']]['voice']['model']
+        model = self.agents[self.sessions[call_id]['call_sid']]['TTS']['voice']['model']
         # Select TTS provider based on environment variable
-        tts_provider = settings.tts_provider.lower()
-        if tts_provider == "deepgram":
-            audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text, model, call_id, self.queue_audio)
+        print(self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'])
+        if self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Deepgram':
+            audio_stream = await session['synthesis_service'].stream_text_to_speech(text, call_id, self.queue_audio)
         # elif tts_provider == "playht":
         #     audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
-        elif tts_provider == "elevenlabs":
-            audio_stream = await self.elevenlabs_service.stream_text_to_speech(text)
-            await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
-            await self.twilio_service.enqueue_audio(call_id, audio_stream, 'response_buffer')
-            result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
-            session['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
-            session['wait_duration'] = result['duration']
+        elif self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Elevenlabs':
+            audio_stream = await self.sessions[call_id]["synthesis_service"].stream_text_to_speech(text, model, self.agents[self.sessions[call_id]['call_sid']]['TTS']['model'], call_id, self.queue_audio)
+            # audio_stream = await self.sessions[call_id]["synthesis_service"].stream_text_to_speech(text, call_id, self.queue_audio)
+            
+            # await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
+            # await self.twilio_service.enqueue_audio(call_id, audio_stream, 'response_buffer')
+            # result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
+            # session['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
+            # session['wait_duration'] = result['duration']
 
         else:
             raise ValueError(f"Unsupported TTS provider: {settings.tts_provider}")
@@ -1097,7 +1102,7 @@ class CallHandler:
         if not session :
             return
         ai_interupted = session.get('ai_interrupt', False)
-        if not ai_interupted:
+        if not ai_interupted and session['websocket'] is not None:
             
             await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
             await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
@@ -1107,55 +1112,10 @@ class CallHandler:
         # else:
         #     self.sessions[call_id]['ai_interrupt'] = False
 
-    def get_interrupt_message(self , type = 'check_availability'):
-        arrayObj = {
-            'interrupt': [
-                "Go ahead",
-                "Please, go ahead."
-                "Yes, do continue."
-                "Yes, please go on."
-                "I'm listening, please."
-                "Yes, please continue. "
-                "Of course, go ahead."
-                "Go ahead, I'm listening."
-                "Okay, I'm listening."
-                "Sure, please continue."
-            ],
-            'check_availability': [
-                "Are you around?",
-                "Still with me?",
-                "You there?",
-                "Did I lose you?",
-                "Are you gone?",
-                "Can you hear me?",
-                "Are you still online?",
-                "Just checking if you're still here.",
-                "Are you still listening?",
-                "Hello? Still there?"
-            ],
-            'end_call': [
-                "I understand you might be tied up. Feel free to message me when you're available. Wishing you a great day!",
-                "No worries if you're busy. Just reach out when you have a moment. Take care!",
-                "You may be caught up with something. Ping me whenever you're free. Have a wonderful day!",
-                "Totally fine if you're busy. Let's connect when you get a chance. Hope your day is going well!",
-                "If you're occupied, that's okay. Reach out anytime you're free. Have an awesome day!",
-                "I get that things can get hectic. Connect with me whenever you're free. Take it easy!",
-                "It seems like you might be busy. Just drop a message when you’re free. Enjoy your day!",
-                "All good if you’re swamped. Let’s talk whenever you have time. Wishing you a nice day!",
-                "You might have your hands full. Reach out whenever it works for you. Hope your day’s great!",
-                "Understandable if you're unavailable right now. Let's chat when you're free. Have a great one!"
-                ]
-        } 
-
-
-        return random.choice(arrayObj[type])
-
     def initialize_session_info(self, stream_sid, call_sid):
         # Initialize a session for this specific call
-        if stream_sid not in self.sessions:
-            self.sessions[stream_sid]={
-                "deepgram_transcribe_service": self.initialize_transcriber(call_sid, stream_sid, DeepgramService),
-                "transcribe_service" : self.initialize_transcriber(call_sid, stream_sid, TranscribeService),
+        
+        self.sessions[stream_sid] = {
                 "ai_speaking": False,
                 "ai_interrupt": False,
                 "wait_counter": 0,
@@ -1167,6 +1127,41 @@ class CallHandler:
                 "call_sid" : call_sid,
                 "last_user_audio_time" : None
             }
+        if self.agents[call_sid]['STT']['name'] == 'Deepgram':
+            self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
+            # self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
+        elif self.agents[call_sid]['STT']['name'] == 'AssemblyAI':
+            self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(call_sid, stream_sid, TranscribeService)
+            # self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
+        else :
+            self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
+            # self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
+        
+
+
+        if self.agents[call_sid]['TTS']['name'] == 'Deepgram':
+            if self.agents[call_sid]['STT']['name'] == 'Deepgram':
+                self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
+            else :
+                self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
+        elif self.agents[call_sid]['TTS']['name'] == 'Elevenlabs':
+            self.sessions[stream_sid]["synthesis_service"] = self.elevenlabs_service
+        else:
+            self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
+
+        # if stream_sid not in self.sessions:
+        #     self.sessions[stream_sid]={
+        #         "ai_speaking": False,
+        #         "ai_interrupt": False,
+        #         "wait_counter": 0,
+        #         "wait_duration": 12,
+        #         "prev_wait_duration": 0,
+        #         "stream_sid": stream_sid,
+        #         "background_sound": None,
+        #         "websocket" : None,
+        #         "call_sid" : call_sid,
+        #         "last_user_audio_time" : None
+        #     }
 
     def formatToSalesforceNumber(self, phone):
         digits = re.sub(r'\D', '', phone)
@@ -1208,6 +1203,11 @@ class CallHandler:
         self.agents[call_id]['from'] = data['from']
         self.agents[call_id]['previous_convo_summary'] = None
         self.agents[call_id]['new_knowledge'] = False
+        self.agents[call_id]['aiClient'] = api_response['data']['aiClient']
+        self.agents[call_id]['STT'] = api_response['data']['STT']
+        self.agents[call_id]['TTS'] = api_response['data']['TTS']
+
+
         
         # Add user preference for allowing meeting conflicts
         if 'userPreference' in api_response['data'] and 'allowMeetingConflict' in api_response['data']['userPreference']:
@@ -1268,9 +1268,19 @@ class CallHandler:
         call_sid = data.get("CallSid")
         print(f"Stream SID: {stream_sid}, Call SID: {call_sid}")
         self.initialize_session_info(stream_sid, call_sid)
-        await self.sessions[stream_sid]['deepgram_transcribe_service'].establish_dg_connection()
-
+        print("stt: ",self.agents[call_sid]['STT']['name'])
+        if self.agents[call_sid]['STT']['name'] == 'Deepgram':
+            await self.sessions[stream_sid]['transcribe_service'].establish_dg_connection(self.agents[call_sid]['STT']['model'])
+        else: self.sessions[stream_sid]['transcribe_service'].connect()
+        print("tts: ",self.agents[call_sid]['TTS']['name'])
+        
+        # if self.agents[call_sid]['TTS']['name'] == 'Elevenlabs':
+        #     await self.sessions[stream_sid]['synthesis_service'].establish_connection( self.agents[call_sid]['TTS']['voice']['model'], self.agents[call_sid]['TTS']['model'])
+        if self.agents[call_sid]['TTS']['name'] == 'Deepgram':
+            await self.sessions[stream_sid]['transcribe_service'].establish_sp_connection(self.agents[call_sid]['TTS']['voice']['model'])
         # self.sessions[call_sid]['stream_sid'] = stream_sid
+        print("Done initializing session info")
+
         updaedata= {
             "stream_sid" : stream_sid,
             "call_sid" : call_sid
@@ -1294,29 +1304,33 @@ class CallHandler:
         print("Existing appointment: ", existing_appointment)
         isAllowMeetingConflict = self.agents[call_sid]['allowMeetingConflict']
         print("isAllowMeetingConflict: ", isAllowMeetingConflict)
-        await self.synthesize_response(greetings , stream_sid)
-        await self.sessions[stream_sid]['deepgram_transcribe_service'].flush_sp_ws()
-        await self.chatgpt_service.process_initial_message(stream_sid, self.get_agent_knowledge)
-        self.chatgpt_service.add_message(stream_sid, "assistant", greetings)
-        self.chatgpt_service.add_system_message(stream_sid, "assistant", greetings)
 
+        await self.synthesize_response(greetings , stream_sid)
+
+        if self.agents[call_sid]['STT']['name'] == 'Deepgram':
+            await self.sessions[stream_sid]['transcribe_service'].flush_sp_ws()
+
+        await self.ai_service.process_initial_message(stream_sid, self.get_agent_knowledge)
+        self.ai_service.add_message(stream_sid, "assistant", greetings)
+        self.ai_service.add_system_message(stream_sid, "assistant", greetings)
+        
         if fullname is not None and fullname != "":
-            self.chatgpt_service.add_message(stream_sid, "user", f"My Name is: {fullname}")
-            self.chatgpt_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Name of the user you will use in this conversation: {fullname}")
+            self.ai_service.add_message(stream_sid, "user", f"My Name is: {fullname}")
+            self.ai_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Name of the user you will use in this conversation: {fullname}")
         if email is not None and email != "":
-            self.chatgpt_service.add_message(stream_sid, "user", f"My Email Address is: {email}")
-            self.chatgpt_service.add_system_message(stream_sid, "system", f"Don't forget. This is the email address of the user you will use in this conversation : {email}.")
+            self.ai_service.add_message(stream_sid, "user", f"My Email Address is: {email}")
+            self.ai_service.add_system_message(stream_sid, "system", f"Don't forget. This is the email address of the user you will use in this conversation : {email}.")
         if phone is not None and phone != "":
-            self.chatgpt_service.add_message(stream_sid, "user", f"My Phone Number is: {phone}")
-            self.chatgpt_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Phone Number of the user you will use in this conversation: {phone}")
+            self.ai_service.add_message(stream_sid, "user", f"My Phone Number is: {phone}")
+            self.ai_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Phone Number of the user you will use in this conversation: {phone}")
         else:
-            self.chatgpt_service.add_system_message(stream_sid, "system", f"This is the Phone Number of the user you will use in this conversation and you can ask the user if he/she wants to change the phone number: {self.format_us_phone(self.agents[call_sid]['from'])}")
+            self.ai_service.add_system_message(stream_sid, "system", f"This is the Phone Number of the user you will use in this conversation and you can ask the user if he/she wants to change the phone number: {self.format_us_phone(self.agents[call_sid]['from'])}")
         if description is not None and description != "":
-            self.chatgpt_service.add_system_message(stream_sid, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
+            self.ai_service.add_system_message(stream_sid, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
        
         if not isAllowMeetingConflict and existing_appointment is not None and existing_appointment != "":
             print("Existing appointment found: ", existing_appointment)
-            self.chatgpt_service.add_system_message(
+            self.ai_service.add_system_message(
             stream_sid,
             "system",
             f"""Task: if user wants to schedule an appointment or meeting.
@@ -1366,7 +1380,7 @@ class CallHandler:
         elif self.agents[call_sid]['integrations']['salesforce_connection_id']:
 
             formatted_number = self.formatToSalesforceNumber(self.agents[call_sid]['from'])
-            result = await self.chatgpt_service.salesforce_service.get_lead_by_phone(self.agents[call_sid]['integrations']['salesforce_connection_id'], formatted_number)
+            result = await self.ai_service.salesforce_service.get_lead_by_phone(self.agents[call_sid]['integrations']['salesforce_connection_id'], formatted_number)
             
             if len(result) > 0:
                 details = result[0]
@@ -1382,7 +1396,7 @@ class CallHandler:
 
         elif self.agents[call_sid]['integrations']['hubspot_connection_id']:
 
-            result = await self.chatgpt_service.hubspot_service.get_contact_by_phone(self.agents[call_sid]['integrations']['hubspot_connection_id'], self.agents[call_sid]['from'])
+            result = await self.ai_service.hubspot_service.get_contact_by_phone(self.agents[call_sid]['integrations']['hubspot_connection_id'], self.agents[call_sid]['from'])
             
             if 'results' in result and len(result['results']) > 0:
                 details = result['results'][0]['properties']
@@ -1396,7 +1410,7 @@ class CallHandler:
 
         elif self.agents[call_sid]['integrations']['zoho_connection_id']:
 
-            result = await self.chatgpt_service.zoho_service.get_lead_by_phone(self.agents[call_sid]['integrations']['zoho_connection_id'], self.agents[call_sid]['from'])
+            result = await self.ai_service.zoho_service.get_lead_by_phone(self.agents[call_sid]['integrations']['zoho_connection_id'], self.agents[call_sid]['from'])
             
             if len(result) > 0:
                 details = result[0]
@@ -1688,66 +1702,6 @@ class CallHandler:
                 self.twilio_service.background_sound = audio_stream
             await self.twilio_service.send_audio_stream(self.sessions[call_id]['websocket'], call_id, self.twilio_service.background_sound)
 
-    async def process_file(self, file: UploadFile):
-        """
-        Process the uploaded file based on its MIME type and content.
-
-        Supports: TXT, DOC/DOCX, PDF
-        """
-        # Read the file content
-        file_content = await file.read()
-
-        # Process based on MIME type
-        if file.content_type == "text/plain":
-            # Process TXT file
-            return file_content.decode("utf-8")
-
-        elif file.content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            # Process DOCX file
-            from io import BytesIO
-            doc = Document(BytesIO(file_content))
-            return "\n".join([paragraph.text for paragraph in doc.paragraphs])
-
-        elif file.content_type == "application/pdf":
-            # Process PDF file
-            from io import BytesIO
-            pdf_reader = PdfReader(BytesIO(file_content))
-            text = ""
-            for page in pdf_reader.pages:
-                text += page.extract_text()
-            return text
-
-        else:
-            # Unsupported file type
-            print("Unsupported file type. Please upload TXT, DOC/DOCX, or PDF files.")
-            return None
-
-    async def convert_mulaw_to_wav(self, mulaw_file, wav_file):
-        # Define WAV file settings
-        wav_fp = wave.open(wav_file, 'wb')
-        wav_fp.setnchannels(1)  # Mono channel
-        wav_fp.setsampwidth(2)  # 16-bit samples
-        wav_fp.setframerate(8000)  # 8 kHz sampling rate
-
-        # Read the μ-law file
-        with open(mulaw_file, 'rb') as mulaw_fp:
-            while True:
-                chunk = mulaw_fp.read(1024)
-                if not chunk:
-                    break
-
-                # Convert μ-law to linear PCM
-                pcm_chunk = audioop.ulaw2lin(chunk, 2)
-
-                # Write the PCM chunk to the WAV file
-                wav_fp.writeframes(pcm_chunk)
-
-        wav_fp.close()
-        if os.path.exists(mulaw_file):
-                os.remove(mulaw_file)
-        else:
-            print("The file does not exist")
-
     async def complete_status_callback(self, data):
         """Handle the stream callback to get the streamSid."""
 
@@ -1827,4 +1781,4 @@ class CallHandler:
             allowed_integrations: List of integration IDs the user is allowed to connect to (optional) 
            
         """
-        return await self.chatgpt_service.get_nango_session_token(user_id, allowed_integrations)
+        return await self.ai_service.get_nango_session_token(user_id, allowed_integrations)

@@ -1,4 +1,6 @@
 # app/services/chatgpt_service.py
+
+# app/services/chatgpt_service.py
 import openai
 from app.config import settings
 # Import date class from datetime module
@@ -14,57 +16,8 @@ from typing import Dict, Any, List
 from app.services.backend_service import BackendHandler
 import html
 import re, json, threading, queue
-
-class StreamingChunker:
-    def __init__(self, max_length=200, onTTS=None, conversation_id=None,flush_ws =None):
-        self.buffer = ""  # Store incoming characters
-        self.max_length = max_length
-        self.send_to_tts= onTTS
-        self.conversation_id= conversation_id
-        self.flush_ws = flush_ws
-    async def add_stream_data(self, char):
-        self.buffer = char  # Append incoming characters
-        
-        # Check if we have a complete sentence AND at least 200 chars
-        if len(self.buffer) >= self.max_length:
-            chunk, remaining = self._split_at_sentence()
-            if chunk:
-                chunk = self.filter_message(chunk)
-                print("chunk : " ,chunk)
-                # self.buffer = remaining  # Keep the leftover text for the next chunk
-                await self.send_to_tts(chunk, self.conversation_id)  # Process the completed chunk
-                await self.add_stream_data(remaining)
-
-    async def flush(self):
-        """Force send any remaining text when stream ends."""
-        if self.buffer.strip():
-            chunk = self.filter_message(self.buffer)
-            print("chunk : ", chunk)
-            await self.send_to_tts(chunk, self.conversation_id)
-            self.buffer = ""
-            # self.flush_ws()
-
-    def _split_at_sentence(self):
-        """Find the nearest full sentence before max_length."""
-        # sentences = re.split(r'(?<=[.!?])\s+', self.buffer)  # Split at sentence end
-        sentences = re.findall(r'[^.!?]*[.!?]', self.buffer, re.DOTALL)
-        chunk, remaining = "", ""
-
-        for sentence in sentences:
-            if len(chunk) + len(sentence) <= self.max_length:
-                chunk += " " + sentence if chunk else sentence
-            else:
-                remaining = " ".join(sentences[sentences.index(sentence):])  # Save leftover
-                break
-        
-        return chunk.strip(), remaining.strip()  # Return cleanly formatted chunks
-
-    def filter_message(self, message):
-        if 'End Call Message' in message or 'Routing Message' in message:
-            message = message.replace('End Call Message', '')
-            message = message.replace('Routing Message', '')
-        return message
-class ChatGPTService:
+# import app.adapters.openai_adapter as OpenAiAdapter
+class AIService:
     def __init__(self, integration_type: str = "zoho"):
         openai.api_key = settings.chatgpt_api_key
         self.conversations = {}
@@ -80,7 +33,9 @@ class ChatGPTService:
         self.google_calendar_service = GoogleCalendarService()
         self.outlook_calendar_service = OutlookCalendarService()
         self.backend_service = BackendHandler()
-                # Set the integration type
+                # Set the integration type     
+        # self.openai_adapter = OpenAiAdapter()
+
         # Initialize integration services and endpoints
         self.endpoints = {}
         self.method_mappings = {}
@@ -443,7 +398,7 @@ class ChatGPTService:
             print(f"Error using {integration} integration: {str(e)}")
         
             response = openai.chat.completions.create(
-                model="gpt-4-turbo",
+                model="gpt-4.1",
                 messages=self.system_convo[conversation_id]
             )
             assistant_reply = response.choices[0].message.content
@@ -455,7 +410,7 @@ class ChatGPTService:
             self.ai_interrupt[conversation_id] = False
         self.ai_interrupt[conversation_id] = status
         
-    async def generate_response(self, conversation_id, message: str, synthesize_response, flush_ws):
+    async def generate_response(self, conversation_id, message: str, synthesize_response,ai_client, flush_ws, streamingResponse):
 
         
         # Add user input to conversation history
@@ -487,62 +442,66 @@ class ChatGPTService:
         
         # else:
             # Standard response without CRM integration
-        response = openai.chat.completions.create(
-            model="gpt-4.1",
-            messages=self.system_convo[conversation_id],
-            stream=True,
-            max_tokens=150,
+        if ai_client['name'] == 'OpenAI':
+            response = openai.chat.completions.create(
+                model=ai_client['model'],
+                messages=self.system_convo[conversation_id],
+                stream=True,
+                max_tokens=150,
+            )
 
-        )
+            print("Assistant: ", end="", flush=True)  # Print the assistant's response incrementally
+            # assistant_reply = response.choices[0].message.content
+        
+            # Process the response for speech synthesis
+            # assistant_reply = assistant_reply.replace('*', '')
+            chunk_reply = ""
+            # chunker = StreamingChunker(max_length=50, onTTS=synthesize_response, conversation_id=conversation_id, flush_ws=flush_ws)
+            # await chunker.add_stream_data(assistant_reply)  # Simulating stream input
+            end_call_prefix = "End Call Message"
+            prefix_buffer = ""
+            post_prefix_mode = False
+            post_prefix_text = ""
+            for chunk in response:
+                if chunk.choices and chunk.choices[0].delta:
+                    delta = chunk.choices[0].delta
+                    if delta.content:
+                        val = delta.content
+                        chunk_reply += val  # Save the full assistant response
 
-        print("Assistant: ", end="", flush=True)  # Print the assistant's response incrementally
-        # assistant_reply = response.choices[0].message.content
-    
-        # Process the response for speech synthesis
-        # assistant_reply = assistant_reply.replace('*', '')
-        chunk_reply = ""
-        chunker = StreamingChunker(max_length=50, onTTS=synthesize_response, conversation_id=conversation_id, flush_ws=flush_ws)
-        # await chunker.add_stream_data(assistant_reply)  # Simulating stream input
-        end_call_prefix = "End Call Message"
-        prefix_buffer = ""
-        post_prefix_mode = False
-        post_prefix_text = ""
-        for chunk in response:
-            if chunk.choices and chunk.choices[0].delta:
-                delta = chunk.choices[0].delta
-                if delta.content:
-                    val = delta.content
-                    chunk_reply += val  # Save the full assistant response
+                        print(val, end="", flush=True)  # Display the streamed text
+                        assistant_reply += val  # Save the full assistant response
+                        if streamingResponse:
+                            if not post_prefix_mode:
+                                # Build up prefix buffer
+                                prefix_buffer += val
 
-                    print(val, end="", flush=True)  # Display the streamed text
-                    assistant_reply += val  # Save the full assistant response
-                    if not post_prefix_mode:
-                        # Build up prefix buffer
-                        prefix_buffer += val
+                                if end_call_prefix in prefix_buffer:
+                                    post_prefix_mode = True
+                                    # Split at prefix
+                                    post_prefix_text = prefix_buffer.split(end_call_prefix, 1)[1]
+                                    if post_prefix_text.strip() and not self.ai_interrupt[conversation_id]:
+                                        await synthesize_response(post_prefix_text, conversation_id)
+                                elif not end_call_prefix.startswith(prefix_buffer) and not self.ai_interrupt[conversation_id]:
+                                    # Prefix was never part of stream, flush buffer to TTS
+                                    await synthesize_response(prefix_buffer, conversation_id)
 
-                        if end_call_prefix in prefix_buffer:
-                            post_prefix_mode = True
-                            # Split at prefix
-                            post_prefix_text = prefix_buffer.split(end_call_prefix, 1)[1]
-                            if post_prefix_text.strip() and not self.ai_interrupt[conversation_id]:
-                                await synthesize_response(post_prefix_text, conversation_id)
-                        elif not end_call_prefix.startswith(prefix_buffer) and not self.ai_interrupt[conversation_id]:
-                            # Prefix was never part of stream, flush buffer to TTS
-                            await synthesize_response(prefix_buffer, conversation_id)
+                                    prefix_buffer = ""
+                            elif not self.ai_interrupt[conversation_id]:
+                                    await synthesize_response(val, conversation_id)                 
 
-                            prefix_buffer = ""
-                    elif not self.ai_interrupt[conversation_id]:
-                            await synthesize_response(val, conversation_id)                 
+                        # await chunker.add_stream_data(val)
 
-                    # await chunker.add_stream_data(val)
+            # await chunker.flush()
+            if not streamingResponse:
+                await synthesize_response(chunk_reply, conversation_id)
+            else:
+                await flush_ws()
+            # if chunk_reply and chunk_reply != '':
+            #     chunk_reply = chunker.filter_message(chunk_reply)
+            #     await synthesize_response(chunk_reply, conversation_id)
 
-        # await chunker.flush()
-        await flush_ws()
-        # if chunk_reply and chunk_reply != '':
-        #     chunk_reply = chunker.filter_message(chunk_reply)
-        #     await synthesize_response(chunk_reply, conversation_id)
-
-            
+                
                     
         self.add_message(conversation_id, "assistant", assistant_reply)
         self.add_system_message(conversation_id, "assistant", assistant_reply)
@@ -673,9 +632,3 @@ class ChatGPTService:
             summary = result.choices[0].message.content
             summary = json.loads(summary)
             return summary
-
-
-
-
-
-
