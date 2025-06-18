@@ -57,7 +57,7 @@ class DeepgramService:
     def is_sentence_complete(self, sentence):
         return bool(re.search(r'[.!?]$', sentence.strip()))
 
-    async def stream_text_to_speech(self, text: str , model, call_id, queue_audio):
+    async def stream_text_to_speech(self, text: str, call_id, queue_audio):
         try:
             # options = SpeakOptions(
             #     model= model,
@@ -82,14 +82,17 @@ class DeepgramService:
         print("Establishing Deepgram Connection....")
         if self.dg_connection:
             await self.dg_connection.finish()
-        if self.sp_dg_connection:
-            await self.sp_dg_connection.finish()
         self.dg_connection = self.deepgram.listen.asyncwebsocket.v("1")
         self.dg_connection.on(LiveTranscriptionEvents.Open, self.on_open)
         self.transcribeOptions['model'] = model
         await self.dg_connection.start(options=self.transcribeOptions)
         await self.dg_connection.keep_alive()
 
+    async def establish_sp_connection(self, model = "aura-2-thalia-en"):
+        print("Establishing Speak Connection....")
+        if self.sp_dg_connection:
+            await self.sp_dg_connection.finish()
+        self.speakOptions['model'] = model
         self.sp_dg_connection = self.deepgram.speak.asyncwebsocket.v("1")
         self.sp_dg_connection.on(SpeakWebSocketEvents.Open, self.on_sp_open)
 

@@ -16,7 +16,7 @@ from typing import Dict, Any, List
 from app.services.backend_service import BackendHandler
 import html
 import re, json, threading, queue
-import app.adapters.openai_adapter as OpenAiAdapter
+# import app.adapters.openai_adapter as OpenAiAdapter
 class AIService:
     def __init__(self, integration_type: str = "zoho"):
         openai.api_key = settings.chatgpt_api_key
@@ -34,7 +34,7 @@ class AIService:
         self.outlook_calendar_service = OutlookCalendarService()
         self.backend_service = BackendHandler()
                 # Set the integration type     
-        self.openai_adapter = OpenAiAdapter()
+        # self.openai_adapter = OpenAiAdapter()
 
         # Initialize integration services and endpoints
         self.endpoints = {}
@@ -410,7 +410,7 @@ class AIService:
             self.ai_interrupt[conversation_id] = False
         self.ai_interrupt[conversation_id] = status
         
-    async def generate_response(self, conversation_id, message: str, synthesize_response,ai_client, flush_ws):
+    async def generate_response(self, conversation_id, message: str, synthesize_response,ai_client, flush_ws, streamingResponse):
 
         
         # Add user input to conversation history
@@ -471,28 +471,32 @@ class AIService:
 
                         print(val, end="", flush=True)  # Display the streamed text
                         assistant_reply += val  # Save the full assistant response
-                        if not post_prefix_mode:
-                            # Build up prefix buffer
-                            prefix_buffer += val
+                        if streamingResponse:
+                            if not post_prefix_mode:
+                                # Build up prefix buffer
+                                prefix_buffer += val
 
-                            if end_call_prefix in prefix_buffer:
-                                post_prefix_mode = True
-                                # Split at prefix
-                                post_prefix_text = prefix_buffer.split(end_call_prefix, 1)[1]
-                                if post_prefix_text.strip() and not self.ai_interrupt[conversation_id]:
-                                    await synthesize_response(post_prefix_text, conversation_id)
-                            elif not end_call_prefix.startswith(prefix_buffer) and not self.ai_interrupt[conversation_id]:
-                                # Prefix was never part of stream, flush buffer to TTS
-                                await synthesize_response(prefix_buffer, conversation_id)
+                                if end_call_prefix in prefix_buffer:
+                                    post_prefix_mode = True
+                                    # Split at prefix
+                                    post_prefix_text = prefix_buffer.split(end_call_prefix, 1)[1]
+                                    if post_prefix_text.strip() and not self.ai_interrupt[conversation_id]:
+                                        await synthesize_response(post_prefix_text, conversation_id)
+                                elif not end_call_prefix.startswith(prefix_buffer) and not self.ai_interrupt[conversation_id]:
+                                    # Prefix was never part of stream, flush buffer to TTS
+                                    await synthesize_response(prefix_buffer, conversation_id)
 
-                                prefix_buffer = ""
-                        elif not self.ai_interrupt[conversation_id]:
-                                await synthesize_response(val, conversation_id)                 
+                                    prefix_buffer = ""
+                            elif not self.ai_interrupt[conversation_id]:
+                                    await synthesize_response(val, conversation_id)                 
 
                         # await chunker.add_stream_data(val)
 
             # await chunker.flush()
-            await flush_ws()
+            if not streamingResponse:
+                await synthesize_response(chunk_reply, conversation_id)
+            else:
+                await flush_ws()
             # if chunk_reply and chunk_reply != '':
             #     chunk_reply = chunker.filter_message(chunk_reply)
             #     await synthesize_response(chunk_reply, conversation_id)

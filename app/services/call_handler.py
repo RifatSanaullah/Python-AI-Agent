@@ -203,7 +203,8 @@ class CallHandler:
             print("Unexpected error:", e)
         finally:
             print("WebSocket connection closed.")
-            session['transcribe_service'].cancel_transmit()
+            if self.agents[call_id]['STT']['name'] == 'Deepgram' and session['transcribe_service']:
+                session['transcribe_service'].cancel_transmit()
             if session['stream_sid'] in self.ai_service.conversations:
                 conversations = self.ai_service.conversations[session['stream_sid']]
 
@@ -990,8 +991,10 @@ class CallHandler:
             return
         self.sessions[call_id]['ai_interrupt'] =  False
         self.ai_service.update_interrupt_status(call_id, False)
-
-        response = await self.ai_service.generate_response(call_id, transcript, self.synthesize_response, self.agents[self.sessions[call_id]['call_sid']]['aiClient'], self.sessions[call_id]['transcribe_service'].flush_sp_ws)
+        streamingResponse = True
+        if self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Elevenlabs':
+            streamingResponse = False
+        response = await self.ai_service.generate_response(call_id, transcript, self.synthesize_response, self.agents[self.sessions[call_id]['call_sid']]['aiClient'], self.sessions[call_id]['synthesis_service'].flush_sp_ws, streamingResponse)
         if 'End Call Message' in response or self.contains_any_word(transcript) or  self.contains_any_word(response):
             self.agents[self.sessions[call_id]['call_sid']]['end_call'] = True
             response = response.replace('End Call Message', '')
@@ -1065,20 +1068,20 @@ class CallHandler:
         # start_time = datetime.now()
         model = self.agents[self.sessions[call_id]['call_sid']]['TTS']['voice']['model']
         # Select TTS provider based on environment variable
-        tts_provider = settings.tts_provider.lower()
-        if self.agents[self.sessions[call_id]['call_sid']]['TTS'] == 'Deepgram':
-            audio_stream = await session['synthesis_service'].stream_text_to_speech(text, model, call_id, self.queue_audio)
+        print(self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'])
+        if self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Deepgram':
+            audio_stream = await session['synthesis_service'].stream_text_to_speech(text, call_id, self.queue_audio)
         # elif tts_provider == "playht":
         #     audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
-        elif self.agents[self.sessions[call_id]['call_sid']]['TTS'] == 'ElevenLabs':
-            # audio_stream = await self.elevenlabs_service.stream_text_to_speech(text, model)
-            audio_stream = await self.sessions[call_id]["synthesis_service"].stream_text_to_speech(text, model)
+        elif self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Elevenlabs':
+            audio_stream = await self.sessions[call_id]["synthesis_service"].stream_text_to_speech(text, model, self.agents[self.sessions[call_id]['call_sid']]['TTS']['model'], call_id, self.queue_audio)
+            # audio_stream = await self.sessions[call_id]["synthesis_service"].stream_text_to_speech(text, call_id, self.queue_audio)
             
-            await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
-            await self.twilio_service.enqueue_audio(call_id, audio_stream, 'response_buffer')
-            result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
-            session['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
-            session['wait_duration'] = result['duration']
+            # await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
+            # await self.twilio_service.enqueue_audio(call_id, audio_stream, 'response_buffer')
+            # result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
+            # session['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
+            # session['wait_duration'] = result['duration']
 
         else:
             raise ValueError(f"Unsupported TTS provider: {settings.tts_provider}")
@@ -1099,7 +1102,7 @@ class CallHandler:
         if not session :
             return
         ai_interupted = session.get('ai_interrupt', False)
-        if not ai_interupted:
+        if not ai_interupted and session['websocket'] is not None:
             
             await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
             await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
@@ -1112,31 +1115,7 @@ class CallHandler:
     def initialize_session_info(self, stream_sid, call_sid):
         # Initialize a session for this specific call
         
-        self.sessions[stream_sid] = {}
-        if self.agents[call_sid]['STT']['name'] == 'Deepgram':
-            self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
-            # self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
-        elif self.agents[call_sid]['STT']['name'] == 'AssemblyAI':
-            self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(stream_sid, TranscribeService)
-            # self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
-        else :
-            self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
-            # self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
-        
-
-
-        if self.agents[call_sid]['TTS'] == 'Deepgram':
-            if self.agents[call_sid]['STT']['name'] == 'Deepgram':
-                self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
-            else :
-                self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
-        elif self.agents[call_sid]['TTS'] == 'ElevenLabs':
-            self.sessions[stream_sid]["synthesis_service"] = self.elevenlabs_service
-        else:
-            self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
-
-        if stream_sid not in self.sessions:
-            self.sessions[stream_sid]={
+        self.sessions[stream_sid] = {
                 "ai_speaking": False,
                 "ai_interrupt": False,
                 "wait_counter": 0,
@@ -1148,6 +1127,41 @@ class CallHandler:
                 "call_sid" : call_sid,
                 "last_user_audio_time" : None
             }
+        if self.agents[call_sid]['STT']['name'] == 'Deepgram':
+            self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
+            # self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
+        elif self.agents[call_sid]['STT']['name'] == 'AssemblyAI':
+            self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(call_sid, stream_sid, TranscribeService)
+            # self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
+        else :
+            self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
+            # self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
+        
+
+
+        if self.agents[call_sid]['TTS']['name'] == 'Deepgram':
+            if self.agents[call_sid]['STT']['name'] == 'Deepgram':
+                self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
+            else :
+                self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
+        elif self.agents[call_sid]['TTS']['name'] == 'Elevenlabs':
+            self.sessions[stream_sid]["synthesis_service"] = self.elevenlabs_service
+        else:
+            self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
+
+        # if stream_sid not in self.sessions:
+        #     self.sessions[stream_sid]={
+        #         "ai_speaking": False,
+        #         "ai_interrupt": False,
+        #         "wait_counter": 0,
+        #         "wait_duration": 12,
+        #         "prev_wait_duration": 0,
+        #         "stream_sid": stream_sid,
+        #         "background_sound": None,
+        #         "websocket" : None,
+        #         "call_sid" : call_sid,
+        #         "last_user_audio_time" : None
+        #     }
 
     def formatToSalesforceNumber(self, phone):
         digits = re.sub(r'\D', '', phone)
@@ -1189,6 +1203,11 @@ class CallHandler:
         self.agents[call_id]['from'] = data['from']
         self.agents[call_id]['previous_convo_summary'] = None
         self.agents[call_id]['new_knowledge'] = False
+        self.agents[call_id]['aiClient'] = api_response['data']['aiClient']
+        self.agents[call_id]['STT'] = api_response['data']['STT']
+        self.agents[call_id]['TTS'] = api_response['data']['TTS']
+
+
         
         # Add user preference for allowing meeting conflicts
         if 'userPreference' in api_response['data'] and 'allowMeetingConflict' in api_response['data']['userPreference']:
@@ -1249,12 +1268,19 @@ class CallHandler:
         call_sid = data.get("CallSid")
         print(f"Stream SID: {stream_sid}, Call SID: {call_sid}")
         self.initialize_session_info(stream_sid, call_sid)
+        print("stt: ",self.agents[call_sid]['STT']['name'])
         if self.agents[call_sid]['STT']['name'] == 'Deepgram':
             await self.sessions[stream_sid]['transcribe_service'].establish_dg_connection(self.agents[call_sid]['STT']['model'])
         else: self.sessions[stream_sid]['transcribe_service'].connect()
-        # await self.sessions[stream_sid]['deepgram_transcribe_service'].establish_dg_connection()
-
+        print("tts: ",self.agents[call_sid]['TTS']['name'])
+        
+        # if self.agents[call_sid]['TTS']['name'] == 'Elevenlabs':
+        #     await self.sessions[stream_sid]['synthesis_service'].establish_connection( self.agents[call_sid]['TTS']['voice']['model'], self.agents[call_sid]['TTS']['model'])
+        if self.agents[call_sid]['TTS']['name'] == 'Deepgram':
+            await self.sessions[stream_sid]['transcribe_service'].establish_sp_connection(self.agents[call_sid]['TTS']['voice']['model'])
         # self.sessions[call_sid]['stream_sid'] = stream_sid
+        print("Done initializing session info")
+
         updaedata= {
             "stream_sid" : stream_sid,
             "call_sid" : call_sid
@@ -1278,8 +1304,12 @@ class CallHandler:
         print("Existing appointment: ", existing_appointment)
         isAllowMeetingConflict = self.agents[call_sid]['allowMeetingConflict']
         print("isAllowMeetingConflict: ", isAllowMeetingConflict)
+
         await self.synthesize_response(greetings , stream_sid)
-        await self.sessions[stream_sid]['transcribe_service'].flush_sp_ws()
+
+        if self.agents[call_sid]['STT']['name'] == 'Deepgram':
+            await self.sessions[stream_sid]['transcribe_service'].flush_sp_ws()
+
         await self.ai_service.process_initial_message(stream_sid, self.get_agent_knowledge)
         self.ai_service.add_message(stream_sid, "assistant", greetings)
         self.ai_service.add_system_message(stream_sid, "assistant", greetings)
