@@ -223,7 +223,7 @@ async def get_nango_session_token(request: Request, call_handler: CallHandler = 
     
     # Use the ChatGPT service to get a Nango session token
     try:
-        session_data = await call_handler.chatgpt_service.get_nango_session_token(
+        session_data = await call_handler.ai_service.get_nango_session_token(
             user_id=user_id,
             allowed_integrations=allowed_integrations
         )
