@@ -1,15 +1,18 @@
 # app/main.py
+import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Depends, WebSocket, HTTPException
-from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse
+from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse, RedirectResponse # Keep RedirectResponse
 from app.services.call_handler import CallHandler
 from contextlib import asynccontextmanager
 from fastapi import UploadFile, File
 from pathlib import Path
-from app.config import settings
+from app.config import settings # Ensure settings is imported to access frontend_url
 from app.services.backend_service import BackendHandler
 from fastapi.middleware.cors import CORSMiddleware
-from app.services.nango_service import NangoService
+from app.services.nango_service import NangoService # Added NangoService import back
+from app.services import cinc_service
+from typing import Optional, Dict, Any # Added Dict and Any for type hinting
 
 load_dotenv()
 
@@ -56,7 +59,7 @@ async def incoming_call(request: Request, call_handler: CallHandler = Depends(ge
     application_sid = data.get('ApplicationSid')
     direction = data.get('Direction')
     fromNumber = data.get('From')
-    dialed_number = data.get('To')
+    dialed_number =  data.get('To')
     call_id = data.get("CallSid")
     print(data.get("IsBoom"))
     data = {
@@ -247,6 +250,107 @@ async def remove_session(request: Request, call_handler: CallHandler = Depends(g
                         "account_id": account_id,
                         "connection_type": connection_type,
                     })
-        return JSONResponse(status_code=200, content={"status": "success", "message": "Session removed successfully" , data: response})
+        return JSONResponse(status_code=200, content={"status": "success", "message": "Session removed successfully" , "data": response}) # Corrected data key
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# CINC OAuth Endpoints
+@app.get("/cinc/login")
+async def cinc_login(request: Request, state: Optional[str] = None, account_id: Optional[str] = None):
+    if not account_id:
+        raise HTTPException(status_code=400, detail="account_id is required for CINC login flow initiation")
+    auth_url = cinc_service.get_authorization_url(state=state, account_id=account_id) 
+    return RedirectResponse(url=auth_url)
+
+@app.get("/cinc/callback", tags=["CINC Integration"])
+async def cinc_callback(
+    request: Request, 
+    code: Optional[str] = None, 
+    error: Optional[str] = None, 
+    error_description: Optional[str] = None, 
+    state: Optional[str] = None 
+):
+    base_redirect_url = settings.frontend_url.rstrip('/') + settings.frontend_cinc_callback_path 
+    
+    account_id_from_state = None
+    original_csrf_state = None
+
+    if state:
+        state_parts = state.split("__")
+        if len(state_parts) == 2:
+            original_csrf_state = state_parts[0]
+            account_id_from_state = state_parts[1]
+        elif len(state_parts) == 1:
+            pass 
+
+    redirect_params = {}
+    if original_csrf_state: 
+        redirect_params['state'] = original_csrf_state
+    if account_id_from_state: 
+        redirect_params['account_id'] = account_id_from_state
+
+    if error:
+        if error == "access_denied":
+            redirect_params['cinc_status'] = 'cancelled'
+            redirect_params['detail'] = 'User denied access in CINC.'
+        else:
+            redirect_params['cinc_status'] = 'error'
+            redirect_params['detail'] = error_description or error
+        
+        query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
+        return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
+
+    if not code:
+        redirect_params['cinc_status'] = 'error'
+        redirect_params['detail'] = 'Authorization code not found in CINC callback.'
+        query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
+        return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
+
+    try:
+       
+        token_response = await cinc_service.exchange_code_for_token(auth_code=code, composite_state=state)
+        
+        
+        stored_account_id = token_response.get("account_id_for_storage") 
+
+        redirect_params['cinc_status'] = 'success'
+        if stored_account_id:
+             redirect_params['account_id'] = stored_account_id 
+        elif account_id_from_state: 
+            redirect_params['account_id'] = account_id_from_state
+        
+        query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
+        return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
+    
+    except HTTPException as e:
+        redirect_params['cinc_status'] = 'error'
+        redirect_params['detail'] = str(e.detail)
+        if account_id_from_state: 
+             redirect_params['account_id'] = account_id_from_state
+
+        query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
+        return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
+        
+    except Exception as e:
+        print(f"Unexpected error in CINC callback processing: {str(e)}") 
+        redirect_params['cinc_status'] = 'error'
+        redirect_params['detail'] = "An unexpected error occurred while finalizing CINC authorization."
+        if account_id_from_state:
+             redirect_params['account_id'] = account_id_from_state
+        
+        query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
+        return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
+
+@app.post("/cinc/account/{account_id}/disconnect")
+async def disconnect_cinc_integration(account_id: str):
+    try:
+        await cinc_service.delete_cinc_tokens(account_id=int(account_id))
+        return JSONResponse(status_code=200, content={"message": "CINC connection deleted successfully"})
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete CINC connection: {str(e)}")
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
