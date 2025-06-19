@@ -3,6 +3,8 @@ import requests
 import httpx
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
+import httpx
+import requests
 
 from fastapi import HTTPException, status
 from app.config import settings
@@ -267,16 +269,20 @@ async def _make_cinc_request(method: str, endpoint: str, account_id: int, connec
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to make CINC API request.")
 
-async def get_leads(account_id: int, connection_id: Optional[str] = None, next_page: Optional[str] = None, from_lead_id: Optional[str] = None) -> Dict[str, Any]:
+async def get_leads(account_id: int, connection_id: Optional[str] = None, next_page: Optional[str] = None, from_lead_id: Optional[str] = None, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     endpoint = "/site/leads"
-    params = {}
+    query_params = {}
     if next_page:
-        params["next"] = next_page
+        query_params["next"] = next_page
     if from_lead_id:
-        params["from"] = f"id:{from_lead_id}"
+        query_params["from"] = f"id:{from_lead_id}"
+    
+    # Add search parameters if provided
+    if params:
+        query_params.update(params)
     
     # Get raw response from CINC API
-    response = await _make_cinc_request("GET", endpoint, account_id, connection_id=connection_id, params=params)
+    response = await _make_cinc_request("GET", endpoint, account_id, connection_id=connection_id, params=query_params)
     
     # Handle response structure - CINC API wraps data in "body"
     leads_data = response
@@ -349,6 +355,16 @@ async def create_lead(account_id: int, lead_data: Dict[str, Any], connection_id:
         }
     }
     
+    # Handle Description field by converting it to notes array
+    description = lead_data.get("Description")
+    if description and description.strip():
+        formatted_data["notes"] = [{
+            "content": description,
+            "category": "general",  # Use "general" category for AI call summaries
+            "is_pinned": True,
+            "created_by": lead_data.get("created_by"),  # Optional: agent ID who created the note
+        }]
+    
     # Add optional fields if present
     contact = lead_data.get("info", {}).get("contact", {})
     
@@ -413,6 +429,10 @@ async def create_lead(account_id: int, lead_data: Dict[str, Any], connection_id:
     if lead_data.get("created_by"):
         formatted_data["created_by"] = lead_data["created_by"]
     
+    # Add timezone
+    if lead_data.get("timezone"):
+        formatted_data["timezone"] = lead_data["timezone"]
+    
     try:
         result = await _make_cinc_request("POST", endpoint, account_id, connection_id=connection_id, json_data=formatted_data)
         
@@ -436,6 +456,22 @@ async def create_lead(account_id: int, lead_data: Dict[str, Any], connection_id:
 
 async def update_lead(account_id: int, lead_id: str, lead_data: Dict[str, Any], connection_id: Optional[str] = None) -> Dict[str, Any]:    
     endpoint = f"/site/leads/{lead_id}"
+     # Handle Description field by converting it to notes array
+    if lead_data.get("Description") and lead_data["Description"].strip():
+        # If notes array doesn't exist, create it
+        if "notes" not in lead_data:
+            lead_data["notes"] = []
+        
+        # Add the description as a new note
+        lead_data["notes"].append({
+            "content": lead_data["Description"],
+            "category": "general",  # Use "general" category for AI call summaries
+            "is_pinned": True,
+            "created_by": lead_data.get("created_by"),  # Optional: agent ID who created the note
+        })
+        
+        # Remove the Description field as it's now in notes
+        del lead_data["Description"]
     
     # CINC API requires a complete lead object for updates, not just partial changes
     # First, fetch the existing lead data
@@ -510,6 +546,23 @@ async def update_lead_via_upsert(account_id: int, lead_id: str, lead_data: Dict[
     """
     endpoint = "/site/leads"
     
+    # Handle Description field by converting it to notes array
+    if lead_data.get("Description") and lead_data["Description"].strip():
+        # If notes array doesn't exist, create it
+        if "notes" not in lead_data:
+            lead_data["notes"] = []
+        
+        # Add the description as a new note
+        lead_data["notes"].append({
+            "content": lead_data["Description"],
+            "category": "general",  # Use "general" category for AI call summaries
+            "is_pinned": True,
+            "created_by": lead_data.get("created_by"),  # Optional: agent ID who created the note
+        })
+        
+        # Remove the Description field as it's now in notes
+        del lead_data["Description"]
+    
     # Fetch existing lead and merge with updates for upsert as well
     try:
         existing_lead = await get_lead_details(account_id, lead_id, connection_id=connection_id)
@@ -580,9 +633,9 @@ async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optiona
             clean_phone = clean_phone[1:]  # Remove leading '1'
         elif len(clean_phone) == 10:
             pass  # Already in correct format
-        # else:
-        #     # Invalid phone number format
-        #     clean_phone = "5436234123"
+        else:
+            # Invalid phone number format
+            clean_phone = "5432126343"
 
         # Get leads from CINC (retrieve all leads)
         leads_response = await get_leads(account_id, connection_id=connection_id)

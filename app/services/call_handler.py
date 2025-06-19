@@ -289,6 +289,136 @@ class CallHandler:
         # Check if CINC is available by connection_id existence
         if cinc_connection_id and cinc_connection_id != "null" and cinc_connection_id != "" and account_id:
             try:
+                logging.info(f"Processing CINC integration for account {account_id} with connection {cinc_connection_id}")
+                
+                # Check if summary has CINC data structure (cincLeadPostFormat or cincLeadPatchFormat)
+                cinc_data = None
+                if summary and isinstance(summary, dict):
+                    # Look for CINC format data in summary
+                    if 'info' in summary and 'contact' in summary['info']:
+                        cinc_data = summary.copy()
+                        
+                        # Handle Description field by converting it to notes array
+                        description = cinc_data.get('Description', '') or cinc_data.get('description', '')
+                        if description and description.strip():
+                            # Remove Description field as it will be converted to notes
+                            cinc_data.pop('Description', None)
+                            cinc_data.pop('description', None)
+                            
+                            # Add notes array with proper structure according to CINC API
+                            cinc_data["notes"] = [{
+                                "content": description,
+                                "category": "general",  # Use "general" category for AI call summaries
+                                "is_pinned": True,
+                                "created_by": session_info.get("agent_id"),  # Optional: add agent ID if available
+                            }]
+                    else:
+                        # If summary doesn't have CINC format, create basic structure
+                        description = summary.get('Description', '') or summary.get('description', '')
+                        cinc_data = {
+                            "info": {
+                                "contact": {
+                                    "email": summary.get('email', ''),
+                                    "first_name": summary.get('first_name', ''),
+                                    "last_name": summary.get('last_name', ''),
+                                    "phone_numbers": {
+                                        "cell_phone": summary.get('phone', '') or summary.get('cell_phone', ''),
+                                        "home_phone": summary.get('home_phone', ''),
+                                    }
+                                },
+                                "is_buyer": summary.get('is_buyer', True),  # Default to buyer for real estate
+                                "is_seller": summary.get('is_seller', False),
+                                "source": summary.get('source', 'AI Call Assistant'),
+                                "status": 'contacted' if lead_id else 'unworked',
+                            },
+                            "pipeline": summary.get('pipeline', {}),
+                            "timezone": summary.get('timezone', 'America/New_York'),
+                        }
+                        
+                        # Add notes array if description exists
+                        if description and description.strip():
+                            cinc_data["notes"] = [{
+                                "content": description,
+                                "category": "general",  # Use "general" category for AI call summaries
+                                "is_pinned": True,
+                                "created_by": session_info.get("agent_id"),  # Optional: add agent ID if available
+                            }]
+                
+                # Ensure required email field is present
+                if not cinc_data or not cinc_data.get('info', {}).get('contact', {}).get('email'):
+                    logging.warning("CINC integration skipped: No email address found in summary")
+                else:
+                    # Determine if we should create or update based on lead_id or email/phone search
+                    should_create_new = True
+                    existing_lead_id = lead_id
+                    
+                    # If no lead_id provided, try to find existing lead by phone or email
+                    if not lead_id or lead_id == "null" or lead_id == "":
+                        try:
+                            email = cinc_data['info']['contact']['email']
+                            phone = cinc_data['info']['contact'].get('phone_numbers', {}).get('cell_phone', '')
+                            
+                            # Try to find existing lead by phone first (if phone available)
+                            if phone:
+                                existing_leads = await self.cinc_service.get_leads(
+                                    account_id=account_id,
+                                    connection_id=cinc_connection_id,
+                                    # Use CINC API search by phone
+                                    params={"info.contact.phone_numbers.cell_phone": phone}
+                                )
+                                if existing_leads and existing_leads.get('body', {}).get('leads'):
+                                    existing_lead_id = existing_leads['body']['leads'][0]['id']
+                                    should_create_new = False
+                                    logging.info(f"Found existing CINC lead by phone: {existing_lead_id}")
+                                    
+                            # If not found by phone, try by email
+                            if should_create_new and email:
+                                existing_leads = await self.cinc_service.get_leads(
+                                    account_id=account_id,
+                                    connection_id=cinc_connection_id,
+                                    # Use CINC API search by email
+                                    params={"info.contact.email": email}
+                                )
+                                if existing_leads and existing_leads.get('body', {}).get('leads'):
+                                    existing_lead_id = existing_leads['body']['leads'][0]['id']
+                                    should_create_new = False
+                                    logging.info(f"Found existing CINC lead by email: {existing_lead_id}")
+                                    
+                        except Exception as search_error:
+                            logging.warning(f"Error searching for existing CINC lead: {search_error}")
+                    else:
+                        should_create_new = False  # We have a lead_id, so update existing
+                    
+                    if not should_create_new and existing_lead_id:
+                        # Update existing lead
+                        logging.info(f"Updating CINC lead {existing_lead_id}")
+                        result = await self.cinc_service.update_lead(
+                            account_id=account_id,
+                            lead_id=existing_lead_id,
+                            lead_data=cinc_data,
+                            connection_id=cinc_connection_id
+                        )
+                        logging.info(f"CINC lead updated successfully: {result}")
+                    else:
+                        # Create new lead
+                        logging.info("Creating new CINC lead")
+                        result = await self.cinc_service.create_lead(
+                            account_id=account_id,
+                            lead_data=cinc_data,
+                            connection_id=cinc_connection_id
+                        )
+                        logging.info(f"CINC lead created successfully: {result}")
+                        
+                        # Extract lead ID from response for future updates
+                        if result and isinstance(result, dict):
+                            new_lead_id = result.get('body', {}).get('id') or result.get('id')
+                            if new_lead_id:
+                                logging.info(f"New CINC lead ID: {new_lead_id}")
+                                
+            except Exception as e:
+                logging.error(f"Error in CINC integration for account {account_id}: {str(e)}")
+                # Continue with other integrations even if CINC fails
+            try:
                 # Prepare lead data for CINC update/create
                 from datetime import datetime, timezone
                 
