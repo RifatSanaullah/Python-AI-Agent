@@ -10,6 +10,7 @@ from app.services.polly_service import PollyService
 from app.services.deepgram_service import DeepgramService
 from app.services.assembly_ai_transcribe_service import TranscribeService
 from app.services.elevenlabs_service import ElevenLabsService
+from app.services.azure_service import AzureService
 from app.services.zoho_service import ZohoService
 from app.services.hubspot_service import HubSpotService
 from app.services.salesforce_service import SalesforceService
@@ -50,6 +51,7 @@ class CallHandler:
         self.s3_service = S3Service()
         # self.playht_service = PlayHT()
         self.elevenlabs_service = ElevenLabsService()
+        self.azure_service = AzureService()
         self.zoho_service = ZohoService()
         self.hubspot_service = HubSpotService()
         self.salesforce_service = SalesforceService()
@@ -252,16 +254,17 @@ class CallHandler:
 
                 self.ai_service.close_conversation(session['stream_sid'])
                 self.twilio_service.remove_stream_from_queue(session['stream_sid'])
-                del self.sessions[session['stream_sid']]
                 self.agents[call_id]['websocket_closed'] = True
                 # self.flush_agent(call_id)
-                
-            if self.agents[data['streamSid']['call_sid']]['TTS'] == 'Deepgram':
-                await session['synthesis_service'].disconnect()
-            if self.agents[data['streamSid']['call_sid']]['STT']['name'] == 'Deepgram':
-                await session['transcribe_service'].disconnect()
-            elif self.agents[data['streamSid']['call_sid']]['STT']['name'] == 'AssemblyAI':
-                session['transcribe_service'].close()  # Close the transcriber service
+            if session.get('streamSid') is not None:
+                if self.agents[session['streamSid']['call_sid']]['TTS'] == 'Deepgram':
+                    await session['synthesis_service'].disconnect()
+                if self.agents[session['streamSid']['call_sid']]['STT']['name'] == 'Deepgram':
+                    await session['transcribe_service'].disconnect()
+                elif self.agents[session['streamSid']['call_sid']]['STT']['name'] == 'AssemblyAI':
+                    session['transcribe_service'].close()  # Close the transcriber service
+                    
+            del self.sessions[session['stream_sid']]
             try:
                 await websocket.close()
             except Exception as e:
@@ -993,9 +996,9 @@ class CallHandler:
             return
         self.sessions[call_id]['ai_interrupt'] =  False
         self.ai_service.update_interrupt_status(call_id, False)
-        streamingResponse = True
-        if self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Elevenlabs':
-            streamingResponse = False
+        streamingResponse = False
+        if self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Deepgram':
+            streamingResponse = True
         response = await self.ai_service.generate_response(call_id, transcript, self.synthesize_response, self.agents[self.sessions[call_id]['call_sid']]['aiClient'], self.sessions[call_id]['synthesis_service'].flush_sp_ws, streamingResponse)
         if 'End Call Message' in response or self.contains_any_word(transcript) or  self.contains_any_word(response):
             self.agents[self.sessions[call_id]['call_sid']]['end_call'] = True
@@ -1083,6 +1086,8 @@ class CallHandler:
             # result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
             # session['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
             # session['wait_duration'] = result['duration']
+        elif self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Microsoft Azure':
+            audio_stream = await self.sessions[call_id]["synthesis_service"].stream_text_to_speech(text, model, call_id, self.queue_audio)
 
         else:
             raise ValueError(f"Unsupported TTS provider: {settings.tts_provider}")
@@ -1147,6 +1152,8 @@ class CallHandler:
                 self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
         elif self.agents[call_sid]['TTS']['name'] == 'Elevenlabs':
             self.sessions[stream_sid]["synthesis_service"] = self.elevenlabs_service
+        elif self.agents[call_sid]['TTS']['name'] == 'Microsoft Azure':
+            self.sessions[stream_sid]["synthesis_service"] = self.azure_service
         else:
             self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
 
@@ -1197,7 +1204,7 @@ class CallHandler:
         api_response = await self.backend_service.create_call_info(data)
         self.agents[call_id] = api_response['data']['agent']
         self.agents[call_id]['isBoom'] = data['isBoom']
-        print("handle call data:", data)
+
         self.agents[call_id]['complete_call'] = False
         self.agents[call_id]['websocket_closed'] = False
         self.agents[call_id]['end_call'] = False
@@ -1208,7 +1215,7 @@ class CallHandler:
         self.agents[call_id]['aiClient'] = api_response['data']['aiClient']
         self.agents[call_id]['STT'] = api_response['data']['STT']
         self.agents[call_id]['TTS'] = api_response['data']['TTS']
-
+        print(api_response['data']['aiClient'])
 
         
         # Add user preference for allowing meeting conflicts
@@ -1279,7 +1286,9 @@ class CallHandler:
         # if self.agents[call_sid]['TTS']['name'] == 'Elevenlabs':
         #     await self.sessions[stream_sid]['synthesis_service'].establish_connection( self.agents[call_sid]['TTS']['voice']['model'], self.agents[call_sid]['TTS']['model'])
         if self.agents[call_sid]['TTS']['name'] == 'Deepgram':
-            await self.sessions[stream_sid]['transcribe_service'].establish_sp_connection(self.agents[call_sid]['TTS']['voice']['model'])
+            await self.sessions[stream_sid]['synthesis_service'].establish_sp_connection(self.agents[call_sid]['TTS']['voice']['model'])
+        elif self.agents[call_sid]['TTS']['name'] == 'Microsoft Azure':
+           await self.sessions[stream_sid]['synthesis_service'].establish_connection(self.agents[call_sid]['TTS']['voice']['model'])
         # self.sessions[call_sid]['stream_sid'] = stream_sid
         print("Done initializing session info")
 
