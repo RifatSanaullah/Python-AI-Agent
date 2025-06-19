@@ -355,15 +355,8 @@ async def create_lead(account_id: int, lead_data: Dict[str, Any], connection_id:
         }
     }
     
-    # Handle Description field by converting it to notes array
-    description = lead_data.get("Description")
-    if description and description.strip():
-        formatted_data["notes"] = [{
-            "content": description,
-            "category": "general",  # Use "general" category for AI call summaries
-            "is_pinned": True,
-            "created_by": lead_data.get("created_by"),  # Optional: agent ID who created the note
-        }]
+    # Notes should already be handled in call_handler.py, so we don't process Description here
+    # This prevents duplicate notes from being created
     
     # Add optional fields if present
     contact = lead_data.get("info", {}).get("contact", {})
@@ -456,22 +449,8 @@ async def create_lead(account_id: int, lead_data: Dict[str, Any], connection_id:
 
 async def update_lead(account_id: int, lead_id: str, lead_data: Dict[str, Any], connection_id: Optional[str] = None) -> Dict[str, Any]:    
     endpoint = f"/site/leads/{lead_id}"
-     # Handle Description field by converting it to notes array
-    if lead_data.get("Description") and lead_data["Description"].strip():
-        # If notes array doesn't exist, create it
-        if "notes" not in lead_data:
-            lead_data["notes"] = []
-        
-        # Add the description as a new note
-        lead_data["notes"].append({
-            "content": lead_data["Description"],
-            "category": "general",  # Use "general" category for AI call summaries
-            "is_pinned": True,
-            "created_by": lead_data.get("created_by"),  # Optional: agent ID who created the note
-        })
-        
-        # Remove the Description field as it's now in notes
-        del lead_data["Description"]
+    # Notes should already be handled in call_handler.py, so we don't process Description here
+    # This prevents duplicate notes from being created
     
     # CINC API requires a complete lead object for updates, not just partial changes
     # First, fetch the existing lead data
@@ -546,22 +525,8 @@ async def update_lead_via_upsert(account_id: int, lead_id: str, lead_data: Dict[
     """
     endpoint = "/site/leads"
     
-    # Handle Description field by converting it to notes array
-    if lead_data.get("Description") and lead_data["Description"].strip():
-        # If notes array doesn't exist, create it
-        if "notes" not in lead_data:
-            lead_data["notes"] = []
-        
-        # Add the description as a new note
-        lead_data["notes"].append({
-            "content": lead_data["Description"],
-            "category": "general",  # Use "general" category for AI call summaries
-            "is_pinned": True,
-            "created_by": lead_data.get("created_by"),  # Optional: agent ID who created the note
-        })
-        
-        # Remove the Description field as it's now in notes
-        del lead_data["Description"]
+    # Notes should already be handled in call_handler.py, so we don't process Description here
+    # This prevents duplicate notes from being created
     
     # Fetch existing lead and merge with updates for upsert as well
     try:
@@ -633,9 +598,9 @@ async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optiona
             clean_phone = clean_phone[1:]  # Remove leading '1'
         elif len(clean_phone) == 10:
             pass  # Already in correct format
-        else:
-            # Invalid phone number format
-            clean_phone = "5432126343"
+        # else:
+        #     # Invalid phone number format
+        #     clean_phone = "5432126343"
 
         # Get leads from CINC (retrieve all leads)
         leads_response = await get_leads(account_id, connection_id=connection_id)
