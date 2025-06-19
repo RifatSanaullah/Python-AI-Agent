@@ -29,7 +29,6 @@ async def store_cinc_tokens(account_id: int, token_data: Dict[str, Any]):
     except HTTPException as e:
         raise e
     except Exception as e:
-        print(f"Error calling backend to store CINC token for account {account_id}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to store CINC token via backend: {str(e)}")
 
 async def get_cinc_tokens(account_id: int, connection_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -46,7 +45,6 @@ async def get_cinc_tokens(account_id: int, connection_id: Optional[str] = None) 
         raise
     except Exception as e:
         # Log or handle other unexpected errors
-        # print(f"Unexpected error in get_cinc_tokens: {e}") # Replace with proper logging
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error retrieving CINC tokens")
 
 async def delete_cinc_tokens(account_id: int, connection_id: Optional[str] = None):
@@ -55,7 +53,6 @@ async def delete_cinc_tokens(account_id: int, connection_id: Optional[str] = Non
     except HTTPException as e:
         raise e
     except Exception as e:
-        print(f"Error calling backend to delete CINC token for account {account_id}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete CINC token via backend: {str(e)}")
 
 async def get_cinc_access_token(account_id: int, connection_id: Optional[str] = None) -> str:
@@ -66,7 +63,6 @@ async def get_cinc_access_token(account_id: int, connection_id: Optional[str] = 
     expires_in_seconds = tokens.get("expires_in")
 
     if not token_updated_at_str or expires_in_seconds is None:
-        print(f"Warning: Missing updated_at or expires_in for CINC token account {account_id}. Proceeding with current token.")
         return tokens["access_token"]
 
     try:
@@ -240,14 +236,7 @@ async def _make_cinc_request(method: str, endpoint: str, account_id: int, connec
     }
     url = f"{CINC_API_BASE_URL}{endpoint}"
 
-    # Debug logging
-    print(f"DEBUG - CINC API Request:")
-    print(f"  Method: {method}")
-    print(f"  URL: {url}")
-    if json_data:
-        print(f"  JSON Data: {json_data}")
-    if params:
-        print(f"  Params: {params}")
+
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
@@ -263,43 +252,24 @@ async def _make_cinc_request(method: str, endpoint: str, account_id: int, connec
             else:
                 raise ValueError(f"Unsupported HTTP method: {method}")
 
-            print(f"DEBUG - CINC API Response: {response.status_code}")
             response.raise_for_status()
             response_data = response.json()
-            print(f"DEBUG - CINC API Response Data: {response_data}")
             return response_data
         except httpx.TimeoutException as e:
-            print(f"CINC API request timed out after 30 seconds for URL: {url}")
             raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="CINC API request timed out")
         except httpx.ConnectError as e:
-            print(f"CINC API connection error for URL: {url} - {e}")
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Unable to connect to CINC API")
         except httpx.RequestError as e:
-            print(f"CINC API request error for URL: {url} - {e}")
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="CINC API request failed")
         except httpx.HTTPStatusError as e:
             error_text = e.response.text
-            print(f"CINC API request failed: {e.response.status_code} - {error_text} for URL: {url}")
-            print(f"DEBUG - Full error response headers: {e.response.headers}")
-            
-            # Try to parse error details if it's JSON
-            try:
-                error_json = e.response.json()
-                print(f"DEBUG - Error JSON details: {error_json}")
-            except:
-                print(f"DEBUG - Error response is not JSON: {error_text}")
-                
             raise HTTPException(status_code=e.response.status_code, detail=f"CINC API request error: {error_text}")
         except Exception as e:
-            print(f"Error making CINC API request: {e} for URL: {url}")
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to make CINC API request.")
 
-async def get_leads(account_id: int, connection_id: Optional[str] = None, offset: int = 0, limit: int = 10, next_page: Optional[str] = None, from_lead_id: Optional[str] = None) -> Dict[str, Any]:
+async def get_leads(account_id: int, connection_id: Optional[str] = None, next_page: Optional[str] = None, from_lead_id: Optional[str] = None) -> Dict[str, Any]:
     endpoint = "/site/leads"
-    params = {
-        "offset": offset,
-        "limit": limit
-    }
+    params = {}
     if next_page:
         params["next"] = next_page
     if from_lead_id:
@@ -308,12 +278,17 @@ async def get_leads(account_id: int, connection_id: Optional[str] = None, offset
     # Get raw response from CINC API
     response = await _make_cinc_request("GET", endpoint, account_id, connection_id=connection_id, params=params)
     
+    # Handle response structure - CINC API wraps data in "body"
+    leads_data = response
+    if isinstance(response, dict) and "body" in response:
+        leads_data = response["body"]
+    
     # Filter out trash leads from the response
-    if response and 'leads' in response:
+    if leads_data and 'leads' in leads_data:
         filtered_leads = []
         trash_count = 0
         
-        for lead in response['leads']:
+        for lead in leads_data['leads']:
             lead_status = lead.get('info', {}).get('status', '').lower()
             if lead_status == 'trash':
                 trash_count += 1
@@ -321,30 +296,278 @@ async def get_leads(account_id: int, connection_id: Optional[str] = None, offset
             filtered_leads.append(lead)
         
         # Update the response with filtered leads
-        response['leads'] = filtered_leads
+        leads_data['leads'] = filtered_leads
         
         # Update count if available
-        if 'paging' in response and 'count' in response['paging']:
-            response['paging']['count'] = len(filtered_leads)
-        
-        print(f"DEBUG - Filtered out {trash_count} trash leads, returning {len(filtered_leads)} active leads")
+        if 'paging' in leads_data and 'count' in leads_data['paging']:
+            leads_data['paging']['count'] = len(filtered_leads)
     
-    return response
+    # Return the full response structure to maintain compatibility
+    if isinstance(response, dict) and "body" in response:
+        response["body"] = leads_data
+        return response
+    else:
+        return leads_data
 
 async def get_lead_details(account_id: int, lead_id: str, connection_id: Optional[str] = None, fields: Optional[List[str]] = None) -> Dict[str, Any]:    
     endpoint = f"/site/leads/{lead_id}"
     params = {}
     if fields:
         params["fields"] = ",".join(fields)
-    return await _make_cinc_request("GET", endpoint, account_id, connection_id=connection_id, params=params)
+    
+    response = await _make_cinc_request("GET", endpoint, account_id, connection_id=connection_id, params=params)
+    
+    # According to CINC API docs, the lead details are wrapped in a "lead" object within "body"
+    if isinstance(response, dict):
+        if "body" in response and "lead" in response["body"]:
+            return response["body"]["lead"]
+        elif "lead" in response:
+            return response["lead"]
+        elif "body" in response:
+            return response["body"]
+    
+    # If no wrapper, return as-is
+    return response
 
 async def create_lead(account_id: int, lead_data: Dict[str, Any], connection_id: Optional[str] = None) -> Dict[str, Any]:    
     endpoint = "/site/leads"
-    return await _make_cinc_request("POST", endpoint, account_id, connection_id=connection_id, json_data=lead_data)
+    
+    # Validate minimum required fields according to CINC API docs
+    # The only required field is info.contact.email
+    if not lead_data.get("info", {}).get("contact", {}).get("email"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="CINC lead creation requires info.contact.email"
+        )
+    
+    # Ensure proper structure for CINC API
+    formatted_data = {
+        "info": {
+            "contact": {
+                "email": lead_data["info"]["contact"]["email"]
+            }
+        }
+    }
+    
+    # Add optional fields if present
+    contact = lead_data.get("info", {}).get("contact", {})
+    
+    # Add name fields
+    if contact.get("first_name"):
+        formatted_data["info"]["contact"]["first_name"] = contact["first_name"]
+    if contact.get("last_name"):
+        formatted_data["info"]["contact"]["last_name"] = contact["last_name"]
+    
+    # Add phone numbers
+    if contact.get("phone_numbers"):
+        formatted_data["info"]["contact"]["phone_numbers"] = contact["phone_numbers"]
+    
+    # Add mailing address
+    if contact.get("mailing_address"):
+        formatted_data["info"]["contact"]["mailing_address"] = contact["mailing_address"]
+    
+    # Add buyer/seller flags and data
+    info = lead_data.get("info", {})
+    if info.get("is_buyer") is not None:
+        formatted_data["info"]["is_buyer"] = info["is_buyer"]
+    if info.get("is_seller") is not None:
+        formatted_data["info"]["is_seller"] = info["is_seller"]
+    
+    # Add buyer details
+    if info.get("buyer"):
+        formatted_data["info"]["buyer"] = info["buyer"]
+    
+    # Add seller details
+    if info.get("seller"):
+        formatted_data["info"]["seller"] = info["seller"]
+    
+    # Add source
+    if info.get("source"):
+        formatted_data["info"]["source"] = info["source"]
+    
+    # Add status
+    if info.get("status"):
+        formatted_data["info"]["status"] = info["status"]
+    
+    # Add secondary contact
+    if info.get("secondary"):
+        formatted_data["info"]["secondary"] = info["secondary"]
+    
+    # Add pipeline information
+    if lead_data.get("pipeline"):
+        formatted_data["pipeline"] = lead_data["pipeline"]
+    
+    # Add notes
+    if lead_data.get("notes"):
+        formatted_data["notes"] = lead_data["notes"]
+    
+    # Add assigned agents
+    if lead_data.get("assigned_agents"):
+        formatted_data["assigned_agents"] = lead_data["assigned_agents"]
+    
+    # Add registration date
+    if lead_data.get("registered_date"):
+        formatted_data["registered_date"] = lead_data["registered_date"]
+    
+    # Add created_by
+    if lead_data.get("created_by"):
+        formatted_data["created_by"] = lead_data["created_by"]
+    
+    try:
+        result = await _make_cinc_request("POST", endpoint, account_id, connection_id=connection_id, json_data=formatted_data)
+        
+        # CINC API wraps the response in "body" 
+        if isinstance(result, dict) and "body" in result:
+            return result["body"]
+        return result
+        
+    except HTTPException as e:
+        # Log the error details for debugging
+        print(f"CINC lead creation failed for account {account_id}: {e.detail}")
+        print(f"Data sent: {formatted_data}")
+        raise e
+    except Exception as e:
+        print(f"Unexpected error creating CINC lead: {str(e)}")
+        print(f"Data sent: {formatted_data}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Failed to create CINC lead: {str(e)}"
+        )
 
 async def update_lead(account_id: int, lead_id: str, lead_data: Dict[str, Any], connection_id: Optional[str] = None) -> Dict[str, Any]:    
     endpoint = f"/site/leads/{lead_id}"
-    return await _make_cinc_request("POST", endpoint, account_id, connection_id=connection_id, json_data=lead_data)
+    
+    # CINC API requires a complete lead object for updates, not just partial changes
+    # First, fetch the existing lead data
+    try:
+        existing_lead = await get_lead_details(account_id, lead_id, connection_id=connection_id)
+        
+        # Deep merge the new data with existing data
+        def deep_merge(existing: Dict, updates: Dict) -> Dict:
+            """Deep merge updates into existing data"""
+            result = existing.copy()
+            for key, value in updates.items():
+                if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                    result[key] = deep_merge(result[key], value)
+                else:
+                    result[key] = value
+            return result
+        
+        # Start with existing lead data and merge updates
+        merged_payload = deep_merge(existing_lead, lead_data)
+        
+        # Ensure required fields for update
+        merged_payload["id"] = lead_id
+        
+        # Ensure email is present (required by CINC)
+        if "info" not in merged_payload:
+            merged_payload["info"] = {}
+        if "contact" not in merged_payload["info"]:
+            merged_payload["info"]["contact"] = {}
+        
+        original_email = existing_lead.get("info", {}).get("contact", {}).get("email")
+        if original_email:
+            merged_payload["info"]["contact"]["email"] = original_email
+        
+    except Exception as e:
+        # Fallback to original approach if we can't fetch existing data
+        merged_payload = lead_data.copy()
+        merged_payload["id"] = lead_id
+    
+    result = await _make_cinc_request("POST", endpoint, account_id, connection_id=connection_id, json_data=merged_payload)
+    
+    # CINC API wraps the response in "body" 
+    if isinstance(result, dict) and "body" in result:
+        final_result = result["body"]
+    else:
+        final_result = result
+    
+    # Add verification by fetching the lead after update to confirm changes
+    try:
+        updated_lead = await get_lead_details(account_id, lead_id, connection_id=connection_id)
+        
+        # Check if specific fields were updated (like budget)
+        if 'info' in lead_data and 'buyer' in lead_data['info']:
+            expected_budget = lead_data['info']['buyer'].get('average_price')
+            actual_budget = updated_lead.get("info", {}).get("buyer", {}).get("average_price")
+            
+            if expected_budget is not None:
+                if actual_budget != expected_budget:
+                    # Log discrepancy but don't print debug info
+                    pass
+        
+    except Exception as e:
+        # Verification failed, but update may have succeeded
+        pass
+    
+    return final_result
+
+async def update_lead_via_upsert(account_id: int, lead_id: str, lead_data: Dict[str, Any], connection_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Alternative update method using the generic POST /site/leads endpoint (upsert functionality).
+    According to CINC docs, this endpoint works as upsert - if ID is provided, it updates the lead.
+    Use this method if the specific lead_id endpoint is not working properly.
+    """
+    endpoint = "/site/leads"
+    
+    # Fetch existing lead and merge with updates for upsert as well
+    try:
+        existing_lead = await get_lead_details(account_id, lead_id, connection_id=connection_id)
+        
+        # Deep merge function (same as in update_lead)
+        def deep_merge(existing: Dict, updates: Dict) -> Dict:
+            """Deep merge updates into existing data"""
+            result = existing.copy()
+            for key, value in updates.items():
+                if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                    result[key] = deep_merge(result[key], value)
+                else:
+                    result[key] = value
+            return result
+        
+        # Merge updates with existing data
+        upsert_payload = deep_merge(existing_lead, lead_data)
+        upsert_payload["id"] = lead_id
+        
+        # Ensure email is present
+        original_email = existing_lead.get("info", {}).get("contact", {}).get("email")
+        if original_email:
+            if "info" not in upsert_payload:
+                upsert_payload["info"] = {}
+            if "contact" not in upsert_payload["info"]:
+                upsert_payload["info"]["contact"] = {}
+            upsert_payload["info"]["contact"]["email"] = original_email
+        
+    except Exception as e:
+        upsert_payload = lead_data.copy()
+        upsert_payload["id"] = lead_id
+    
+    result = await _make_cinc_request("POST", endpoint, account_id, connection_id=connection_id, json_data=upsert_payload)
+    
+    # CINC API wraps the response in "body" 
+    if isinstance(result, dict) and "body" in result:
+        final_result = result["body"]
+    else:
+        final_result = result
+    
+    # Verify the update
+    try:
+        updated_lead = await get_lead_details(account_id, lead_id, connection_id=connection_id)
+        
+        if 'info' in lead_data and 'buyer' in lead_data['info']:
+            expected_budget = lead_data['info']['buyer'].get('average_price')
+            actual_budget = updated_lead.get("info", {}).get("buyer", {}).get("average_price")
+            
+            if expected_budget is not None:
+                if actual_budget != expected_budget:
+                    # Log discrepancy but don't print debug info
+                    pass
+        
+    except Exception as e:
+        # Verification failed, but upsert may have succeeded
+        pass
+    
+    return final_result
 
 async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optional[str] = None) -> List[Dict[str, Any]]:
     try:
@@ -352,25 +575,31 @@ async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optiona
         clean_phone = ''.join(filter(str.isdigit, phone))
         
         # For testing purposes, use a placeholder phone when invalid phone is passed
-        if len(clean_phone) == 0 or phone == "client:Anonymous":
-            print(f"DEBUG - Using placeholder phone for testing. Original phone: {phone}")
-        elif len(clean_phone) == 11 and clean_phone.startswith('1'):
+
+        if len(clean_phone) == 11 and clean_phone.startswith('1'):
             clean_phone = clean_phone[1:]  # Remove leading '1'
         elif len(clean_phone) == 10:
             pass  # Already in correct format
-        else:
-            # If phone format is unexpected, use placeholder for testing
-            print(f"DEBUG - Invalid phone format, using placeholder. Original: {phone}, Cleaned: {clean_phone}")
+        # else:
+        #     # Invalid phone number format
+        #     clean_phone = "5436234123"
 
-        print(f"DEBUG - Searching CINC leads for phone: {clean_phone}")
-
-        # Get leads from CINC (we'll start with a reasonable limit)
-        leads_response = await get_leads(account_id, connection_id=connection_id, limit=100)
-        if not leads_response or 'leads' not in leads_response:
+        # Get leads from CINC (retrieve all leads)
+        leads_response = await get_leads(account_id, connection_id=connection_id)
+        
+        # Handle response structure - extract leads from body if present
+        leads_list = []
+        if isinstance(leads_response, dict):
+            if "body" in leads_response and "leads" in leads_response["body"]:
+                leads_list = leads_response["body"]["leads"]
+            elif "leads" in leads_response:
+                leads_list = leads_response["leads"]
+        
+        if not leads_list:
             return []
         
         matching_leads = []
-        for lead in leads_response['leads']:
+        for lead in leads_list:
             # Check if lead has contact info with phone numbers
             if (lead.get('info', {}).get('contact', {}).get('phone_numbers')):
                 phone_numbers = lead['info']['contact']['phone_numbers']
@@ -379,7 +608,17 @@ async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optiona
                 if phone_numbers.get('cell_phone'):
                     lead_phone = ''.join(filter(str.isdigit, phone_numbers['cell_phone']))
                     if lead_phone == clean_phone:
-                        print(f"DEBUG - Found matching lead by cell phone: {lead.get('id')} - {lead_phone}")
+                        # Fetch notes for this matching lead
+                        lead_id = lead.get('id')
+                        if lead_id:
+                            try:
+                                notes = await get_lead_notes_with_content(account_id, lead_id, connection_id=connection_id)
+                                lead['notes'] = notes
+                            except Exception as e:
+                                lead['notes'] = []
+                        else:
+                            lead['notes'] = []
+                        
                         matching_leads.append(lead)
                         continue
                 
@@ -387,16 +626,71 @@ async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optiona
                 if phone_numbers.get('home_phone'):
                     lead_phone = ''.join(filter(str.isdigit, phone_numbers['home_phone']))
                     if lead_phone == clean_phone:
-                        print(f"DEBUG - Found matching lead by home phone: {lead.get('id')} - {lead_phone}")
+                        # Fetch notes for this matching lead
+                        lead_id = lead.get('id')
+                        if lead_id:
+                            try:
+                                notes = await get_lead_notes_with_content(account_id, lead_id, connection_id=connection_id)
+                                lead['notes'] = notes
+                            except Exception as e:
+                                lead['notes'] = []
+                        else:
+                            lead['notes'] = []
+                        
                         matching_leads.append(lead)
                         continue
-        
-        print(f"DEBUG - Found {len(matching_leads)} matching leads for phone {clean_phone}")
+        print("xxxxxxxxxx",matching_leads)
         return matching_leads
         
     except Exception as e:
-        print(f"Error searching CINC leads by phone {phone}: {e}")
         return []
+
+async def get_lead_notes(account_id: int, lead_id: str, connection_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Fetch all notes for a specific lead from CINC API"""
+    endpoint = f"/site/leads/{lead_id}/notes"
+    try:
+        response = await _make_cinc_request("GET", endpoint, account_id, connection_id=connection_id)
+        if response and 'notes' in response:
+            return response['notes']
+        return []
+    except Exception as e:
+        return []
+
+async def get_lead_note_content(account_id: int, note_id: str, connection_id: Optional[str] = None) -> Dict[str, Any]:
+    """Fetch the content of a specific note from CINC API"""
+    endpoint = f"/site/leads/notes/{note_id}"
+    try:
+        response = await _make_cinc_request("GET", endpoint, account_id, connection_id=connection_id)
+        # Extract the note from the response body
+        if response and 'note' in response:
+            return response['note']
+        return {}
+    except Exception as e:
+        return {}
+
+async def get_lead_notes_with_content(account_id: int, lead_id: str, connection_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Fetch all notes for a lead with their content"""
+    # First get the notes list (metadata only)
+    notes = await get_lead_notes(account_id, lead_id, connection_id=connection_id)
+    
+    # Then fetch content for each note
+    notes_with_content = []
+    for note in notes:
+        note_id = note.get('id')
+        if note_id:
+            try:
+                note_content = await get_lead_note_content(account_id, note_id, connection_id=connection_id)
+                # Use the full note content which includes the content field
+                if note_content:
+                    notes_with_content.append(note_content)
+                else:
+                    notes_with_content.append(note)  # Keep note without content
+            except Exception as e:
+                notes_with_content.append(note)  # Keep note without content
+        else:
+            notes_with_content.append(note)  # Keep note without content
+    
+    return notes_with_content
 
 
 # OAuth Flow Notes:
