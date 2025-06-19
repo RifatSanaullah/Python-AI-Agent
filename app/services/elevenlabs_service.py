@@ -102,6 +102,8 @@ class ElevenLabsService:
         """
         if self.ws:
             await self.ws.send(json.dumps({"text": ""}))
+    async def disconnect(self):
+        return
 
     async def list_available_voices(self):
         """

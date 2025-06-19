@@ -261,8 +261,7 @@ class CallHandler:
                 self.agents[call_id]['websocket_closed'] = True
                 # self.flush_agent(call_id)
             if session.get('streamSid') is not None:
-                if self.agents[session['streamSid']['call_sid']]['TTS'] == 'Deepgram':
-                    await session['synthesis_service'].disconnect()
+                await session['synthesis_service'].disconnect()
                 if self.agents[session['streamSid']['call_sid']]['STT']['name'] == 'Deepgram':
                     await session['transcribe_service'].disconnect()
                 elif self.agents[session['streamSid']['call_sid']]['STT']['name'] == 'AssemblyAI':
@@ -1011,9 +1010,9 @@ class CallHandler:
             return
         self.sessions[call_id]['ai_interrupt'] =  False
         self.ai_service.update_interrupt_status(call_id, False)
-        streamingResponse = False
-        if self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Deepgram':
-            streamingResponse = True
+        streamingResponse = True
+        if self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Elevenlabs':
+            streamingResponse = False
         response = await self.ai_service.generate_response(call_id, transcript, self.synthesize_response, self.agents[self.sessions[call_id]['call_sid']]['aiClient'], self.sessions[call_id]['synthesis_service'].flush_sp_ws, streamingResponse)
         if 'End Call Message' in response or self.contains_any_word(transcript) or  self.contains_any_word(response):
             self.agents[self.sessions[call_id]['call_sid']]['end_call'] = True
@@ -1356,8 +1355,8 @@ class CallHandler:
 
         await self.synthesize_response(greetings , stream_sid)
 
-        if self.agents[call_sid]['STT']['name'] == 'Deepgram':
-            await self.sessions[stream_sid]['transcribe_service'].flush_sp_ws()
+        # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
+        await self.sessions[stream_sid]['synthesis_service'].flush_sp_ws()
 
         await self.ai_service.process_initial_message(stream_sid, self.get_agent_knowledge)
         self.ai_service.add_message(stream_sid, "assistant", greetings)
