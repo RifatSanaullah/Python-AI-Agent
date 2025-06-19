@@ -1,4 +1,9 @@
 import base64
+import audioop
+import asyncio
+import logging
+import time
+import numpy as np
 from sqlalchemy.orm import Session
 # from app.services.playht_service import PlayHT
 from app.services.twilio_service import TwilioService
@@ -17,7 +22,6 @@ from app.services.calendly_service import CalendlyService
 from app.services.google_calendar_service import GoogleCalendarService
 from app.services.outlook_calendar_service import OutlookCalendarService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
-import logging
 from datetime import datetime_CAPI
 from app.helpers.utils import get_interrupt_message, convert_mulaw_to_wav
 from app.config import settings
@@ -278,7 +282,6 @@ class CallHandler:
         cinc_connection_id = session_info.get("integrations", {}).get("cinc_connection_id") # Get CINC specific connection_id
         
         print(f"DEBUG - update_crm_data: account_id={account_id}, cinc_connection_id={cinc_connection_id}")
-        print(f"DEBUG - update_crm_data: integrations={integrations}")
 
         # CINC Integration
         # Check if CINC is available by connection_id existence
@@ -376,52 +379,35 @@ class CallHandler:
                         "stage": summary.get("pipeline_stage", "")
                     }
 
-                # Handle notes (works for both CINC format and flat format)
-                notes = []
+                # Handle notes - Combine all notes into a single comprehensive note for CINC
+                note_parts = []
                 
-                # Check if notes already exist in CINC format
-                if cinc_lead_data.get("notes"):
-                    # Filter out empty notes
-                    notes.extend([note for note in cinc_lead_data["notes"] if note.get("content", "").strip()])
-                
-                # Add conversation summary as the main note if available
+                # Add conversation summary if available
                 if summary.get("description") and summary["description"].strip():
-                    # Check if we already have a call summary note to avoid duplicates
-                    has_call_summary = any(note.get("content", "").startswith("Call summary:") for note in notes)
-                    if not has_call_summary:
-                        notes.append({
-                            "content": f"Call summary: {summary['description']}",
-                            "category": "info",
-                            "is_pinned": True,
-                            "created_by": "AI_AGENT"
-                        })
+                    note_parts.append(f"Call Summary: {summary['description']}")
                 
                 # Add individual notes from the conversation if they exist in the summary
                 if summary.get("notes") and isinstance(summary["notes"], list):
                     for note_item in summary["notes"]:
                         if isinstance(note_item, dict) and note_item.get("content", "").strip():
-                            notes.append({
-                                "content": note_item["content"],
-                                "category": note_item.get("category", "info"),
-                                "is_pinned": note_item.get("is_pinned", False),
-                                "created_by": "AI_AGENT"
-                            })
+                            # Add category prefix if it exists
+                            category = note_item.get("category", "")
+                            content = note_item["content"]
+                            if category and category != "info":
+                                note_parts.append(f"{category.title()}: {content}")
+                            else:
+                                note_parts.append(content)
                 
-                # Add appointment note if exists
+                # Add appointment information if exists
                 if appointment and appointment.get("start_time") and appointment.get("end_time"):
                     appointment_time_str = format_datetime_range_human_readable(
                         appointment["start_time"], appointment["end_time"]
                     )
                     if appointment_time_str.strip():
-                        notes.append({
-                            "content": f"Appointment scheduled: {appointment_time_str}. Details: {appointment.get('summary', 'N/A')}",
-                            "category": "appointment",
-                            "is_pinned": True,
-                            "created_by": "AI_AGENT"
-                        })
+                        note_parts.append(f"Appointment: {appointment_time_str}. Details: {appointment.get('summary', 'N/A')}")
                 
-                # Add a default conversation note if no other notes exist but we have basic info
-                if not notes and (summary.get("first_name") or summary.get("email")):
+                # Add basic contact info if no other notes exist
+                if not note_parts and (summary.get("first_name") or summary.get("email")):
                     contact_info = []
                     if summary.get("first_name"):
                         contact_info.append(f"Name: {summary.get('first_name', '')} {summary.get('last_name', '')}")
@@ -431,16 +417,17 @@ class CallHandler:
                         contact_info.append(f"Phone: {summary['phone']}")
                     
                     if contact_info:
-                        notes.append({
-                            "content": f"Contact captured via AI assistant. {', '.join(contact_info)}",
-                            "category": "info",
-                            "is_pinned": True,
-                            "created_by": "AI_AGENT"
-                        })
+                        note_parts.append(f"Contact captured via AI assistant: {', '.join(contact_info)}")
                 
-                # Only add notes if there are any
-                if notes: 
-                    cinc_lead_data["notes"] = notes
+                # Combine all note parts into a single comprehensive note
+                if note_parts:
+                    combined_content = " | ".join(note_parts)  # Use " | " as separator
+                    cinc_lead_data["notes"] = [{
+                        "content": combined_content,
+                        "category": "call",
+                        "is_pinned": True,
+                        "created_by": "AI_AGENT"
+                    }]
                 
                 # Remove empty/null fields that might cause issues with CINC API
                 # For CINC, we need to be more careful about what we send
@@ -558,14 +545,51 @@ class CallHandler:
                     
                     # Only proceed with update if we have data to update
                     if update_data:
+                        # CINC API requires email or ID to identify the lead for updates
+                        # Fetch existing lead to get email for identification
+                        try:
+                            existing_lead = await cinc_service_module.get_lead_details(
+                                account_id=int_account_id, 
+                                lead_id=lead_id,
+                                connection_id=cinc_connection_id
+                            )
+                            original_email = existing_lead.get("info", {}).get("contact", {}).get("email")
+                            if original_email and "info" in update_data:
+                                if "contact" not in update_data["info"]:
+                                    update_data["info"]["contact"] = {}
+                                # Always include the email to ensure CINC can identify the lead
+                                update_data["info"]["contact"]["email"] = original_email
+                        except Exception as e:
+                            print(f"DEBUG - Could not fetch existing lead for email: {e}")
+                            # Continue with update attempt anyway
+                        
                         print(f"DEBUG - CINC update data (filtered): {update_data}")
-                        await cinc_service_module.update_lead(
-                            account_id=int_account_id, 
-                            lead_id=lead_id, 
-                            lead_data=update_data,
-                            connection_id=cinc_connection_id
-                        )
-                        logging.info(f"CINC lead {lead_id} updated for account {account_id} via connection {cinc_connection_id}")
+                        
+                        try:
+                            await cinc_service_module.update_lead(
+                                account_id=int_account_id, 
+                                lead_id=lead_id, 
+                                lead_data=update_data,
+                                connection_id=cinc_connection_id
+                            )
+                            logging.info(f"CINC lead {lead_id} updated for account {account_id} via connection {cinc_connection_id}")
+                        except Exception as e:
+                            # If the standard update fails, try the upsert method
+                            print(f"DEBUG - Standard CINC update failed, trying upsert method: {e}")
+                            logging.warning(f"CINC standard update failed for lead {lead_id}, attempting upsert: {e}")
+                            
+                            try:
+                                await cinc_service_module.update_lead_via_upsert(
+                                    account_id=int_account_id, 
+                                    lead_id=lead_id, 
+                                    lead_data=update_data,
+                                    connection_id=cinc_connection_id
+                                )
+                                logging.info(f"CINC lead {lead_id} updated via upsert for account {account_id} via connection {cinc_connection_id}")
+                            except Exception as upsert_error:
+                                print(f"DEBUG - Both CINC update methods failed: {upsert_error}")
+                                logging.error(f"All CINC update methods failed for lead {lead_id}: {upsert_error}")
+                                
                     else:
                         print(f"DEBUG - No meaningful updates to send to CINC for lead {lead_id}")
                         logging.info(f"CINC lead {lead_id} - no updates needed for account {account_id}")
@@ -793,15 +817,12 @@ class CallHandler:
                             "appointment_id": appointment_id,
                             "google_calendar_event_id": response['id'] # Storing Google Calendar event ID
                         })
-                        print(f"Successfully created Google Calendar event: {response['id']}")
                     elif response:
-                        print(f"Google Calendar event creation response did not contain an ID: {response}")
+                        pass  # Response without ID
                     else:
-                        print("Google Calendar event creation returned no response.")
+                        pass  # No response
             except Exception as e:
-                print(f"Google Calendar event creation failed: {str(e)}")
                 import traceback
-                print(traceback.format_exc())
 
         # Outlook Calendar Event Handling
         if integrations and integrations.get("outlook_connection_id") and integrations["outlook_connection_id"] != '':
@@ -832,7 +853,7 @@ class CallHandler:
                     # Basic validation for fields required by the Nango script
                     required_fields = ["subject", "startDateTime", "endDateTime", "timeZone"]
                     if not all(outlook_event_payload.get(k) for k in required_fields):
-                        print(f"Outlook Calendar event payload (for Nango script) missing required fields: {outlook_event_payload}")
+                        pass  # Missing required fields
                     else:
                         response = await self.outlook_calendar_service.create_event(
                             integrations['outlook_connection_id'],
@@ -844,15 +865,12 @@ class CallHandler:
                                 "appointment_id": appointment_id,
                                 "outlook_event_id": response['id']
                             })
-                            print(f"Successfully created Outlook Calendar event: {response['id']}")
                         elif response:
-                            print(f"Outlook Calendar event creation response did not contain an ID: {response}")
+                            pass  # Response without ID
                         else:
-                            print("Outlook Calendar event creation returned no response.")
+                            pass  # No response
             except Exception as e:
-                print(f"Outlook Calendar event creation failed: {str(e)}")
                 import traceback
-                print(traceback.format_exc())
 
         # Calendly Scheduled Event Handling
         if integrations and integrations.get("calendly_connection_id") and integrations["calendly_connection_id"] != '':
@@ -879,7 +897,7 @@ class CallHandler:
                     # Basic validation for fields required by the Nango script
                     required_calendly_fields = ["name", "duration", "locationType", "location", "startTime", "endTime"]
                     if not all(calendly_event_payload.get(k) is not None for k in required_calendly_fields): # Check for None explicitly for boolean field
-                        print(f"Calendly one-off event payload (for Nango script) missing required fields: {calendly_event_payload}")
+                        pass  # Missing required fields
                     else:
                         response = await self.calendly_service.create_one_off_event_type(
                             integrations['calendly_connection_id'],
@@ -899,15 +917,12 @@ class CallHandler:
                                 "appointment_id": appointment_id,
                                 "calendly_event_uuid": event_resource_uri # Storing URI or UUID
                             })
-                            print(f"Successfully created Calendly one-off event: {event_resource_uri}")
                         elif response:
-                            print(f"Calendly one-off event creation response did not contain expected URI/UUID: {response}")
+                            pass  # Response without expected URI/UUID
                         else:
-                            print("Calendly one-off event creation returned no response.")
+                            pass  # No response
             except Exception as e:
-                print(f"Calendly scheduled event creation failed: {str(e)}")
                 import traceback
-                print(traceback.format_exc())
 
 
     def remove_empty_values(self, data: dict) -> dict:
@@ -1197,7 +1212,6 @@ class CallHandler:
         api_response = await self.backend_service.create_call_info(data)
         self.agents[call_id] = api_response['data']['agent']
         self.agents[call_id]['isBoom'] = data['isBoom']
-        print("handle call data:", data)
         self.agents[call_id]['complete_call'] = False
         self.agents[call_id]['websocket_closed'] = False
         self.agents[call_id]['end_call'] = False
@@ -1209,6 +1223,13 @@ class CallHandler:
         self.agents[call_id]['STT'] = api_response['data']['STT']
         self.agents[call_id]['TTS'] = api_response['data']['TTS']
 
+        # Add timezone from backend response
+        if 'agent' in api_response['data'] and 'timezone' in api_response['data']['agent']:
+            self.agents[call_id]['timezone'] = api_response['data']['agent']['timezone']
+        else:
+            self.agents[call_id]['timezone'] = 'UTC'  # Default to UTC if not provided
+        
+        print(f"DEBUG - Agent timezone: {self.agents[call_id]['timezone']}")
 
         
         # Add user preference for allowing meeting conflicts
@@ -1248,10 +1269,6 @@ class CallHandler:
             self.agents[call_id]['user_id'] = api_response['data']['agent']['userId']
         else:
             self.agents[call_id]['user_id'] = None
-        
-        print(f"DEBUG - Final agent integrations: {self.agents[call_id]['integrations']}")
-        print(f"DEBUG - Agent user_id: {self.agents[call_id].get('user_id')}")
-        print(f"DEBUG - Agent keys: {list(self.agents[call_id].keys())}")
 
         
         response = self.twilio_service.initialize_call(call_id)
@@ -1303,7 +1320,28 @@ class CallHandler:
         phone = result['phone']
         description = result['description']
         existing_appointment = result['existing_appointment']
-        print("Existing appointment: ", existing_appointment)
+        
+        # Debug: Print current datetime for reference
+        from datetime import datetime
+        current_time = datetime.utcnow()
+        print(f"Current UTC time: {current_time.isoformat()}")
+        
+        # Get user's timezone and show current time in user's timezone
+        user_timezone = self.agents[call_sid].get('timezone', 'UTC')
+        print(f"User timezone: {user_timezone}")
+        
+        # Clean up the existing appointment string - remove duplicates and format nicely
+        if existing_appointment:
+            # Split by comma, strip whitespace, and remove duplicates while preserving order
+            appointments = []
+            seen = set()
+            for apt in existing_appointment.split(','):
+                apt = apt.strip()
+                if apt and apt not in seen:
+                    appointments.append(apt)
+                    seen.add(apt)
+            
+            existing_appointment = ', '.join(appointments) if appointments else None
         isAllowMeetingConflict = self.agents[call_sid]['allowMeetingConflict']
         print("isAllowMeetingConflict: ", isAllowMeetingConflict)
 
@@ -1332,6 +1370,7 @@ class CallHandler:
        
         if not isAllowMeetingConflict and existing_appointment is not None and existing_appointment != "":
             print("Existing appointment found: ", existing_appointment)
+            user_timezone = self.agents[call_sid].get('timezone', 'UTC')
             self.ai_service.add_system_message(
             stream_sid,
             "system",
@@ -1339,7 +1378,7 @@ class CallHandler:
 
             Specifics:
             1. The booked time slots are: {existing_appointment}
-            2. If the existing_appointment variable indicates the slot is booked, inform the user it's unavailable and ask them to choose another time or date
+            2. If the existing_appointment variable indicates the slot is booked, inform the user it's unavailable and ask them to choose another time slots or date
             """
         )
 
@@ -1436,7 +1475,7 @@ class CallHandler:
                         phone=self.agents[call_sid]['from'],
                         connection_id=self.agents[call_sid]['integrations']['cinc_connection_id']
                     )
-                    
+                    print(f"DEBUG - CINC lead search result: {result}")
                     if result and len(result) > 0:
                         # Use the first matching lead
                         lead = result[0]
@@ -1475,16 +1514,15 @@ class CallHandler:
                         
                         greetings = self.modify_greeting(fullname, greetings, call_sid)
                         self.agents[call_sid]['new_knowledge'] = True
-                        
-                        print(f"DEBUG - Found CINC lead: {fullname}, Email: {email}, Phone: {phoneNumber}")
-                        
+
+                        print(f"DEBUG - Found CINC lead: {fullname}, Email: {email}, Phone: {phoneNumber}, Notes: {description}")
+
             except Exception as e:
                 print(f"Error fetching CINC lead by phone {self.agents[call_sid]['from']}: {e}")
 
 
         if self.agents[call_sid]['integrations'].get('calendly_connection_id'):
             # Check if there are any scheduled events for this user in Calendly
-            print(f"Calendly connection ID: {self.agents[call_sid]['integrations']['calendly_connection_id']}")
 
             try:
                 # First get the user information
@@ -1524,20 +1562,50 @@ class CallHandler:
                         if events_collection and len(events_collection) > 0:
                             # Set existing_appointment with formatted times
                             appointment_times = []
+                            future_events = []
+                            
+                            # Get user's timezone
+                            user_timezone = self.agents[call_sid].get('timezone', 'UTC')
+                            print(f"Using user timezone for Calendly: {user_timezone}")
+                            
                             for event in events_collection:
                                 if 'start_time' in event:
-                                    # Only include future appointments
-                                    if is_future_datetime(event['start_time']):
+                                    # Check if this is a future appointment using user's timezone
+                                    is_future = (is_future_datetime(event['start_time'], user_timezone_str=user_timezone) and 
+                                               event.get('status') != 'canceled')
+                                    
+                                    if is_future:
                                         # Check if end_time is available in Calendly event
                                         end_time = event.get('end_time', None)
-                                        formatted_time = format_datetime_range_human_readable(event['start_time'], end_time)
-                                        appointment_times.append(formatted_time)
+                                        # Format time in user's timezone
+                                        formatted_time = format_datetime_range_human_readable(
+                                            event['start_time'], 
+                                            end_time, 
+                                            user_timezone_str=user_timezone
+                                        )
+                                        
+                                        if formatted_time and formatted_time.strip():  # Ensure valid formatted time
+                                            appointment_times.append(formatted_time)
+                                            future_events.append({
+                                                'name': event.get('name', 'Meeting'),
+                                                'start': event['start_time'],
+                                                'end': end_time,
+                                                'formatted_time': formatted_time
+                                            })
                             
                             if appointment_times:
+                                # Remove duplicates while preserving order
+                                unique_appointment_times = []
+                                seen = set()
+                                for time_str in appointment_times:
+                                    if time_str not in seen:
+                                        unique_appointment_times.append(time_str)
+                                        seen.add(time_str)
+                                
                                 if existing_appointment:
-                                    existing_appointment += ", " + ", ".join(appointment_times)
+                                    existing_appointment += ", " + ", ".join(unique_appointment_times)
                                 else:
-                                    existing_appointment = ", ".join(appointment_times)
+                                    existing_appointment = ", ".join(unique_appointment_times)
                             
                             # We have scheduled events, update description with this info
                             events_count = len(events_collection)
@@ -1571,13 +1639,19 @@ class CallHandler:
                 )
                 
                 # print("=== GOOGLE CALENDAR EVENTS ===",json.dumps(events_result, indent=2))
-                # Extract events from response format
+     
                 events_collection = []
                 if events_result and 'records' in events_result:
                     events_collection = events_result['records']
                 
                 if events_collection and len(events_collection) > 0:
                     appointment_times = []
+                    future_events = []
+                    
+                    # Get user's timezone
+                    user_timezone = self.agents[call_sid].get('timezone', 'UTC')
+                    # print(f"Using user timezone for Google Calendar: {user_timezone}")
+                    
                     for event in events_collection:
                         # Handle both all-day events (date) and timed events (dateTime)
                         start_datetime = None
@@ -1594,18 +1668,42 @@ class CallHandler:
                             elif 'date' in event['end']:
                                 end_datetime = event['end']['date']
                         
-                        if start_datetime:
-                            # Only include future appointments
-                            if is_future_datetime(start_datetime):
-                                formatted_time = format_datetime_range_human_readable(start_datetime, end_datetime)
+                        # Check if this is a future appointment using user's timezone
+                        is_future = (start_datetime and 
+                                   is_future_datetime(start_datetime, user_timezone_str=user_timezone) and
+                                   event.get('status') != 'cancelled')
+                        
+                        if is_future:
+                            # Format time in user's timezone
+                            formatted_time = format_datetime_range_human_readable(
+                                start_datetime, 
+                                end_datetime, 
+                                user_timezone_str=user_timezone
+                            )
+                            if formatted_time and formatted_time.strip():  # Ensure valid formatted time
                                 appointment_times.append(formatted_time)
+                                future_events.append({
+                                    'summary': event.get('summary', 'Meeting'),
+                                    'start': start_datetime,
+                                    'end': end_datetime,
+                                    'formatted_time': formatted_time
+                                })
+                                print(f"Google Calendar - Added future appointment: {formatted_time}")
                     
                     # Set existing_appointment with formatted times
                     if appointment_times:
+                        # Remove duplicates while preserving order
+                        unique_appointment_times = []
+                        seen = set()
+                        for time_str in appointment_times:
+                            if time_str not in seen:
+                                unique_appointment_times.append(time_str)
+                                seen.add(time_str)
+                        
                         if existing_appointment:
-                            existing_appointment += ", " + ", ".join(appointment_times)
+                            existing_appointment += ", " + ", ".join(unique_appointment_times)
                         else:
-                            existing_appointment = ", ".join(appointment_times)
+                            existing_appointment = ", ".join(unique_appointment_times)
                     
                     # We have scheduled events, update description with this info
                     events_count = len([t for t in appointment_times])  # Count only future events
@@ -1635,9 +1733,9 @@ class CallHandler:
                 events_result = await self.outlook_calendar_service.get_events(
                     self.agents[call_sid]['integrations']['outlook_connection_id']
                 )
-                
-                # Display events in a well-formatted way
-                print("\n=== OUTLOOK CALENDAR EVENTS ===")
+                # print("=== OUTLOOK CALENDAR EVENTS ===", json.dumps(events_result, indent=2))
+                # # Display events in a well-formatted way
+                # print("\n=== OUTLOOK CALENDAR EVENTS ===")
                 events_collection = []
                 
                 if events_result and 'records' in events_result:
@@ -1645,6 +1743,12 @@ class CallHandler:
                 
                 if events_collection and len(events_collection) > 0:
                     appointment_times = []
+                    future_events = []
+                    
+                    # Get user's timezone
+                    user_timezone = self.agents[call_sid].get('timezone', 'UTC')
+                    # print(f"Using user timezone: {user_timezone}")
+                    
                     for event in events_collection:
                         print(f"\nEvent:")
                         print(f"  Subject: {event.get('subject', 'N/A')}")
@@ -1666,22 +1770,59 @@ class CallHandler:
                             if end != 'N/A':
                                 end_datetime = end
                         
-                        # Only include future appointments
-                        if start_datetime and is_future_datetime(start_datetime):
-                            formatted_time = format_datetime_range_human_readable(start_datetime, end_datetime)
-                            appointment_times.append(formatted_time)
-                            
-                        print(f"  Location: {event.get('location', {}).get('displayName', 'N/A')}")
-                        print(f"  Status: {event.get('showAs', 'N/A')}")
+                        # Check if this is a future appointment using user's timezone
+                        is_future = start_datetime and is_future_datetime(start_datetime, user_timezone_str=user_timezone)
+                        is_cancelled = event.get('isCancelled', False)
                         
-                    print("===============================\n")
+                        # print(f"  Location: {event.get('location', {}).get('displayName', 'N/A')}")
+                        # print(f"  Status: {event.get('showAs', 'N/A')}")
+                        # print(f"  Is Future (in {user_timezone}): {is_future}")
+                        # print(f"  Is Cancelled: {is_cancelled}")
+                        
+                        # Only include future appointments that are not cancelled
+                        if start_datetime and is_future and not is_cancelled:
+                            # Format time in user's timezone
+                            formatted_time = format_datetime_range_human_readable(
+                                start_datetime, 
+                                end_datetime, 
+                                user_timezone_str=user_timezone
+                            )
+                            if formatted_time and formatted_time.strip():  # Ensure valid formatted time
+                                appointment_times.append(formatted_time)
+                                future_events.append({
+                                    'subject': event.get('subject', 'Meeting'),
+                                    'start': start_datetime,
+                                    'end': end_datetime,
+                                    'formatted_time': formatted_time
+                                })
+                                print(f"  ✓ Added future appointment: {formatted_time}")
+                            else:
+                                print(f"  ✗ Skipped - invalid formatted time")
+                        else:
+                            if not start_datetime:
+                                print(f"  ✗ Skipped - no start time")
+                            elif not is_future:
+                                print(f"  ✗ Skipped - past appointment")
+                            elif is_cancelled:
+                                print(f"  ✗ Skipped - cancelled appointment")
+                        
+                    # print("===============================\n")
+                    # print(f"Found {len(future_events)} future events in {user_timezone}")
                     
                     # Set existing_appointment with formatted times
                     if appointment_times:
+                        # Remove duplicates while preserving order
+                        unique_appointment_times = []
+                        seen = set()
+                        for time_str in appointment_times:
+                            if time_str not in seen:
+                                unique_appointment_times.append(time_str)
+                                seen.add(time_str)
+                        
                         if existing_appointment:
-                            existing_appointment += ", " + ", ".join(appointment_times)
+                            existing_appointment += ", " + ", ".join(unique_appointment_times)
                         else:
-                            existing_appointment = ", ".join(appointment_times)
+                            existing_appointment = ", ".join(unique_appointment_times)
                     
                 else:
                     print("No upcoming Outlook Calendar events found.")
