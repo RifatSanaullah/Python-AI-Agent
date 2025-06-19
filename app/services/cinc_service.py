@@ -580,9 +580,9 @@ async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optiona
             clean_phone = clean_phone[1:]  # Remove leading '1'
         elif len(clean_phone) == 10:
             pass  # Already in correct format
-        else:
-            # Invalid phone number format
-            clean_phone = "5436234123"
+        # else:
+        #     # Invalid phone number format
+        #     clean_phone = "5436234123"
 
         # Get leads from CINC (retrieve all leads)
         leads_response = await get_leads(account_id, connection_id=connection_id)
