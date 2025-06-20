@@ -10,7 +10,7 @@ class AzureService:
         self.speech_synthesizer = None
         self.tts_task = None
         self.tts_request = None
-
+        self._receiver_thread = None
         # Initialize Azure Speech config
         self.speech_config = speechsdk.SpeechConfig(
             endpoint=f"wss://{settings.azure_region}.tts.speech.microsoft.com/cognitiveservices/websocket/v2",
@@ -105,10 +105,12 @@ class AzureService:
             self.start_synthesiser()
         return
     async def disconnect(self):
-        if self.tts_request:
+        if self._exit:
             self._exit.set()
-            if self._receiver_thread:
-                self._receiver_thread.join()
+        if self._receiver_thread:
+            self._receiver_thread.join()
+            self._receiver_thread=None
+        if self.tts_request:
             self.tts_request.input_stream.close()
 
 
