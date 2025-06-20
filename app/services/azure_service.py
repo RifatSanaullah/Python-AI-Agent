@@ -107,6 +107,8 @@ class AzureService:
     async def disconnect(self):
         if self.tts_request:
             self._exit.set()
+            if self._receiver_thread:
+                self._receiver_thread.join()
             self.tts_request.input_stream.close()
 
 
