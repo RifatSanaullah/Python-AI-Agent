@@ -16,7 +16,7 @@ class AzureService:
             endpoint=f"wss://{settings.azure_region}.tts.speech.microsoft.com/cognitiveservices/websocket/v2",
             subscription=settings.azure_key
         )
-
+        self._exit=None
         # self.speech_config = speechsdk.SpeechConfig(subscription=self.speech_key, region=self.region)
         self.speech_config.speech_synthesis_voice_name = self.voice
         self.speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Raw8Khz8BitMonoMULaw)
@@ -60,6 +60,9 @@ class AzureService:
         self.tts_task = self.speech_synthesizer.speak_async(self.tts_request)
         self._receiver_thread = threading.Thread(target=asyncio.run, args=(self.receiver(),))
         self._receiver_thread.start()
+        self._exit = threading.Event()
+        print("Synthesiser Start")
+
 
     async def establish_connection(self, voice:str):
         self.speech_config.speech_synthesis_voice_name = voice
@@ -69,6 +72,7 @@ class AzureService:
 
         self.start_synthesiser()
         self._exit = threading.Event()
+        print("Established Connection")
 
     async def receiver(self):
 
@@ -97,20 +101,25 @@ class AzureService:
                     'call_id': call_id,
                     "queue_audio": queue_audio
                 }
+            print("TTS REQUEST")
+            
             return self.tts_request.input_stream.write(text)
 
     async def flush_sp_ws(self):
+        print("FLUSH REQUEST")
+
+        await self.disconnect()
         if self.tts_request:
-            await self.disconnect()
             self.start_synthesiser()
         return
     async def disconnect(self):
-        if self._exit:
+        print("Disconnected")
+        if self.tts_request is not None:
+            self.tts_request.input_stream.close()
+        if self._exit is not None:
             self._exit.set()
-        if self._receiver_thread:
+        if self._receiver_thread is not None:
             self._receiver_thread.join()
             self._receiver_thread=None
-        if self.tts_request:
-            self.tts_request.input_stream.close()
 
 
