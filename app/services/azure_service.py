@@ -55,7 +55,7 @@ class AzureService:
     #     return
 
 
-    def start_synthesiser(self):
+    async def start_synthesiser(self):
         self.tts_request = speechsdk.SpeechSynthesisRequest(input_type=speechsdk.SpeechSynthesisRequestInputType.TextStream)
         self.tts_task = self.speech_synthesizer.speak_async(self.tts_request)
         # self._receiver_thread = threading.Thread(target=asyncio.run, args=(self.receiver(),))
@@ -70,7 +70,7 @@ class AzureService:
         self.speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=self.speech_config, audio_config=None)
         self.speech_synthesizer.synthesizing.connect(lambda evt: print("[audio]", end=""))
 
-        self.start_synthesiser()
+        await self.start_synthesiser()
         # self._exit = threading.Event()
         print("Established Connection")
 
@@ -112,7 +112,7 @@ class AzureService:
         await self.disconnect()
         if self.tts_task:
                 await self.get_tts_data()
-                self.start_synthesiser()
+                await self.start_synthesiser()
         return
     async def disconnect(self):
         print("Disconnected")
