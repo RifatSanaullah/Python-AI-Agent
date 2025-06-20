@@ -196,5 +196,7 @@ class DeepgramService:
         print("Closing Session", kwargs)
     
     async def disconnect(self):
-        await self.dg_connection.finish()
-        await self.sp_dg_connection.finish()
+        if self.dg_connection:
+            await self.dg_connection.finish()
+        if self.sp_dg_connection:
+            await self.sp_dg_connection.finish()
