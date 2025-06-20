@@ -58,9 +58,9 @@ class AzureService:
     def start_synthesiser(self):
         self.tts_request = speechsdk.SpeechSynthesisRequest(input_type=speechsdk.SpeechSynthesisRequestInputType.TextStream)
         self.tts_task = self.speech_synthesizer.speak_async(self.tts_request)
-        self._receiver_thread = threading.Thread(target=asyncio.run, args=(self.receiver(),))
-        self._receiver_thread.start()
-        self._exit = threading.Event()
+        # self._receiver_thread = threading.Thread(target=asyncio.run, args=(self.receiver(),))
+        # self._receiver_thread.start()
+        # self._exit = threading.Event()
         print("Synthesiser Start")
 
 
@@ -71,7 +71,7 @@ class AzureService:
         self.speech_synthesizer.synthesizing.connect(lambda evt: print("[audio]", end=""))
 
         self.start_synthesiser()
-        self._exit = threading.Event()
+        # self._exit = threading.Event()
         print("Established Connection")
 
     async def receiver(self):
@@ -80,6 +80,11 @@ class AzureService:
             while True:
                 if self.tts_task is None or self._exit.is_set():
                     break
+                await self.get_tts_data()
+        except Exception as e:
+            print(f"receiver: {e}")
+
+    async def get_tts_data(self):
                 result = self.tts_task.get()
                 # Check result
                 if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
@@ -91,8 +96,6 @@ class AzureService:
                     if cancellation_details.reason == speechsdk.CancellationReason.Error:
                         print("Error details: {}".format(cancellation_details.error_details))
                 return
-        except Exception as e:
-            print(f"receiver: {e}")
 
     async def stream_text_to_speech(self, text: str, voice: str, call_id,  queue_audio=None):
 
@@ -101,25 +104,24 @@ class AzureService:
                     'call_id': call_id,
                     "queue_audio": queue_audio
                 }
-            print("TTS REQUEST")
-            
+
             return self.tts_request.input_stream.write(text)
 
     async def flush_sp_ws(self):
         print("FLUSH REQUEST")
-
         await self.disconnect()
-        if self.tts_request:
-            self.start_synthesiser()
+        if self.tts_task:
+                await self.get_tts_data()
+                self.start_synthesiser()
         return
     async def disconnect(self):
         print("Disconnected")
         if self.tts_request is not None:
             self.tts_request.input_stream.close()
-        if self._exit is not None:
-            self._exit.set()
-        if self._receiver_thread is not None:
-            self._receiver_thread.join()
-            self._receiver_thread=None
+        # if self._exit is not None:
+        #     self._exit.set()
+        # if self._receiver_thread is not None:
+        #     self._receiver_thread.join()
+        #     self._receiver_thread=None
 
 
