@@ -203,6 +203,13 @@ class CallHandler:
 
         except ConnectionClosedError as e:
             print(f"Connection closed with error: {e.code} - {e.reason}")
+            if session.get('synthesis_service') is not None:
+                await session['synthesis_service'].disconnect()
+                if self.agents[session['streamSid']['call_sid']]['STT']['name'] == 'Deepgram':
+                    await session['transcribe_service'].disconnect()
+                elif self.agents[session['streamSid']['call_sid']]['STT']['name'] == 'AssemblyAI':
+                    session['transcribe_service'].close()  # Close the transcriber service
+                    
         except ConnectionClosedOK as e:
             print(f"Connection closed normally: {e.code} - {e.reason}")
         except Exception as e:
@@ -256,11 +263,12 @@ class CallHandler:
                     import traceback
                     print(traceback.format_exc())
 
+
                 self.ai_service.close_conversation(session['stream_sid'])
                 self.twilio_service.remove_stream_from_queue(session['stream_sid'])
                 self.agents[call_id]['websocket_closed'] = True
                 # self.flush_agent(call_id)
-            if session.get('streamSid') is not None:
+            if session.get('synthesis_service') is not None:
                 await session['synthesis_service'].disconnect()
                 if self.agents[session['streamSid']['call_sid']]['STT']['name'] == 'Deepgram':
                     await session['transcribe_service'].disconnect()
