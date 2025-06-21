@@ -1830,7 +1830,6 @@ class CallHandler:
                                     'end': end_datetime,
                                     'formatted_time': formatted_time
                                 })
-                                print(f"Google Calendar - Added future appointment: {formatted_time}")
                     
                     # Set existing_appointment with formatted times
                     if appointment_times:
@@ -1865,19 +1864,12 @@ class CallHandler:
                 
         # Check for Outlook calendar events
         if self.agents[call_sid]['integrations'].get('outlook_connection_id'):
-            # Check if there are any scheduled events for this user in Outlook Calendar
-            print(f"Outlook Calendar connection ID: {self.agents[call_sid]['integrations']['outlook_connection_id']}")
 
             try:
-                # Get events directly, NangoService's fetch_data for outlook events
-                # will typically fetch from the default calendar if no calendar_id is specified.
-                print(f"Fetching events from default Outlook calendar")
                 events_result = await self.outlook_calendar_service.get_events(
                     self.agents[call_sid]['integrations']['outlook_connection_id']
                 )
                 # print("=== OUTLOOK CALENDAR EVENTS ===", json.dumps(events_result, indent=2))
-                # # Display events in a well-formatted way
-                # print("\n=== OUTLOOK CALENDAR EVENTS ===")
                 events_collection = []
                 
                 if events_result and 'records' in events_result:
@@ -1889,39 +1881,27 @@ class CallHandler:
                     
                     # Get user's timezone
                     user_timezone = self.agents[call_sid].get('timezone', 'UTC')
-                    # print(f"Using user timezone: {user_timezone}")
                     
                     for event in events_collection:
-                        print(f"\nEvent:")
-                        print(f"  Subject: {event.get('subject', 'N/A')}")
-                        
+                       
                         start_datetime = None
                         end_datetime = None
                         
                         if 'start' in event:
                             start = event['start'].get('dateTime', 'N/A')
                             timezone = event['start'].get('timeZone', 'N/A')
-                            print(f"  Start: {start} ({timezone})")
                             if start != 'N/A':
                                 start_datetime = start
                             
                         if 'end' in event:
                             end = event['end'].get('dateTime', 'N/A')
                             timezone = event['end'].get('timeZone', 'N/A')
-                            print(f"  End: {end} ({timezone})")
                             if end != 'N/A':
                                 end_datetime = end
                         
                         # Check if this is a future appointment using user's timezone
                         is_future = start_datetime and is_future_datetime(start_datetime, user_timezone_str=user_timezone)
                         is_cancelled = event.get('isCancelled', False)
-                        
-                        # print(f"  Location: {event.get('location', {}).get('displayName', 'N/A')}")
-                        # print(f"  Status: {event.get('showAs', 'N/A')}")
-                        # print(f"  Is Future (in {user_timezone}): {is_future}")
-                        # print(f"  Is Cancelled: {is_cancelled}")
-                        
-                        # Only include future appointments that are not cancelled
                         if start_datetime and is_future and not is_cancelled:
                             # Format time in user's timezone
                             formatted_time = format_datetime_range_human_readable(
@@ -1937,21 +1917,11 @@ class CallHandler:
                                     'end': end_datetime,
                                     'formatted_time': formatted_time
                                 })
-                                print(f"  ✓ Added future appointment: {formatted_time}")
                             else:
-                                print(f"  ✗ Skipped - invalid formatted time")
+                                pass
                         else:
-                            if not start_datetime:
-                                print(f"  ✗ Skipped - no start time")
-                            elif not is_future:
-                                print(f"  ✗ Skipped - past appointment")
-                            elif is_cancelled:
-                                print(f"  ✗ Skipped - cancelled appointment")
-                        
-                    # print("===============================\n")
-                    # print(f"Found {len(future_events)} future events in {user_timezone}")
-                    
-                    # Set existing_appointment with formatted times
+                            pass
+                                           
                     if appointment_times:
                         # Remove duplicates while preserving order
                         unique_appointment_times = []
