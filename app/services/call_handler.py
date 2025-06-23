@@ -130,6 +130,9 @@ class CallHandler:
                     self.sessions[data['streamSid']]['websocket'] = websocket
                     self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
                     session = self.sessions[data['streamSid']]
+                    if session['call_initialized'] == False:
+                        await self.process_all_info(data['streamSid'], call_id)
+                        self.sessions[data['streamSid']]['call_initialized'] = True
                     # if self.agents[data['streamSid']['call_sid']]['STT']['name'] == 'Deepgram':
                     #     session['transcribe_service'].establish_dg_connection(self.agents[data['streamSid']['call_sid']]['STT']['model'])
                     # else: session['transcribe_service'].connect()
@@ -248,7 +251,6 @@ class CallHandler:
                     response = await self.backend_service.update_conversation_info(data)
                     isBoom = self.agents[call_id]['isBoom']
                     print("isBoom" , isBoom)
-                    print({ "lead_id" : lead_id, "conversations": data['conversations']})
                     if isBoom is not None or isBoom == True or isBoom == 'true':
                         await self.backend_service.update_conversation_bh({ "lead_id" : lead_id, "conversations": data['conversations']})
                     else:
@@ -1145,7 +1147,7 @@ class CallHandler:
         self.sessions[call_id]['ai_interrupt'] =  False
         self.ai_service.update_interrupt_status(call_id, False)
         streamingResponse = True
-        if self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Elevenlabs' or self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Microsoft Azure':
+        if self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Elevenlabs':
             streamingResponse = False
         response = await self.ai_service.generate_response(call_id, transcript, self.synthesize_response, self.agents[self.sessions[call_id]['call_sid']]['aiClient'], self.sessions[call_id]['synthesis_service'].flush_sp_ws, streamingResponse)
         if 'End Call Message' in response or self.contains_any_word(transcript) or  self.contains_any_word(response):
@@ -1279,7 +1281,8 @@ class CallHandler:
                 "background_sound": None,
                 "websocket" : None,
                 "call_sid" : call_sid,
-                "last_user_audio_time" : None
+                "last_user_audio_time" : None,
+                "call_initialized" : False
             }
         if self.agents[call_sid]['STT']['name'] == 'Deepgram':
             self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
@@ -1421,12 +1424,8 @@ class CallHandler:
         call_sid = self.twilio_service.make_call(phone_number)
         return call_sid
 
-    async def handle_stream_callback(self, data):
-        """Handle the stream callback to get the streamSid."""
-        stream_sid = data.get("StreamSid")
-        call_sid = data.get("CallSid")
+    async def process_all_info(self, stream_sid, call_sid):
         print(f"Stream SID: {stream_sid}, Call SID: {call_sid}")
-        self.initialize_session_info(stream_sid, call_sid)
         print("stt: ",self.agents[call_sid]['STT']['name'])
         if self.agents[call_sid]['STT']['name'] == 'Deepgram':
             await self.sessions[stream_sid]['transcribe_service'].establish_dg_connection(self.agents[call_sid]['STT']['model'])
@@ -1524,7 +1523,12 @@ class CallHandler:
             """
         )
 
-
+    async def handle_stream_callback(self, data):
+        """Handle the stream callback to get the streamSid."""
+        stream_sid = data.get("StreamSid")
+        call_sid = data.get("CallSid")
+        if stream_sid not in self.sessions:
+            self.initialize_session_info(stream_sid, call_sid)
         return "OK", 200
     
     def modify_greeting(self, name, greetings, call_sid):
