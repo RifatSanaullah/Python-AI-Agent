@@ -954,6 +954,7 @@ class CallHandler:
                             pass  # No response
                     elif appointment.get('updateAppointment'):
                         google_calendar_event_id = appointment.get('google_calendar_event_id') or prev_event_id
+                        
                         if google_calendar_event_id:
                             logging.info(f"Updating Google Calendar event: {google_calendar_event_id}")
                             response = await self.google_calendar_service.update_event(
@@ -967,6 +968,7 @@ class CallHandler:
                     elif appointment.get('deleteAppointment'):
                         # Delete existing appointment
                         google_calendar_event_id = appointment.get('google_calendar_event_id') or prev_event_id
+                        
                         if google_calendar_event_id:
                             logging.info(f"Deleting Google Calendar event: {google_calendar_event_id}")
                             await self.google_calendar_service.delete_event(
@@ -1030,6 +1032,7 @@ class CallHandler:
                         elif appointment.get('updateAppointment'):
                             # Update existing appointment
                             outlook_calendar_event_id = appointment.get('outlook_calendar_event_id') or prev_event_id
+                            
                             if outlook_calendar_event_id:
                                 logging.info(f"Updating Outlook Calendar event: {outlook_calendar_event_id}")
                                 response = await self.outlook_calendar_service.update_event(
@@ -1043,6 +1046,7 @@ class CallHandler:
                         elif appointment.get('deleteAppointment'):
                             # Delete existing appointment
                             outlook_calendar_event_id = appointment.get('outlook_calendar_event_id') or prev_event_id
+                            
                             if outlook_calendar_event_id:
                                 logging.info(f"Deleting Outlook Calendar event: {outlook_calendar_event_id}")
                                 await self.outlook_calendar_service.delete_event(
