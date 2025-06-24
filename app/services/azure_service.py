@@ -72,8 +72,14 @@ class AzureService:
             # print(f"Azure TTS Synthesizing Audio Data received: {len(evt.result.audio_data)} bytes") # Debugging
             audio_chunk_queue.put(evt.result.audio_data)
 
-    async def establish_connection(self, voice:str):
+    async def establish_connection(self, voice:str, call_id, queue_audio):
         self.speech_config.speech_synthesis_voice_name = voice
+
+        if 'call_id' not in self.queue_audio:
+                self.queue_audio = {
+                    'call_id': call_id,
+                    "queue_audio": queue_audio
+        }
 
         self.speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=self.speech_config, audio_config=None)
         # self.speech_synthesizer.synthesizing.connect(lambda evt: print("[audio]", end=""))
@@ -110,16 +116,9 @@ class AzureService:
                 self.tts_task = None
                 return
 
-    async def stream_text_to_speech(self, text: str, voice: str, call_id,  queue_audio=None):
-
-            if 'call_id' not in self.queue_audio:
-                self.queue_audio = {
-                    'call_id': call_id,
-                    "queue_audio": queue_audio
-                }
-
-            # return self.self.tts_request.input_stream.write(text)
-            return await self.send_to_tts(text)
+    async def stream_text_to_speech(self, text: str):
+        # return self.tts_request.input_stream.write(text)
+        return await self.send_to_tts(text)
 
     async def send_to_tts(self, text_chunk):
         
@@ -156,6 +155,8 @@ class AzureService:
                             
                         # Keep any remaining text in the buffer for the next chunk
                         self.full_text_buffer = self.full_text_buffer[self.last_split_index:].strip()
+
+
 
 
 

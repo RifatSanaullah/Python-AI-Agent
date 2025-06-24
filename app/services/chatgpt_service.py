@@ -85,7 +85,7 @@ class ChatGPTService:
         self.endpoints = {}
         self.method_mappings = {}
         self.summary_queue = queue.Queue()
-        self.worker_thread = threading.Thread(target=self.summary_worker, daemon=True)
+        # self.worker_thread = threading.Thread(target=self.summary_worker, daemon=True)
         self.ai_interrupt = {}
         # Initialize service-specific components based on integration type
         

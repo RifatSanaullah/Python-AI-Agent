@@ -16,6 +16,7 @@ from app.services.deepgram_service import DeepgramService
 from app.services.assembly_ai_transcribe_service import TranscribeService
 from app.services.elevenlabs_service import ElevenLabsService
 from app.services.azure_service import AzureService
+# from app.services.azure_tts_service import AzureService
 from app.services.zoho_service import ZohoService
 from app.services.hubspot_service import HubSpotService
 from app.services.salesforce_service import SalesforceService
@@ -194,7 +195,7 @@ class CallHandler:
                     # await self.twilio_service.send_control_command(session['websocket'], 'stop')
                     if self.sessions[data['streamSid']]['background_sound'] is True:
                         await self.stop_stream(data['streamSid'])
-                    session['ai_speaking'] = True
+                    # session['ai_speaking'] = True
                     with open(output_file, "ab") as f:
                         f.write(response_audio)
 
@@ -247,21 +248,21 @@ class CallHandler:
                     "previous_convo_summary" : previous_convo_summary,
                 }
 
-                try:
-                    response = await self.backend_service.update_conversation_info(data)
-                    isBoom = self.agents[call_id]['isBoom']
-                    print("isBoom" , isBoom)
-                    if isBoom is not None or isBoom == True or isBoom == 'true':
-                        await self.backend_service.update_conversation_bh({ "lead_id" : lead_id, "conversations": data['conversations']})
-                    else:
-                        if 'summary' in response:
-                            summary = response['summary']
-                            await self.update_crm_data(call_id, data['lead_id'], data['integrations'], summary, response['appointment'], data['event_id'], data['previous_convo_summary'])
-                except Exception as e:
-                    print(f"Error updating conversation info: {str(e)}")
-                    # Log the full exception traceback
-                    import traceback
-                    print(traceback.format_exc())
+                # try:
+                #     response = await self.backend_service.update_conversation_info(data)
+                #     isBoom = self.agents[call_id]['isBoom']
+                #     print("isBoom" , isBoom)
+                #     if isBoom is not None or isBoom == True or isBoom == 'true':
+                #         await self.backend_service.update_conversation_bh({ "lead_id" : lead_id, "conversations": data['conversations']})
+                #     else:
+                #         if 'summary' in response:
+                #             summary = response['summary']
+                #             await self.update_crm_data(call_id, data['lead_id'], data['integrations'], summary, response['appointment'], data['event_id'], data['previous_convo_summary'])
+                # except Exception as e:
+                #     print(f"Error updating conversation info: {str(e)}")
+                #     # Log the full exception traceback
+                #     import traceback
+                #     print(traceback.format_exc())
 
 
                 self.ai_service.close_conversation(session['stream_sid'])
@@ -1237,7 +1238,7 @@ class CallHandler:
             # session['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
             # session['wait_duration'] = result['duration']
         elif self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Microsoft Azure':
-            audio_stream = await self.sessions[call_id]["synthesis_service"].stream_text_to_speech(text, model, call_id, self.queue_audio)
+            audio_stream = await self.sessions[call_id]["synthesis_service"].stream_text_to_speech(text)
 
         else:
             raise ValueError(f"Unsupported TTS provider: {settings.tts_provider}")
@@ -1259,7 +1260,7 @@ class CallHandler:
             return
         ai_interupted = session.get('ai_interrupt', False)
         if not ai_interupted and session['websocket'] is not None:
-            
+            session['ai_speaking'] = True
             await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
             await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
             result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
@@ -1437,7 +1438,8 @@ class CallHandler:
         if self.agents[call_sid]['TTS']['name'] == 'Deepgram':
             await self.sessions[stream_sid]['synthesis_service'].establish_sp_connection(self.agents[call_sid]['TTS']['voice']['model'])
         elif self.agents[call_sid]['TTS']['name'] == 'Microsoft Azure':
-           await self.sessions[stream_sid]['synthesis_service'].establish_connection(self.agents[call_sid]['TTS']['voice']['model'])
+            await self.sessions[stream_sid]['synthesis_service'].establish_connection(self.agents[call_sid]['TTS']['voice']['model'], stream_sid, self.queue_audio)
+            # await self.sessions[stream_sid]['synthesis_service'].establish_connection(self.agents[call_sid]['TTS']['voice']['model'])
         # self.sessions[call_sid]['stream_sid'] = stream_sid
         print("Done initializing session info")
 

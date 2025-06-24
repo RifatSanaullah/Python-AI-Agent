@@ -47,7 +47,7 @@ class DeepgramService:
                 encoding='mulaw',
                 sample_rate=8000,
             )
-        self._exit = threading.Event()
+        # self._exit = threading.Event()
         self.dg_connection = None
         self.sp_dg_connection = None
         self.queue_audio = {}
@@ -148,8 +148,9 @@ class DeepgramService:
 
             # with self.lock:
             if self.on_transcript and self.complete_sentence.strip():
-                await self.on_transcript(self.complete_sentence.strip())
+                sentence = self.complete_sentence
                 self.complete_sentence = ''
+                await self.on_transcript(sentence.strip())
             self.transmit_task = None
         except asyncio.CancelledError:
             # Canceled because more speech came in
