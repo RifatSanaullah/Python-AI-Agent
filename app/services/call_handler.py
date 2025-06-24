@@ -1488,11 +1488,6 @@ class CallHandler:
         isAllowMeetingConflict = self.agents[call_sid]['allowMeetingConflict']
         print("isAllowMeetingConflict: ", isAllowMeetingConflict)
 
-        await self.synthesize_response(greetings , stream_sid)
-
-        # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
-        await self.sessions[stream_sid]['synthesis_service'].flush_sp_ws()
-
         await self.ai_service.process_initial_message(stream_sid, self.get_agent_knowledge)
         self.ai_service.add_message(stream_sid, "assistant", greetings)
         self.ai_service.add_system_message(stream_sid, "assistant", greetings)
@@ -1524,6 +1519,12 @@ class CallHandler:
             2. If the existing_appointment variable indicates the slot is booked, inform the user it's unavailable and ask them to choose another time slots or date
             """
         )
+
+        
+        await self.synthesize_response(greetings , stream_sid)
+
+        # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
+        await self.sessions[stream_sid]['synthesis_service'].flush_sp_ws()
 
     async def handle_stream_callback(self, data):
         """Handle the stream callback to get the streamSid."""
