@@ -619,7 +619,7 @@ async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optiona
             pass  # Already in correct format
         else:
             # Invalid phone number format - treat as new call
-            clean_phone="7732340346"
+            clean_phone="6307437421"
             # print(f"Invalid phone number format: {phone}, treating as new call")
             # return []
 

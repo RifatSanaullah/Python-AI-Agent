@@ -53,3 +53,35 @@ class OutlookCalendarService(NangoService):
         except Exception as e:
             logger.error(f"Error creating Outlook calendar event: {str(e)}. Payload was: {json.dumps(payload, indent=2)}")
             raise
+    
+    async def update_event(self, connection_id: str, event_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Updates an existing event in Outlook Calendar.
+        """
+        logger.info(f"Updating Outlook event {event_id} with connection_id: {connection_id}")
+        try:
+            endpoint = "update-event"
+            full_payload = {
+                "eventId": event_id,
+                "fields": payload
+            }
+            result = await self.post_data(connection_id, endpoint, full_payload, 'outlook')
+            logger.info(f"Successfully updated Outlook event {event_id}")
+            return result
+        except Exception as e:
+            logger.error(f"Error updating Outlook event {event_id}: {str(e)}")
+            raise
+
+    async def delete_event(self, connection_id: str, event_id: str) -> None:
+        """
+        Deletes an event from Outlook Calendar.
+        """
+        logger.info(f"Deleting Outlook event {event_id} with connection_id: {connection_id}")
+        try:
+            endpoint = "delete-event"
+            payload = {"eventId": event_id}
+            await self.post_data(connection_id, endpoint, payload, 'outlook')
+            logger.info(f"Successfully deleted Outlook event {event_id}")
+        except Exception as e:
+            logger.error(f"Error deleting Outlook event {event_id}: {str(e)}")
+            raise
