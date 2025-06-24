@@ -113,7 +113,6 @@ class AzureService:
                     print("Speech synthesis canceled: {}".format(cancellation_details.reason))
                     if cancellation_details.reason == speechsdk.CancellationReason.Error:
                         print("Error details: {}".format(cancellation_details.error_details))
-                self.tts_task = None
                 return
 
     async def stream_text_to_speech(self, text: str):
@@ -193,7 +192,8 @@ class AzureService:
 
     async def flush_sp_ws(self):
         print("FLUSH REQUEST")
-        await self.disconnect()
+        if self.tts_request is not None:
+            self.tts_request.input_stream.close()
         if self.tts_task:
                 await self.get_tts_data()
                 await self.start_synthesiser()
@@ -203,6 +203,8 @@ class AzureService:
         print("Disconnected")
         if self.tts_request is not None:
             self.tts_request.input_stream.close()
+        self.tts_task = None
+        self.tts_request = None
         if self._exit is not None:
             self._exit.set()
         if self._receiver_thread is not None:

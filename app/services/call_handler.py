@@ -56,7 +56,7 @@ class CallHandler:
         self.s3_service = S3Service()
         # self.playht_service = PlayHT()
         self.elevenlabs_service = ElevenLabsService()
-        self.azure_service = AzureService()
+        # self.azure_service = AzureService()
         self.zoho_service = ZohoService()
         self.hubspot_service = HubSpotService()
         self.salesforce_service = SalesforceService()
@@ -1305,7 +1305,7 @@ class CallHandler:
         elif self.agents[call_sid]['TTS']['name'] == 'Elevenlabs':
             self.sessions[stream_sid]["synthesis_service"] = self.elevenlabs_service
         elif self.agents[call_sid]['TTS']['name'] == 'Microsoft Azure':
-            self.sessions[stream_sid]["synthesis_service"] = self.azure_service
+            self.sessions[stream_sid]["synthesis_service"] = AzureService()
         else:
             self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
 
