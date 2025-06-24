@@ -922,11 +922,7 @@ class CallHandler:
         # Google Calendar Event Handling
         if integrations and integrations.get("google_calendar_connection_id") and integrations["google_calendar_connection_id"] != '':
             try:
-                if event is not None and event != '' and appointment.get('newAppointment'):
-                    # The 'event' variable (derived from appointment['eventData']) is used as the payload.
-                    # Its structure must align with Google Calendar API requirements
-                    
-                    # Transform the event data to Google Calendar API format
+                if event is not None and event != '':
                     google_event_payload = {
                         "summary": event.get("Subject"),
                         "description": event.get("Description"),
@@ -936,34 +932,60 @@ class CallHandler:
                         },
                         "end": {
                             "dateTime": event.get("EndDateTime"),
-                            "timeZone": event.get("timezone")  # Adjust time zone as needed      
+                            "timeZone": event.get("timezone") 
                         }
-                        # Attendees can be added her?e if available in 'event'
-                        # "attendees": event.get("attendees", []) 
                     }
-        
-                    
-                    response = await self.google_calendar_service.create_event(
-                        integrations['google_calendar_connection_id'],
-                        google_event_payload
-                    )
-                    if response and 'id' in response and 'id' in appointment:
-                        appointment_id = appointment['id'] # BoomersHub internal appointment ID
-                        await self.backend_service.update_appointment({
-                            "appointment_id": appointment_id,
-                            "google_calendar_event_id": response['id'] # Storing Google Calendar event ID
-                        })
-                    elif response:
-                        pass  # Response without ID
-                    else:
-                        pass  # No response
+
+                    if appointment.get('newAppointment'):
+                        # Create new appointment
+                        response = await self.google_calendar_service.create_event(
+                            integrations['google_calendar_connection_id'],
+                            google_event_payload
+                        )
+                        if response and 'id' in response and 'id' in appointment:
+                            appointment_id = appointment['id']  # BoomersHub internal appointment ID
+                            await self.backend_service.update_appointment({
+                                "appointment_id": appointment_id,
+                                "google_calendar_event_id": response['id']  # Storing Google Calendar event ID
+                            })
+                        elif response:
+                            pass  # Response without ID
+                        else:
+                            pass  # No response
+                    elif appointment.get('updateAppointment'):
+                        google_calendar_event_id = appointment.get('google_calendar_event_id') or prev_event_id
+                        if google_calendar_event_id:
+                            logging.info(f"Updating Google Calendar event: {google_calendar_event_id}")
+                            response = await self.google_calendar_service.update_event(
+                                integrations['google_calendar_connection_id'],
+                                google_calendar_event_id,
+                                google_event_payload
+                            )
+                            logging.info(f"Google Calendar event updated successfully: {response}")
+                        else:
+                            logging.warning("Google Calendar event ID not found for update")
+                    elif appointment.get('deleteAppointment'):
+                        # Delete existing appointment
+                        google_calendar_event_id = appointment.get('google_calendar_event_id') or prev_event_id
+                        if google_calendar_event_id:
+                            logging.info(f"Deleting Google Calendar event: {google_calendar_event_id}")
+                            await self.google_calendar_service.delete_event(
+                                integrations['google_calendar_connection_id'],
+                                google_calendar_event_id
+                            )
+                            logging.info(f"Google Calendar event deleted successfully")
+                        else:
+                            logging.warning("Google Calendar event ID not found for deletion")
             except Exception as e:
+                logging.error(f"Error in Google Calendar event handling: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 import traceback
 
         # Outlook Calendar Event Handling
         if integrations and integrations.get("outlook_connection_id") and integrations["outlook_connection_id"] != '':
             try:
-                if event is not None and event != '' and appointment.get('newAppointment'):
+                if event is not None and event != '':
                     # Prepare attendees list
                     outlook_attendees = []
                     contact_email_outlook = None
@@ -988,77 +1010,54 @@ class CallHandler:
                     
                     # Basic validation for fields required by the Nango script
                     required_fields = ["subject", "startDateTime", "endDateTime", "timeZone"]
-                    if not all(outlook_event_payload.get(k) for k in required_fields):
-                        pass  # Missing required fields
+                    if all(outlook_event_payload.get(k) for k in required_fields):
+                        if appointment.get('newAppointment'):
+                            # Create new appointment
+                            response = await self.outlook_calendar_service.create_event(
+                                integrations['outlook_connection_id'],
+                                outlook_event_payload
+                            )
+                            if response and 'id' in response and 'id' in appointment:
+                                appointment_id = appointment['id']
+                                await self.backend_service.update_appointment({
+                                    "appointment_id": appointment_id,
+                                    "outlook_calendar_event_id": response['id']
+                                })
+                            elif response:
+                                pass  # Response without ID
+                            else:
+                                pass  # No response
+                        elif appointment.get('updateAppointment'):
+                            # Update existing appointment
+                            outlook_calendar_event_id = appointment.get('outlook_calendar_event_id') or prev_event_id
+                            if outlook_calendar_event_id:
+                                logging.info(f"Updating Outlook Calendar event: {outlook_calendar_event_id}")
+                                response = await self.outlook_calendar_service.update_event(
+                                    integrations['outlook_connection_id'],
+                                    outlook_calendar_event_id,
+                                    outlook_event_payload
+                                )
+                                logging.info(f"Outlook Calendar event updated successfully: {response}")
+                            else:
+                                logging.warning("Outlook Calendar event ID not found for update")
+                        elif appointment.get('deleteAppointment'):
+                            # Delete existing appointment
+                            outlook_calendar_event_id = appointment.get('outlook_calendar_event_id') or prev_event_id
+                            if outlook_calendar_event_id:
+                                logging.info(f"Deleting Outlook Calendar event: {outlook_calendar_event_id}")
+                                await self.outlook_calendar_service.delete_event(
+                                    integrations['outlook_connection_id'],
+                                    outlook_calendar_event_id
+                                )
+                                logging.info(f"Outlook Calendar event deleted successfully")
+                            else:
+                                logging.warning("Outlook Calendar event ID not found for deletion")
                     else:
-                        response = await self.outlook_calendar_service.create_event(
-                            integrations['outlook_connection_id'],
-                            outlook_event_payload
-                        )
-                        if response and 'id' in response and 'id' in appointment:
-                            appointment_id = appointment['id']
-                            await self.backend_service.update_appointment({
-                                "appointment_id": appointment_id,
-                                "outlook_event_id": response['id']
-                            })
-                        elif response:
-                            pass  # Response without ID
-                        else:
-                            pass  # No response
+                        logging.warning("Missing required fields for Outlook Calendar event")
             except Exception as e:
+                logging.error(f"Error in Outlook Calendar event handling: {str(e)}")
                 import traceback
-
-        # Calendly Scheduled Event Handling
-        if integrations and integrations.get("calendly_connection_id") and integrations["calendly_connection_id"] != '':
-            try:
-                if event is not None and event != '' and appointment.get('newAppointment'):
-                    # Transform event data to the format expected by the Nango script's 'fields'
-                    # for creating a Calendly one-off event.
-                    
-                    # Assuming 'event' (from appointment['eventData']) contains the necessary details.
-                    # The Nango script handles mapping these fields to the actual Calendly API structure.
-                    calendly_event_payload = {
-                        "name": event.get("Subject"), # Maps to Nango script's fields.name
-                        "description": "30", # Maps to Nango script's fields.description
-                        "duration": event.get("DurationInMinutes"), # Maps to Nango script's fields.duration
-                        "locationType": event.get("LocationType", "Remote"), # Default to "custom" if not specified
-                        "location": "Remote", # Maps to Nango script's fields.location
-                        "startTime": event.get("StartDateTime"), # Maps to Nango script's fields.startTime
-                        "endTime": event.get("EndDateTime"), # Maps to Nango script's fields.endTime
-                        "inviteesCanChooseTime": event.get("InviteesCanChooseTime", False) # Default if not specified
-                        # Ensure 'event' provides these keys or add defaults.
-                        # 'host_uri' might be needed if not handled by Nango connection context.
-                    }
-                    
-                    # Basic validation for fields required by the Nango script
-                    required_calendly_fields = ["name", "duration", "locationType", "location", "startTime", "endTime"]
-                    if not all(calendly_event_payload.get(k) is not None for k in required_calendly_fields): # Check for None explicitly for boolean field
-                        pass  # Missing required fields
-                    else:
-                        response = await self.calendly_service.create_one_off_event_type(
-                            integrations['calendly_connection_id'],
-                            calendly_event_payload
-                        )
-                        # Calendly API for one-off event types might return the event URI or UUID.
-                        # The Nango script returns response.data.resource, which should contain the URI/UUID.
-                        event_resource_uri = None
-                        if response and response.get('uri'): # Nango script returns response.data.resource which has a 'uri'
-                            event_resource_uri = response.get('uri')
-                        elif response and response.get('uuid'): # Fallback if 'uuid' is directly available
-                            event_resource_uri = response.get('uuid')
-
-                        if event_resource_uri and 'id' in appointment:
-                            appointment_id = appointment['id']
-                            await self.backend_service.update_appointment({
-                                "appointment_id": appointment_id,
-                                "calendly_event_uuid": event_resource_uri # Storing URI or UUID
-                            })
-                        elif response:
-                            pass  # Response without expected URI/UUID
-                        else:
-                            pass  # No response
-            except Exception as e:
-                import traceback
+                traceback.print_exc()
 
 
     def remove_empty_values(self, data: dict) -> dict:

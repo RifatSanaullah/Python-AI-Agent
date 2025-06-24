@@ -135,7 +135,7 @@ class BackendHandler:
         try:
             url = f"{self.OTHER_BACKEND_URL}/call/update-conversation-info"
             async with httpx.AsyncClient() as client:
-                response = await client.post(url, json=data, timeout=20)
+                response = await client.post(url, json=data, timeout=60)  # Increased timeout to 60 seconds
 
             response.raise_for_status()  # Raise an exception for HTTP errors
             result = response.json()
@@ -146,6 +146,11 @@ class BackendHandler:
             print(f"HTTP error while updating conversation info: {e.response.status_code} {e.response.text}")
             print(f"Request data was: {data}")
             raise
+        except httpx.ReadTimeout as e:
+            print(f"Timeout error while updating conversation info (took longer than 60 seconds): {str(e)}")
+            print(f"Request data was: {data}")
+            # Return a default response instead of raising to prevent the entire call from failing
+            return {"conversation": None, "summary": {}, "appointment": {"id": None}}
         except httpx.RequestError as e:
             print(f"Request error while updating conversation info: {str(e)}")
             raise
