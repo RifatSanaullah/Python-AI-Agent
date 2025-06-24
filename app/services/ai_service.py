@@ -1,7 +1,7 @@
 # app/services/chatgpt_service.py
 
 # app/services/chatgpt_service.py
-import openai
+import openai, asyncio
 from app.config import settings
 # Import date class from datetime module
 from datetime import date, datetime
@@ -40,7 +40,6 @@ class AIService:
         self.endpoints = {}
         self.method_mappings = {}
         self.summary_queue = queue.Queue()
-        self.worker_thread = threading.Thread(target=self.summary_worker, daemon=True)
         self.ai_interrupt = {}
         # Initialize service-specific components based on integration type
         
@@ -505,22 +504,37 @@ class AIService:
                     
         self.add_message(conversation_id, "assistant", assistant_reply)
         self.add_system_message(conversation_id, "assistant", assistant_reply)
-        if (conversation_id in self.system_convo and len(self.system_convo[conversation_id]) >= 6 + self.convo_index):
-            self.summary_queue.put(conversation_id)
+        # if self.should_summarize(conversation_id):
+        #     task = self.running_tasks.get(conversation_id)
+
+        #     print("task started")
+        #     if not task or task.done():
+        #         print("task done")
+        #         new_task = asyncio.create_task(self._run_safely(
+        #             self.generate_summary_in_background(conversation_id)
+        #         ))
+        #         self.running_tasks[conversation_id] = new_task
+        #     else:
+        #         print("task pending")
 
         return assistant_reply
-    
-    def summary_worker(self):
-        while True:
-            conversation_id = self.summary_queue.get()
-            try:
-                self.generate_summary_in_background(conversation_id)
-            except Exception as e:
-                print(f"[Worker Error] {e}")
-            self.summary_queue.task_done()
+
+    def should_summarize(self, conversation_id):
+        if (conversation_id in self.system_convo and len(self.system_convo[conversation_id]) >= 6 + self.convo_index):
+            return True
+        else: 
+            return False
+
+    async def _run_safely(self, coro):
+        try:
+            await coro
+        except asyncio.CancelledError:
+            print("Summary task was cancelled.")
+        except Exception as e:
+            print(f"[Async Summary Error] {e}")
     
         # Function to close a conversation
-    def generate_summary_in_background(self, conversation_id):
+    async def generate_summary_in_background(self, conversation_id):
         try:
             if (conversation_id in self.system_convo and len(self.system_convo[conversation_id]) >= 6 + self.convo_index):
 
