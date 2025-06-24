@@ -618,10 +618,8 @@ async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optiona
         elif len(clean_phone) == 10:
             pass  # Already in correct format
         else:
-            # Invalid phone number format - treat as new call
-            clean_phone="6307437421"
-            # print(f"Invalid phone number format: {phone}, treating as new call")
-            # return []
+            print(f"Invalid phone number format: {phone}, treating as new call")
+            return []
 
         # Get leads from CINC using the actual cleaned phone number
         leads_response = await get_leads(account_id, connection_id=connection_id, phone=clean_phone)
