@@ -755,19 +755,6 @@ class CallHandler:
                             lead_data=cinc_lead_data,
                             connection_id=cinc_connection_id
                         )
-                        new_lead_id = created_lead.get("id")
-                        if new_lead_id:
-                            # Update session with new lead ID
-                            if hasattr(self, 'agents') and call_id in self.agents:
-                                self.agents[call_id]["cinc_lead_id"] = new_lead_id
-                            # Update backend with new lead ID
-                            await self.backend_service.update_call_info({
-                                "call_id": call_id,
-                                "cinc_lead_id": new_lead_id
-                            })
-                            logging.info(f"CINC lead created for account {account_id} via connection {cinc_connection_id}: {new_lead_id}")
-                        else:
-                            logging.warning(f"CINC lead creation for account {account_id} did not return an ID")
                     else:
                         logging.warning(f"Cannot create CINC lead for account {account_id} - missing email")
 
@@ -925,11 +912,7 @@ class CallHandler:
         # Google Calendar Event Handling
         if integrations and integrations.get("google_calendar_connection_id") and integrations["google_calendar_connection_id"] != '':
             try:
-                if event is not None and event != '' and appointment.get('newAppointment'):
-                    # The 'event' variable (derived from appointment['eventData']) is used as the payload.
-                    # Its structure must align with Google Calendar API requirements
-                    
-                    # Transform the event data to Google Calendar API format
+                if event is not None and event != '':
                     google_event_payload = {
                         "summary": event.get("Subject"),
                         "description": event.get("Description"),
@@ -939,34 +922,88 @@ class CallHandler:
                         },
                         "end": {
                             "dateTime": event.get("EndDateTime"),
-                            "timeZone": event.get("timezone")  # Adjust time zone as needed      
+                            "timeZone": event.get("timezone") 
                         }
-                        # Attendees can be added her?e if available in 'event'
-                        # "attendees": event.get("attendees", []) 
                     }
-        
-                    
-                    response = await self.google_calendar_service.create_event(
-                        integrations['google_calendar_connection_id'],
-                        google_event_payload
-                    )
-                    if response and 'id' in response and 'id' in appointment:
-                        appointment_id = appointment['id'] # BoomersHub internal appointment ID
-                        await self.backend_service.update_appointment({
-                            "appointment_id": appointment_id,
-                            "google_calendar_event_id": response['id'] # Storing Google Calendar event ID
-                        })
-                    elif response:
-                        pass  # Response without ID
-                    else:
-                        pass  # No response
+
+                    # Handle appointment operations with proper priority: delete > update > create
+                    if appointment.get('deleteAppointment'):
+                        # Delete existing appointment
+                        # Try both camelCase and snake_case key formats for compatibility
+                        google_calendar_event_id = (appointment.get('googleCalendarEventId') or 
+                                                   appointment.get('google_calendar_event_id') or 
+                                                   prev_event_id)
+                        
+                        if google_calendar_event_id:
+                            logging.info(f"Deleting Google Calendar event: {google_calendar_event_id}")
+                            await self.google_calendar_service.delete_event(
+                                integrations['google_calendar_connection_id'],
+                                google_calendar_event_id
+                            )
+                            logging.info(f"Google Calendar event deleted successfully")
+                        else:
+                            logging.warning("Google Calendar event ID not found for deletion")
+                    elif appointment.get('updateAppointment'):
+                        # Update existing appointment
+                        # Try both camelCase and snake_case key formats for compatibility
+                        google_calendar_event_id = (appointment.get('googleCalendarEventId') or 
+                                                   appointment.get('google_calendar_event_id') or 
+                                                   prev_event_id)
+                        
+                        if google_calendar_event_id:
+                            logging.info(f"Updating Google Calendar event: {google_calendar_event_id}")
+                            
+                            # For updates, only send the fields that are changing (start and end time)
+                            update_payload = {}
+                            if event.get("StartDateTime"):
+                                update_payload["start"] = {
+                                    "dateTime": event.get("StartDateTime"),
+                                    "timeZone": event.get("timezone")
+                                }
+                            if event.get("EndDateTime"):
+                                update_payload["end"] = {
+                                    "dateTime": event.get("EndDateTime"),
+                                    "timeZone": event.get("timezone")
+                                }
+                            
+                            # Only update if we have start/end times to update
+                            if update_payload:
+                                response = await self.google_calendar_service.update_event(
+                                    integrations['google_calendar_connection_id'],
+                                    google_calendar_event_id,
+                                    update_payload
+                                )
+                                logging.info(f"Google Calendar event time updated successfully: {response}")
+                            else:
+                                logging.warning("No start/end time provided for Google Calendar event update")
+                        else:
+                            logging.warning("Google Calendar event ID not found for update")
+                    elif appointment.get('newAppointment'):
+                        # Create new appointment
+                        response = await self.google_calendar_service.create_event(
+                            integrations['google_calendar_connection_id'],
+                            google_event_payload
+                        )
+                        if response and 'id' in response and 'id' in appointment:
+                            appointment_id = appointment['id']  # BoomersHub internal appointment ID
+                            await self.backend_service.update_appointment({
+                                "appointment_id": appointment_id,
+                                "google_calendar_event_id": response['id']  # Storing Google Calendar event ID
+                            })
+                        elif response:
+                            pass  # Response without ID
+                        else:
+                            pass  # No response
             except Exception as e:
+                logging.error(f"Error in Google Calendar event handling: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 import traceback
 
         # Outlook Calendar Event Handling
         if integrations and integrations.get("outlook_connection_id") and integrations["outlook_connection_id"] != '':
             try:
-                if event is not None and event != '' and appointment.get('newAppointment'):
+                if event is not None and event != '':
                     # Prepare attendees list
                     outlook_attendees = []
                     contact_email_outlook = None
@@ -989,79 +1026,79 @@ class CallHandler:
                         # Add other fields like 'location' if your Nango script handles them
                     }
                     
+                    # Handle appointment operations with proper priority: delete > update > create
                     # Basic validation for fields required by the Nango script
                     required_fields = ["subject", "startDateTime", "endDateTime", "timeZone"]
-                    if not all(outlook_event_payload.get(k) for k in required_fields):
-                        pass  # Missing required fields
+                    if all(outlook_event_payload.get(k) for k in required_fields):
+                        if appointment.get('deleteAppointment'):
+                            # Delete existing appointment
+                            # Try both camelCase and snake_case key formats for compatibility
+                            outlook_calendar_event_id = (appointment.get('outlookCalendarEventId') or 
+                                                        appointment.get('outlook_calendar_event_id') or 
+                                                        prev_event_id)
+                            
+                            if outlook_calendar_event_id:
+                                logging.info(f"Deleting Outlook Calendar event: {outlook_calendar_event_id}")
+                                await self.outlook_calendar_service.delete_event(
+                                    integrations['outlook_connection_id'],
+                                    outlook_calendar_event_id
+                                )
+                                logging.info(f"Outlook Calendar event deleted successfully")
+                            else:
+                                logging.warning("Outlook Calendar event ID not found for deletion")
+                        elif appointment.get('updateAppointment'):
+                            # Update existing appointment
+                            # Try both camelCase and snake_case key formats for compatibility
+                            outlook_calendar_event_id = (appointment.get('outlookCalendarEventId') or 
+                                                        appointment.get('outlook_calendar_event_id') or 
+                                                        prev_event_id)
+                            
+                            if outlook_calendar_event_id:
+                                logging.info(f"Updating Outlook Calendar event: {outlook_calendar_event_id}")
+                                
+                                # For updates, only send the fields that are changing (start and end time)
+                                update_payload = {}
+                                if event.get("StartDateTime"):
+                                    update_payload["startDateTime"] = event.get("StartDateTime")
+                                if event.get("EndDateTime"):
+                                    update_payload["endDateTime"] = event.get("EndDateTime")
+                                if event.get("timezone"):
+                                    update_payload["timeZone"] = event.get("timezone")
+                                
+                                # Only update if we have start/end times to update
+                                if update_payload.get("startDateTime") or update_payload.get("endDateTime"):
+                                    response = await self.outlook_calendar_service.update_event(
+                                        integrations['outlook_connection_id'],
+                                        outlook_calendar_event_id,
+                                        update_payload
+                                    )
+                                    logging.info(f"Outlook Calendar event time updated successfully: {response}")
+                                else:
+                                    logging.warning("No start/end time provided for Outlook Calendar event update")
+                            else:
+                                logging.warning("Outlook Calendar event ID not found for update")
+                        elif appointment.get('newAppointment'):
+                            # Create new appointment
+                            response = await self.outlook_calendar_service.create_event(
+                                integrations['outlook_connection_id'],
+                                outlook_event_payload
+                            )
+                            if response and 'id' in response and 'id' in appointment:
+                                appointment_id = appointment['id']
+                                await self.backend_service.update_appointment({
+                                    "appointment_id": appointment_id,
+                                    "outlook_calendar_event_id": response['id']
+                                })
+                            elif response:
+                                pass  # Response without ID
+                            else:
+                                pass  # No response
                     else:
-                        response = await self.outlook_calendar_service.create_event(
-                            integrations['outlook_connection_id'],
-                            outlook_event_payload
-                        )
-                        if response and 'id' in response and 'id' in appointment:
-                            appointment_id = appointment['id']
-                            await self.backend_service.update_appointment({
-                                "appointment_id": appointment_id,
-                                "outlook_event_id": response['id']
-                            })
-                        elif response:
-                            pass  # Response without ID
-                        else:
-                            pass  # No response
+                        logging.warning("Missing required fields for Outlook Calendar event")
             except Exception as e:
+                logging.error(f"Error in Outlook Calendar event handling: {str(e)}")
                 import traceback
-
-        # Calendly Scheduled Event Handling
-        if integrations and integrations.get("calendly_connection_id") and integrations["calendly_connection_id"] != '':
-            try:
-                if event is not None and event != '' and appointment.get('newAppointment'):
-                    # Transform event data to the format expected by the Nango script's 'fields'
-                    # for creating a Calendly one-off event.
-                    
-                    # Assuming 'event' (from appointment['eventData']) contains the necessary details.
-                    # The Nango script handles mapping these fields to the actual Calendly API structure.
-                    calendly_event_payload = {
-                        "name": event.get("Subject"), # Maps to Nango script's fields.name
-                        "description": "30", # Maps to Nango script's fields.description
-                        "duration": event.get("DurationInMinutes"), # Maps to Nango script's fields.duration
-                        "locationType": event.get("LocationType", "Remote"), # Default to "custom" if not specified
-                        "location": "Remote", # Maps to Nango script's fields.location
-                        "startTime": event.get("StartDateTime"), # Maps to Nango script's fields.startTime
-                        "endTime": event.get("EndDateTime"), # Maps to Nango script's fields.endTime
-                        "inviteesCanChooseTime": event.get("InviteesCanChooseTime", False) # Default if not specified
-                        # Ensure 'event' provides these keys or add defaults.
-                        # 'host_uri' might be needed if not handled by Nango connection context.
-                    }
-                    
-                    # Basic validation for fields required by the Nango script
-                    required_calendly_fields = ["name", "duration", "locationType", "location", "startTime", "endTime"]
-                    if not all(calendly_event_payload.get(k) is not None for k in required_calendly_fields): # Check for None explicitly for boolean field
-                        pass  # Missing required fields
-                    else:
-                        response = await self.calendly_service.create_one_off_event_type(
-                            integrations['calendly_connection_id'],
-                            calendly_event_payload
-                        )
-                        # Calendly API for one-off event types might return the event URI or UUID.
-                        # The Nango script returns response.data.resource, which should contain the URI/UUID.
-                        event_resource_uri = None
-                        if response and response.get('uri'): # Nango script returns response.data.resource which has a 'uri'
-                            event_resource_uri = response.get('uri')
-                        elif response and response.get('uuid'): # Fallback if 'uuid' is directly available
-                            event_resource_uri = response.get('uuid')
-
-                        if event_resource_uri and 'id' in appointment:
-                            appointment_id = appointment['id']
-                            await self.backend_service.update_appointment({
-                                "appointment_id": appointment_id,
-                                "calendly_event_uuid": event_resource_uri # Storing URI or UUID
-                            })
-                        elif response:
-                            pass  # Response without expected URI/UUID
-                        else:
-                            pass  # No response
-            except Exception as e:
-                import traceback
+                traceback.print_exc()
 
 
     def remove_empty_values(self, data: dict) -> dict:
@@ -1375,7 +1412,8 @@ class CallHandler:
         
         print(f"DEBUG - Agent timezone: {self.agents[call_id]['timezone']}")
 
-        
+        self.agents[call_id]['appointment'] = api_response['data']['appointment']
+        print(f"xxxxDEBUGxxxxx - Appointment data: {self.agents[call_id]['appointment']}")
         # Add user preference for allowing meeting conflicts
         if 'userPreference' in api_response['data'] and 'allowMeetingConflict' in api_response['data']['userPreference']:
             self.agents[call_id]['allowMeetingConflict'] = api_response['data']['userPreference']['allowMeetingConflict']
@@ -1384,6 +1422,7 @@ class CallHandler:
 
         if 'appointment' in api_response['data'] and 'eventId' in api_response['data']['appointment']:
             self.agents[call_id]['event_id'] = api_response['data']['appointment']['eventId']
+    
 
         self.agents[call_id]['integrations'] = {
                 "hubspot_connection_id": None,
@@ -1837,7 +1876,6 @@ class CallHandler:
                                     'end': end_datetime,
                                     'formatted_time': formatted_time
                                 })
-                                print(f"Google Calendar - Added future appointment: {formatted_time}")
                     
                     # Set existing_appointment with formatted times
                     if appointment_times:
@@ -1872,19 +1910,12 @@ class CallHandler:
                 
         # Check for Outlook calendar events
         if self.agents[call_sid]['integrations'].get('outlook_connection_id'):
-            # Check if there are any scheduled events for this user in Outlook Calendar
-            print(f"Outlook Calendar connection ID: {self.agents[call_sid]['integrations']['outlook_connection_id']}")
 
             try:
-                # Get events directly, NangoService's fetch_data for outlook events
-                # will typically fetch from the default calendar if no calendar_id is specified.
-                print(f"Fetching events from default Outlook calendar")
                 events_result = await self.outlook_calendar_service.get_events(
                     self.agents[call_sid]['integrations']['outlook_connection_id']
                 )
                 # print("=== OUTLOOK CALENDAR EVENTS ===", json.dumps(events_result, indent=2))
-                # # Display events in a well-formatted way
-                # print("\n=== OUTLOOK CALENDAR EVENTS ===")
                 events_collection = []
                 
                 if events_result and 'records' in events_result:
@@ -1896,39 +1927,27 @@ class CallHandler:
                     
                     # Get user's timezone
                     user_timezone = self.agents[call_sid].get('timezone', 'UTC')
-                    # print(f"Using user timezone: {user_timezone}")
                     
                     for event in events_collection:
-                        print(f"\nEvent:")
-                        print(f"  Subject: {event.get('subject', 'N/A')}")
-                        
+                       
                         start_datetime = None
                         end_datetime = None
                         
                         if 'start' in event:
                             start = event['start'].get('dateTime', 'N/A')
                             timezone = event['start'].get('timeZone', 'N/A')
-                            print(f"  Start: {start} ({timezone})")
                             if start != 'N/A':
                                 start_datetime = start
                             
                         if 'end' in event:
                             end = event['end'].get('dateTime', 'N/A')
                             timezone = event['end'].get('timeZone', 'N/A')
-                            print(f"  End: {end} ({timezone})")
                             if end != 'N/A':
                                 end_datetime = end
                         
                         # Check if this is a future appointment using user's timezone
                         is_future = start_datetime and is_future_datetime(start_datetime, user_timezone_str=user_timezone)
                         is_cancelled = event.get('isCancelled', False)
-                        
-                        # print(f"  Location: {event.get('location', {}).get('displayName', 'N/A')}")
-                        # print(f"  Status: {event.get('showAs', 'N/A')}")
-                        # print(f"  Is Future (in {user_timezone}): {is_future}")
-                        # print(f"  Is Cancelled: {is_cancelled}")
-                        
-                        # Only include future appointments that are not cancelled
                         if start_datetime and is_future and not is_cancelled:
                             # Format time in user's timezone
                             formatted_time = format_datetime_range_human_readable(
@@ -1944,21 +1963,11 @@ class CallHandler:
                                     'end': end_datetime,
                                     'formatted_time': formatted_time
                                 })
-                                print(f"  ✓ Added future appointment: {formatted_time}")
                             else:
-                                print(f"  ✗ Skipped - invalid formatted time")
+                                pass
                         else:
-                            if not start_datetime:
-                                print(f"  ✗ Skipped - no start time")
-                            elif not is_future:
-                                print(f"  ✗ Skipped - past appointment")
-                            elif is_cancelled:
-                                print(f"  ✗ Skipped - cancelled appointment")
-                        
-                    # print("===============================\n")
-                    # print(f"Found {len(future_events)} future events in {user_timezone}")
-                    
-                    # Set existing_appointment with formatted times
+                            pass
+                                           
                     if appointment_times:
                         # Remove duplicates while preserving order
                         unique_appointment_times = []

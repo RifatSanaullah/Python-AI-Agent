@@ -15,6 +15,28 @@ CINC_API_BASE_URL = "https://public.cincapi.com/v2"
 
 _backend_handler = BackendHandler()
 
+# Token cache to avoid database hits on every request
+_token_cache = {}
+
+def _get_cache_key(account_id: int, connection_id: Optional[str] = None) -> str:
+    """Generate cache key for token storage"""
+    return f"{account_id}_{connection_id or 'default'}"
+
+def _is_token_expired(token_data: Dict[str, Any]) -> bool:
+    """Check if cached token is expired"""
+    try:
+        cached_at = token_data.get("_cached_at")
+        expires_in = token_data.get("expires_in")
+        
+        if not cached_at or not expires_in:
+            return True
+            
+        # Add some buffer time (30 seconds) before actual expiration
+        expiration_time = cached_at + timedelta(seconds=int(expires_in) - 30)
+        return datetime.now(timezone.utc) >= expiration_time
+    except Exception:
+        return True
+
 async def store_cinc_tokens(account_id: int, token_data: Dict[str, Any]):
     payload = {
         "account_id": account_id,
@@ -28,15 +50,40 @@ async def store_cinc_tokens(account_id: int, token_data: Dict[str, Any]):
 
     try:
         await _backend_handler.store_cinc_token_in_db(account_id=account_id, token_data=payload)
+        
+        # Cache the token after successful storage
+        cache_key = _get_cache_key(account_id, token_data.get("connection_id"))
+        cached_token = payload.copy()
+        cached_token["_cached_at"] = datetime.now(timezone.utc)
+        _token_cache[cache_key] = cached_token
+        
     except HTTPException as e:
         raise e
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to store CINC token via backend: {str(e)}")
 
 async def get_cinc_tokens(account_id: int, connection_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    # Check cache first
+    cache_key = _get_cache_key(account_id, connection_id)
+    
+    if cache_key in _token_cache:
+        cached_token = _token_cache[cache_key]
+        if not _is_token_expired(cached_token):
+            return cached_token
+        else:
+            # Remove expired token from cache
+            del _token_cache[cache_key]
+    
     try:
         # Use connection_id if provided, otherwise fall back to account_id for lookup
         token_data = await _backend_handler.get_cinc_token_from_db(account_id, connection_id=connection_id)
+        
+        # Cache the token if found
+        if token_data:
+            cached_token = token_data.copy()
+            cached_token["_cached_at"] = datetime.now(timezone.utc)
+            _token_cache[cache_key] = cached_token
+            
         return token_data
     except HTTPException as e:
         # Log or handle the exception from the backend service call
@@ -52,6 +99,12 @@ async def get_cinc_tokens(account_id: int, connection_id: Optional[str] = None) 
 async def delete_cinc_tokens(account_id: int, connection_id: Optional[str] = None):
     try:
         await _backend_handler.delete_cinc_token_from_db(account_id, connection_id=connection_id)
+        
+        # Remove from cache as well
+        cache_key = _get_cache_key(account_id, connection_id)
+        if cache_key in _token_cache:
+            del _token_cache[cache_key]
+            
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -269,51 +322,19 @@ async def _make_cinc_request(method: str, endpoint: str, account_id: int, connec
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to make CINC API request.")
 
-async def get_leads(account_id: int, connection_id: Optional[str] = None, next_page: Optional[str] = None, from_lead_id: Optional[str] = None, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+async def get_leads(account_id: int, connection_id: Optional[str] = None, phone: Optional[str] = None) -> Dict[str, Any]:
+    """Fetches leads from the CINC API, optionally filtering by phone."""
     endpoint = "/site/leads"
     query_params = {}
-    if next_page:
-        query_params["next"] = next_page
-    if from_lead_id:
-        query_params["from"] = f"id:{from_lead_id}"
+    if phone:
+        query_params['info.contact.phone_numbers.cell_phone'] = phone
     
-    # Add search parameters if provided
-    if params:
-        query_params.update(params)
-    
-    # Get raw response from CINC API
     response = await _make_cinc_request("GET", endpoint, account_id, connection_id=connection_id, params=query_params)
     
-    # Handle response structure - CINC API wraps data in "body"
-    leads_data = response
     if isinstance(response, dict) and "body" in response:
-        leads_data = response["body"]
-    
-    # Filter out trash leads from the response
-    if leads_data and 'leads' in leads_data:
-        filtered_leads = []
-        trash_count = 0
-        
-        for lead in leads_data['leads']:
-            lead_status = lead.get('info', {}).get('status', '').lower()
-            if lead_status == 'trash':
-                trash_count += 1
-                continue
-            filtered_leads.append(lead)
-        
-        # Update the response with filtered leads
-        leads_data['leads'] = filtered_leads
-        
-        # Update count if available
-        if 'paging' in leads_data and 'count' in leads_data['paging']:
-            leads_data['paging']['count'] = len(filtered_leads)
-    
-    # Return the full response structure to maintain compatibility
-    if isinstance(response, dict) and "body" in response:
-        response["body"] = leads_data
-        return response
-    else:
-        return leads_data
+        return response["body"]
+    print("ooooooool",response)
+    return response
 
 async def get_lead_details(account_id: int, lead_id: str, connection_id: Optional[str] = None, fields: Optional[List[str]] = None) -> Dict[str, Any]:    
     endpoint = f"/site/leads/{lead_id}"
@@ -592,75 +613,44 @@ async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optiona
         # Clean phone number to match different formats
         clean_phone = ''.join(filter(str.isdigit, phone))
         
-        # For testing purposes, use a placeholder phone when invalid phone is passed
-
         if len(clean_phone) == 11 and clean_phone.startswith('1'):
             clean_phone = clean_phone[1:]  # Remove leading '1'
         elif len(clean_phone) == 10:
             pass  # Already in correct format
-        # else:
-        #     # Invalid phone number format
-        #     clean_phone = "5432126343"
+        else:
+            print(f"Invalid phone number format: {phone}, treating as new call")
+            return []
 
-        # Get leads from CINC (retrieve all leads)
-        leads_response = await get_leads(account_id, connection_id=connection_id)
+        # Get leads from CINC using the actual cleaned phone number
+        leads_response = await get_leads(account_id, connection_id=connection_id, phone=clean_phone)
+        leads_list = leads_response.get("leads", [])
         
-        # Handle response structure - extract leads from body if present
-        leads_list = []
-        if isinstance(leads_response, dict):
-            if "body" in leads_response and "leads" in leads_response["body"]:
-                leads_list = leads_response["body"]["leads"]
-            elif "leads" in leads_response:
-                leads_list = leads_response["leads"]
-        
-        if not leads_list:
+        # Check if we have exactly one match - if not, treat as new call
+        if len(leads_list) == 0:
+            print(f"No leads found for phone number: {clean_phone}, treating as new call")
+            return []
+        elif len(leads_list) > 1:
+            print(f"Multiple leads found for phone number: {clean_phone} (count: {len(leads_list)}), treating as new call")
             return []
         
-        matching_leads = []
-        for lead in leads_list:
-            # Check if lead has contact info with phone numbers
-            if (lead.get('info', {}).get('contact', {}).get('phone_numbers')):
-                phone_numbers = lead['info']['contact']['phone_numbers']
-                
-                # Check cell phone
-                if phone_numbers.get('cell_phone'):
-                    lead_phone = ''.join(filter(str.isdigit, phone_numbers['cell_phone']))
-                    if lead_phone == clean_phone:
-                        # Fetch notes for this matching lead
-                        lead_id = lead.get('id')
-                        if lead_id:
-                            try:
-                                notes = await get_lead_notes_with_content(account_id, lead_id, connection_id=connection_id)
-                                lead['notes'] = notes
-                            except Exception as e:
-                                lead['notes'] = []
-                        else:
-                            lead['notes'] = []
-                        
-                        matching_leads.append(lead)
-                        continue
-                
-                # Check home phone
-                if phone_numbers.get('home_phone'):
-                    lead_phone = ''.join(filter(str.isdigit, phone_numbers['home_phone']))
-                    if lead_phone == clean_phone:
-                        # Fetch notes for this matching lead
-                        lead_id = lead.get('id')
-                        if lead_id:
-                            try:
-                                notes = await get_lead_notes_with_content(account_id, lead_id, connection_id=connection_id)
-                                lead['notes'] = notes
-                            except Exception as e:
-                                lead['notes'] = []
-                        else:
-                            lead['notes'] = []
-                        
-                        matching_leads.append(lead)
-                        continue
-        print("xxxxxxxxxx",matching_leads)
-        return matching_leads
+        # Exactly one lead found - proceed with enriching it
+        lead = leads_list[0]
+        lead_id = lead.get('id')
+        if lead_id:
+            try:
+                # Fetch notes for this lead
+                notes = await get_lead_notes_with_content(account_id, lead_id, connection_id=connection_id)
+                lead['notes'] = notes
+            except Exception as e:
+                print(f"Failed to fetch notes for lead {lead_id}: {e}")
+                lead['notes'] = []
+        else:
+            lead['notes'] = []
+        
+        return [lead]  # Return single lead in a list for consistency
         
     except Exception as e:
+        print(f"Error in get_leads_by_phone: {e}")
         return []
 
 async def get_lead_notes(account_id: int, lead_id: str, connection_id: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -688,25 +678,30 @@ async def get_lead_note_content(account_id: int, note_id: str, connection_id: Op
 
 async def get_lead_notes_with_content(account_id: int, lead_id: str, connection_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Fetch all notes for a lead with their content"""
+    import asyncio
+    
     # First get the notes list (metadata only)
     notes = await get_lead_notes(account_id, lead_id, connection_id=connection_id)
     
-    # Then fetch content for each note
-    notes_with_content = []
-    for note in notes:
+    # Create tasks to fetch all note contents concurrently
+    async def fetch_note_content_safe(note: Dict[str, Any]) -> Dict[str, Any]:
         note_id = note.get('id')
         if note_id:
             try:
                 note_content = await get_lead_note_content(account_id, note_id, connection_id=connection_id)
                 # Use the full note content which includes the content field
                 if note_content:
-                    notes_with_content.append(note_content)
+                    return note_content
                 else:
-                    notes_with_content.append(note)  # Keep note without content
+                    return note  # Keep note without content
             except Exception as e:
-                notes_with_content.append(note)  # Keep note without content
+                return note  # Keep note without content
         else:
-            notes_with_content.append(note)  # Keep note without content
+            return note  # Keep note without content
+    
+    # Execute all note content fetches concurrently
+    tasks = [fetch_note_content_safe(note) for note in notes]
+    notes_with_content = await asyncio.gather(*tasks)
     
     return notes_with_content
 

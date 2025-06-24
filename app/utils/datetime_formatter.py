@@ -164,7 +164,7 @@ def is_future_datetime(datetime_str, timezone_str=None, user_timezone_str=None):
             
             is_future = user_dt > current_user_time_with_buffer
             
-            print(f"    DateTime check (user timezone): {user_dt.isoformat()} > {current_user_time_with_buffer.isoformat()} = {is_future}")
+            # print(f"    DateTime check (user timezone): {user_dt.isoformat()} > {current_user_time_with_buffer.isoformat()} = {is_future}")
             
             return is_future
         else:
