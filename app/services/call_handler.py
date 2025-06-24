@@ -248,21 +248,21 @@ class CallHandler:
                     "previous_convo_summary" : previous_convo_summary,
                 }
 
-                # try:
-                #     response = await self.backend_service.update_conversation_info(data)
-                #     isBoom = self.agents[call_id]['isBoom']
-                #     print("isBoom" , isBoom)
-                #     if isBoom is not None or isBoom == True or isBoom == 'true':
-                #         await self.backend_service.update_conversation_bh({ "lead_id" : lead_id, "conversations": data['conversations']})
-                #     else:
-                #         if 'summary' in response:
-                #             summary = response['summary']
-                #             await self.update_crm_data(call_id, data['lead_id'], data['integrations'], summary, response['appointment'], data['event_id'], data['previous_convo_summary'])
-                # except Exception as e:
-                #     print(f"Error updating conversation info: {str(e)}")
-                #     # Log the full exception traceback
-                #     import traceback
-                #     print(traceback.format_exc())
+                try:
+                    response = await self.backend_service.update_conversation_info(data)
+                    isBoom = self.agents[call_id]['isBoom']
+                    print("isBoom" , isBoom)
+                    if isBoom is not None or isBoom == True or isBoom == 'true':
+                        await self.backend_service.update_conversation_bh({ "lead_id" : lead_id, "conversations": data['conversations']})
+                    else:
+                        if 'summary' in response:
+                            summary = response['summary']
+                            await self.update_crm_data(call_id, data['lead_id'], data['integrations'], summary, response['appointment'], data['event_id'], data['previous_convo_summary'])
+                except Exception as e:
+                    print(f"Error updating conversation info: {str(e)}")
+                    # Log the full exception traceback
+                    import traceback
+                    print(traceback.format_exc())
 
 
                 self.ai_service.close_conversation(session['stream_sid'])
