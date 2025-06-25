@@ -83,12 +83,8 @@ class GoogleCalendarService(NangoService):
         logger.info(f"Updating Google Calendar event {event_id} with connection_id: {connection_id}")
         try:
             # This action should be configured in Nango to PATCH /calendars/primary/events/{eventId}
-            endpoint = "update-event"
-            full_payload = {
-                "eventId": event_id,
-                "fields": payload
-            }
-            result = await self.post_data(connection_id, endpoint, full_payload, 'google-calendar')
+            endpoint = f"update-event"
+            result = await self.patch_data(connection_id, endpoint, event_id, payload, 'google-calendar')
             logger.info(f"Successfully updated Google Calendar event {event_id}")
             return result
         except Exception as e:
@@ -102,9 +98,8 @@ class GoogleCalendarService(NangoService):
         logger.info(f"Deleting Google Calendar event {event_id} with connection_id: {connection_id}")
         try:
             # This action should be configured in Nango to DELETE /calendars/primary/events/{eventId}
-            endpoint = "delete-event"
-            payload = {"eventId": event_id}
-            await self.post_data(connection_id, endpoint, payload, 'google-calendar')
+            endpoint = f"delete-event/{event_id}"
+            await self.delete_data(connection_id, endpoint, 'google-calendar')
             logger.info(f"Successfully deleted Google Calendar event {event_id}")
         except Exception as e:
             logger.error(f"Error deleting Google Calendar event {event_id}: {str(e)}")
