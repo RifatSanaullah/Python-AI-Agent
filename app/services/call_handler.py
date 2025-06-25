@@ -251,6 +251,7 @@ class CallHandler:
                 try:
                     response = await self.backend_service.update_conversation_info(data)
                     isBoom = self.agents[call_id]['isBoom']
+                    print("summary", response.get('summary'))
                     print("isBoom" , isBoom)
                     if isBoom is not None or isBoom == True or isBoom == 'true':
                         await self.backend_service.update_conversation_bh({ "lead_id" : lead_id, "conversations": data['conversations']})
@@ -284,7 +285,7 @@ class CallHandler:
         # Log the integrations dictionary
         logging.info(f"Integrations for call {call_id}: {integrations}")
         event = appointment.get('eventData') if appointment else None
-        
+        calendarEventData = appointment.get('calendarEventData') if appointment else None
         # Get session info to extract account_id and connection_id for CINC
         session_info = self.get_business_agent(call_id)
         account_id = session_info.get("account_id") # This should be the account ID from the database
@@ -912,17 +913,17 @@ class CallHandler:
         # Google Calendar Event Handling
         if integrations and integrations.get("google_calendar_connection_id") and integrations["google_calendar_connection_id"] != '':
             try:
-                if event is not None and event != '':
+                if calendarEventData is not None and calendarEventData != '':
                     google_event_payload = {
-                        "summary": event.get("Subject"),
-                        "description": event.get("Description"),
+                        "summary": calendarEventData.get("subject"),
+                        "description": calendarEventData.get("description"),
                         "start": {
-                            "dateTime": event.get("StartDateTime"),
-                            "timeZone": event.get("timezone"),
+                            "dateTime": calendarEventData.get("originalStartDateTime"),
+                            "timeZone": calendarEventData.get("timezone"),
                         },
                         "end": {
-                            "dateTime": event.get("EndDateTime"),
-                            "timeZone": event.get("timezone") 
+                            "dateTime": calendarEventData.get("originalEndDateTime"),
+                            "timeZone": calendarEventData.get("timezone") 
                         }
                     }
 
@@ -955,15 +956,15 @@ class CallHandler:
                             
                             # For updates, only send the fields that are changing (start and end time)
                             update_payload = {}
-                            if event.get("StartDateTime"):
+                            if calendarEventData.get("originalStartDateTime"):
                                 update_payload["start"] = {
-                                    "dateTime": event.get("StartDateTime"),
-                                    "timeZone": event.get("timezone")
+                                    "dateTime": calendarEventData.get("originalStartDateTime"),
+                                    "timeZone": calendarEventData.get("timezone")
                                 }
-                            if event.get("EndDateTime"):
+                            if calendarEventData.get("originalEndDateTime"):
                                 update_payload["end"] = {
-                                    "dateTime": event.get("EndDateTime"),
-                                    "timeZone": event.get("timezone")
+                                    "dateTime": calendarEventData.get("originalEndDateTime"),
+                                    "timeZone": calendarEventData.get("timezone")
                                 }
                             
                             # Only update if we have start/end times to update
@@ -1003,7 +1004,7 @@ class CallHandler:
         # Outlook Calendar Event Handling
         if integrations and integrations.get("outlook_connection_id") and integrations["outlook_connection_id"] != '':
             try:
-                if event is not None and event != '':
+                if calendarEventData is not None and calendarEventData != '':
                     # Prepare attendees list
                     outlook_attendees = []
                     contact_email_outlook = None
@@ -1017,11 +1018,11 @@ class CallHandler:
                     
                     # Transform event data to the format expected by the Nango script's 'fields'
                     outlook_event_payload = {
-                        "subject": event.get("Subject"),
-                        "description": event.get("Description"),
-                        "startDateTime": event.get("StartDateTime"), # Expected as ISO 8601 string
-                        "endDateTime": event.get("EndDateTime"),     # Expected as ISO 8601 string
-                        "timeZone": event.get("timezone"), # Default if not in event
+                        "subject": calendarEventData.get("subject"),
+                        "description": calendarEventData.get("description"),
+                        "startDateTime": calendarEventData.get("originalStartDateTime"), # Expected as ISO 8601 string
+                        "endDateTime": calendarEventData.get("originalEndDateTime"),     # Expected as ISO 8601 string
+                        "timeZone": calendarEventData.get("timezone"), # Default if not in event
                         "attendees": outlook_attendees # List of email strings
                         # Add other fields like 'location' if your Nango script handles them
                     }
@@ -1058,12 +1059,12 @@ class CallHandler:
                                 
                                 # For updates, only send the fields that are changing (start and end time)
                                 update_payload = {}
-                                if event.get("StartDateTime"):
-                                    update_payload["startDateTime"] = event.get("StartDateTime")
-                                if event.get("EndDateTime"):
-                                    update_payload["endDateTime"] = event.get("EndDateTime")
-                                if event.get("timezone"):
-                                    update_payload["timeZone"] = event.get("timezone")
+                                if calendarEventData.get("StartDateTime"):
+                                    update_payload["startDateTime"] = calendarEventData.get("StartDateTime")
+                                if calendarEventData.get("EndDateTime"):
+                                    update_payload["endDateTime"] = calendarEventData.get("EndDateTime")
+                                if calendarEventData.get("timezone"):
+                                    update_payload["timeZone"] = calendarEventData.get("timezone")
                                 
                                 # Only update if we have start/end times to update
                                 if update_payload.get("startDateTime") or update_payload.get("endDateTime"):
