@@ -4,15 +4,16 @@ import io, threading, asyncio
 import re # Add this import at the top of the file
 
 class AzureService:
-    def __init__(self, voice: str = "en-US-AriaNeural"):
+    def __init__(self, loop = None):
         self.speech_key = settings.azure_key
         self.region = settings.azure_region
-        self.voice = voice
+        self.voice = "en-US-AriaNeural"
         self.queue_audio = {}
         self.speech_synthesizer = None
         self.tts_task = None
         self.tts_request = None
         self._receiver_thread = None
+        self.loop = loop
         # Initialize Azure Speech config
         self.speech_config = speechsdk.SpeechConfig(
             endpoint=f"wss://{settings.azure_region}.tts.speech.microsoft.com/cognitiveservices/websocket/v2",
@@ -66,12 +67,19 @@ class AzureService:
         # self._exit = threading.Event()
         # print("Synthesiser Start")
         
-    def synthesizing_callback(evt: speechsdk.SpeechSynthesisEventArgs):
-        # This callback provides intermediate audio data
-        if evt.result.audio_data:
-            # print(f"Azure TTS Synthesizing Audio Data received: {len(evt.result.audio_data)} bytes") # Debugging
-            audio_chunk_queue.put(evt.result.audio_data)
 
+    def _synthesis_completed_callback(self, evt: speechsdk.SpeechSynthesisEventArgs):
+        # This indicates that the current text written to the input stream has been processed.
+        # It doesn't mean no more audio will come, just that what was fed is done.
+        # print("Speech synthesis completed for current input stream.")
+        # You might set a flag here if you need to know when all current queued text is done.
+        if evt.result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:  
+            asyncio.run_coroutine_threadsafe(
+                    self.queue_audio['queue_audio'](self.queue_audio['call_id'],evt.result.audio_data),
+                    self.loop
+                )
+        print("Speech synthesis completed.")
+        
     async def establish_connection(self, voice:str, call_id, queue_audio):
         self.speech_config.speech_synthesis_voice_name = voice
 
@@ -83,10 +91,10 @@ class AzureService:
 
         self.speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=self.speech_config, audio_config=None)
         # self.speech_synthesizer.synthesizing.connect(lambda evt: print("[audio]", end=""))
-        # self.speech_synthesizer.synthesis_completed.connect(lambda evt: print("Speech synthesis completed."))
-        # self.speech_synthesizer.synthesis_canceled.connect(
-        #     lambda evt: print(f"Speech synthesis canceled: {evt.result.cancellation_details.error_details}")
-        # )
+        self.speech_synthesizer.synthesis_completed.connect(self._synthesis_completed_callback)
+        self.speech_synthesizer.synthesis_canceled.connect(
+            lambda evt: print(f"Speech synthesis canceled: {evt.result.cancellation_details.error_details}")
+        )
         await self.start_synthesiser()
         # self._exit = threading.Event()
         print("Established Connection")
@@ -195,7 +203,7 @@ class AzureService:
         if self.tts_request is not None:
             self.tts_request.input_stream.close()
         if self.tts_task:
-                await self.get_tts_data()
+                # await self.get_tts_data()
                 await self.start_synthesiser()
         return
     
