@@ -36,10 +36,11 @@ class DeepgramService:
             encoding='mulaw',
             sample_rate=8000,
             smart_format=True,
-            # vad_events=True,
+            vad_events=True,
             utterance_end_ms="1000",
             interim_results=True,
-            endpointing=700,
+            endpointing=400,  # Much shorter silence detection
+            filler_words=False,  # Can help with speed
             # Time in milliseconds of silence to wait for before finalizing speech
             )
         self.speakOptions = SpeakWSOptions(
@@ -164,6 +165,7 @@ class DeepgramService:
         if sentence:
             self.cancel_transmit()
             await self.on_start()
+            print("Transcript: ", sentence, "is_final: ", is_final)
             if is_final and sentence.strip():
                 print("sentence: ", sentence)
                 self.complete_sentence += ' ' + sentence.strip()

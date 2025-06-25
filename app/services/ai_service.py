@@ -462,7 +462,13 @@ class AIService:
             post_prefix_mode = False
             post_prefix_text = ""
             for chunk in response:
+                if self.ai_interrupt[conversation_id]:
+                    print("AI interrupted, stopping response generation.")
+                    break
                 if chunk.choices and chunk.choices[0].delta:
+                    if self.ai_interrupt[conversation_id]:
+                        print("AI interrupted, stopping response generation.")
+                        break
                     delta = chunk.choices[0].delta
                     if delta.content:
                         val = delta.content
