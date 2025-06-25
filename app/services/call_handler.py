@@ -246,6 +246,7 @@ class CallHandler:
                     "integrations" : self.agents[call_id]['integrations'],
                     "event_id" : event_id,
                     "previous_convo_summary" : previous_convo_summary,
+                    "lead_appointment_id": self.agents[call_id].get('lead_appointment_id', None),
                 }
 
                 try:
@@ -1436,14 +1437,19 @@ class CallHandler:
 
         self.agents[call_id]['appointment'] = api_response['data']['appointment']
         print(f"xxxxDEBUGxxxxx - Appointment data: {self.agents[call_id]['appointment']}")
-        google_cal_endar_event_id = api_response['data']['appointment'].get('googleCalendarEventId')
-        outlook_cal_endar_event_id = api_response['data']['appointment'].get('outlookCalendarEventId')
-        print(f"xxxxDEBUGxxxxx - Google Calendar Event ID: {google_cal_endar_event_id}")
-        print(f"xxxxDEBUGxxxxx - Outlook Calendar Event ID: {outlook_cal_endar_event_id}")
-        
+        # Extract and store calendar event IDs from the backend response, if available
+        appointment_data = api_response['data'].get('appointment', {})
+        google_calendar_event_id = appointment_data.get('googleCalendarEventId')
+        outlook_calendar_event_id = appointment_data.get('outlookCalendarEventId')
+        lead_appointment_id = appointment_data.get('appointmentId')
+
+        print(f"xxxxDEBUGxxxxx - Google Calendar Event ID: {google_calendar_event_id}")
+        print(f"xxxxDEBUGxxxxx - Outlook Calendar Event ID: {outlook_calendar_event_id}")
+
         # Store these IDs in the agent for easy access later
-        self.agents[call_id]['google_calendar_event_id'] = google_cal_endar_event_id
-        self.agents[call_id]['outlook_calendar_event_id'] = outlook_cal_endar_event_id
+        self.agents[call_id]['google_calendar_event_id'] = google_calendar_event_id
+        self.agents[call_id]['outlook_calendar_event_id'] = outlook_calendar_event_id
+        self.agents[call_id]['lead_appointment_id'] = lead_appointment_id
         # Add user preference for allowing meeting conflicts
         if 'userPreference' in api_response['data'] and 'allowMeetingConflict' in api_response['data']['userPreference']:
             self.agents[call_id]['allowMeetingConflict'] = api_response['data']['userPreference']['allowMeetingConflict']
