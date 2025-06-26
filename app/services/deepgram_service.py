@@ -39,7 +39,8 @@ class DeepgramService:
             # vad_events=True,
             utterance_end_ms="1000",
             interim_results=True,
-            endpointing=700,
+            endpointing=400,  # Much shorter silence detection
+            filler_words=False,  # Can help with speed
             # Time in milliseconds of silence to wait for before finalizing speech
             )
         self.speakOptions = SpeakWSOptions(
@@ -47,7 +48,7 @@ class DeepgramService:
                 encoding='mulaw',
                 sample_rate=8000,
             )
-        self._exit = threading.Event()
+        # self._exit = threading.Event()
         self.dg_connection = None
         self.sp_dg_connection = None
         self.queue_audio = {}
@@ -57,7 +58,7 @@ class DeepgramService:
     def is_sentence_complete(self, sentence):
         return bool(re.search(r'[.!?]$', sentence.strip()))
 
-    async def stream_text_to_speech(self, text: str , model, call_id, queue_audio):
+    async def stream_text_to_speech(self, text: str, call_id, queue_audio):
         try:
             # options = SpeakOptions(
             #     model= model,
@@ -77,18 +78,22 @@ class DeepgramService:
             print(f"An error occurred: {e}")
             raise
 
-    async def establish_dg_connection(self):
+
+    async def establish_dg_connection(self , model = "nova-3"):
         print("Establishing Deepgram Connection....")
         if self.dg_connection:
             await self.dg_connection.finish()
-        if self.sp_dg_connection:
-            await self.sp_dg_connection.finish()
         self.dg_connection = self.deepgram.listen.asyncwebsocket.v("1")
         self.dg_connection.on(LiveTranscriptionEvents.Open, self.on_open)
-
+        self.transcribeOptions['model'] = model
         await self.dg_connection.start(options=self.transcribeOptions)
         await self.dg_connection.keep_alive()
 
+    async def establish_sp_connection(self, model = "aura-2-thalia-en"):
+        print("Establishing Speak Connection....")
+        if self.sp_dg_connection:
+            await self.sp_dg_connection.finish()
+        self.speakOptions['model'] = model
         self.sp_dg_connection = self.deepgram.speak.asyncwebsocket.v("1")
         self.sp_dg_connection.on(SpeakWebSocketEvents.Open, self.on_sp_open)
 
@@ -138,14 +143,14 @@ class DeepgramService:
     async def transmit_after_delay(self):
         try:
             if self.is_sentence_complete(self.complete_sentence):
-                await asyncio.sleep(0.6)  # Wait for more speech
+                await asyncio.sleep(0.2)  # Wait for more speech
             else:
-                await asyncio.sleep(1)  # Wait for more speech
-
+                await asyncio.sleep(0.4)  # Wait for more speech
             # with self.lock:
             if self.on_transcript and self.complete_sentence.strip():
-                await self.on_transcript(self.complete_sentence.strip())
+                sentence = self.complete_sentence
                 self.complete_sentence = ''
+                await self.on_transcript(sentence.strip())
             self.transmit_task = None
         except asyncio.CancelledError:
             # Canceled because more speech came in
@@ -159,21 +164,19 @@ class DeepgramService:
         if sentence:
             self.cancel_transmit()
             await self.on_start()
+            print("Transcript: ", sentence, "is_final: ", is_final)
             if is_final and sentence.strip():
                 print("sentence: ", sentence)
                 self.complete_sentence += ' ' + sentence.strip()
                 # with self.lock:
 
                 # Schedule new task: wait 2 seconds, then emit final transcript
-                self.transmit_task = asyncio.run_coroutine_threadsafe(
-                    self.transmit_after_delay(),
-                    self.loop
-                )
+                self.transmit_task = asyncio.create_task(self.transmit_after_delay())
                 print('Final' , self.complete_sentence)
 
 
     def cancel_transmit(self):
-        if self.transmit_task:
+         if self.transmit_task and not self.transmit_task.done():
             self.transmit_task.cancel()
 
     async def on_started(self, message, **kwargs):
@@ -192,5 +195,7 @@ class DeepgramService:
         print("Closing Session", kwargs)
     
     async def disconnect(self):
-        await self.dg_connection.finish()
-        await self.sp_dg_connection.finish()
+        if self.dg_connection:
+            await self.dg_connection.finish()
+        if self.sp_dg_connection:
+            await self.sp_dg_connection.finish()

@@ -21,7 +21,7 @@ class TranscribeService:
         )
         self.transcriber.connect()
 
-    def close(self):
+    async def disconnect(self):
         if self.transcriber:
             self.transcriber.close()
             self.transcriber = None

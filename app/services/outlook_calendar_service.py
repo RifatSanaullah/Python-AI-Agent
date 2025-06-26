@@ -16,8 +16,8 @@ class OutlookCalendarService(NangoService):
     async def get_events(self, connection_id: str, calendar_id: Optional[str] = None, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         logger.info(f"Fetching Outlook calendar events with connection_id: {connection_id}")
         try:
-            result = await self.fetch_data(connection_id, "events", params, 'outlook')
-            logger.info(f"Successfully fetched Outlook calendar events")
+            result = await self.post_data(connection_id, "get-events", params, 'outlook')
+            logger.info(f"Successfully fetched Outlook calendar events",result)
             return result
         except Exception as e:
             logger.error(f"Error fetching Outlook calendar events: {str(e)}")
@@ -52,4 +52,32 @@ class OutlookCalendarService(NangoService):
             return result
         except Exception as e:
             logger.error(f"Error creating Outlook calendar event: {str(e)}. Payload was: {json.dumps(payload, indent=2)}")
+            raise
+    
+    async def update_event(self, connection_id: str, event_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Updates an existing event in Outlook Calendar.
+        """
+        logger.info(f"Updating Outlook event {event_id} with connection_id: {connection_id}")
+        try:
+            # This action should be configured in Nango to PATCH /me/events/{eventId}
+            endpoint = f"update-event"
+            result = await self.patch_data(connection_id, endpoint, event_id, payload, 'outlook')
+            logger.info(f"Successfully updated Outlook event {event_id}")
+            return result
+        except Exception as e:
+            logger.error(f"Error updating Outlook event {event_id}: {str(e)}")
+            raise
+
+    async def delete_event(self, connection_id: str, event_id: str) -> None:
+        """
+        Deletes an event from Outlook Calendar.
+        """
+        logger.info(f"Deleting Outlook event {event_id} with connection_id: {connection_id}")
+        try:
+            endpoint = f"delete-event/{event_id}"
+            await self.delete_data(connection_id, endpoint, 'outlook')
+            logger.info(f"Successfully deleted Outlook event {event_id}")
+        except Exception as e:
+            logger.error(f"Error deleting Outlook event {event_id}: {str(e)}")
             raise

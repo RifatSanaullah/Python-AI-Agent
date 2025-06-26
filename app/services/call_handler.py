@@ -1,14 +1,22 @@
 import base64
+import audioop
+import asyncio
+import logging
+import time
+import numpy as np
 from sqlalchemy.orm import Session
-# from app.services.playht_service import PlayHT
+from app.services.playht_service import PlayHT
 from app.services.twilio_service import TwilioService
-from app.services.chatgpt_service import ChatGPTService
+from app.services.ai_service import AIService
+# from app.services.ai_service_v2 import AIService
 from app.services.s3_service import S3Service
 from app.services.backend_service import BackendHandler
 from app.services.polly_service import PollyService
 from app.services.deepgram_service import DeepgramService
 from app.services.assembly_ai_transcribe_service import TranscribeService
 from app.services.elevenlabs_service import ElevenLabsService
+from app.services.azure_service import AzureService
+# from app.services.azure_tts_service import AzureService
 from app.services.zoho_service import ZohoService
 from app.services.hubspot_service import HubSpotService
 from app.services.salesforce_service import SalesforceService
@@ -16,28 +24,27 @@ from app.services.calendly_service import CalendlyService
 from app.services.google_calendar_service import GoogleCalendarService
 from app.services.outlook_calendar_service import OutlookCalendarService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
-import logging
-from datetime import datetime
-from docx import Document
-from PyPDF2 import PdfReader
-from fastapi import UploadFile, WebSocketDisconnect
-import wave
+from datetime import datetime_CAPI
+from app.helpers.utils import get_interrupt_message, convert_mulaw_to_wav
 from app.config import settings
 from pydub import AudioSegment
 from threading import Timer
 import numpy as np
-import audioop
-import os
-import asyncio
-import random
+
 from io import BytesIO
 import numpy as np
 import soundfile as sf
 import time , re
 import traceback
 from app.utils.responseformat import hubspot_patch_format
-from app.utils.datetime_formatter import format_datetime_human_readable, format_datetime_range_human_readable, is_future_datetime
-import json
+from app.utils.datetime_formatter import format_datetime_human_readable, format_datetime_range_human_readable, is_future_datetime, sort_and_group_appointments
+import json, asyncio
+from app.services import cinc_service as cinc_service_module # Added CINC service module
+from typing import Dict, Any # Ensure Dict and Any are imported for type hinting
+
+from app.adapters.filler_manager import FillerManager
+
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -48,16 +55,19 @@ class CallHandler:
     def __init__(self):
         self.twilio_service = TwilioService()
         self.backend_service = BackendHandler()
-        self.chatgpt_service = ChatGPTService()
+        self.ai_service = AIService()
         self.s3_service = S3Service()
         # self.playht_service = PlayHT()
         self.elevenlabs_service = ElevenLabsService()
+        # self.azure_service = AzureService()
         self.zoho_service = ZohoService()
         self.hubspot_service = HubSpotService()
         self.salesforce_service = SalesforceService()
         self.calendly_service = CalendlyService()
         self.google_calendar_service = GoogleCalendarService()
         self.outlook_calendar_service = OutlookCalendarService()
+        self.filler_mgr = FillerManager()
+        self.cinc_service = cinc_service_module # Initialize CINC Service
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.sessions = {}
         self.agents = {}
@@ -97,7 +107,7 @@ class CallHandler:
     async def process_input(self, call_id, websocket):
         await websocket.accept()
         session = {
-            "deepgram_transcribe_service": None,
+            "synthesis_service": None,
             "transcribe_service": None,
             "ai_interrupt": False,
             "ai_speaking": False,
@@ -125,8 +135,12 @@ class CallHandler:
                     self.sessions[data['streamSid']]['websocket'] = websocket
                     self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
                     session = self.sessions[data['streamSid']]
-                    # session['deepgram_transcribe_service'].establish_dg_connection()
-                    # session['transcribe_service'].connect()
+                    if session['call_initialized'] == False:
+                        await self.process_all_info(data['streamSid'], call_id)
+                        self.sessions[data['streamSid']]['call_initialized'] = True
+                    # if self.agents[data['streamSid']['call_sid']]['STT']['name'] == 'Deepgram':
+                    #     session['transcribe_service'].establish_dg_connection(self.agents[data['streamSid']['call_sid']]['STT']['model'])
+                    # else: session['transcribe_service'].connect()
 
                 if data['streamSid'] not in self.sessions or 'call_sid' not in self.sessions[data['streamSid']]:
                     continue
@@ -135,21 +149,21 @@ class CallHandler:
                 # and self.sessions[data['streamSid']]['last_user_audio_time'] 
                 # and time.time() - self.sessions[data['streamSid']]['last_user_audio_time'] > self.sessions[data['streamSid']]['wait_duration']):
 
-                #     if data['streamSid'] and self.sessions[data['streamSid']]['wait_counter'] >= 2:
-                #         self.sessions[data['streamSid']]['wait_counter'] = 0
-                #         message = self.get_interrupt_message('end_call')
-                #         self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
-                #         await self.synthesize_response(message, data['streamSid'])
-                #         # Schedule the call to end after 2 seconds
-                #         self.clear_timer()
-                #         self.timer = Timer(5, self.twilio_service.hangup_call, args=[self.sessions[data['streamSid']]['call_sid']])
-                #         self.timer.start()
-                #         return
+                    # if data['streamSid'] and self.sessions[data['streamSid']]['wait_counter'] >= 2:
+                    #     self.sessions[data['streamSid']]['wait_counter'] = 0
+                    #     message = get_interrupt_message('end_call')
+                    #     self.ai_service.add_message(data['streamSid'], "assistant", message)
+                    #     await self.synthesize_response(message, data['streamSid'])
+                    #     # Schedule the call to end after 2 seconds
+                    #     self.clear_timer()
+                    #     self.timer = Timer(5, self.twilio_service.hangup_call, args=[self.sessions[data['streamSid']]['call_sid']])
+                    #     self.timer.start()
+                    #     return
                     
-                #     message = self.get_interrupt_message()
-                #     self.chatgpt_service.add_message(data['streamSid'], "assistant", message)
-                #     await self.synthesize_response(message, data['streamSid'])
-                #     self.sessions[data['streamSid']]['wait_counter'] += 1
+                    # message = get_interrupt_message()
+                    # self.ai_service.add_message(data['streamSid'], "assistant", message)
+                    # await self.synthesize_response(message, data['streamSid'])
+                    # self.sessions[data['streamSid']]['wait_counter'] += 1
 
                 if data["event"] == "media":
                     media = data["media"]
@@ -185,29 +199,36 @@ class CallHandler:
                     # await self.twilio_service.send_control_command(session['websocket'], 'stop')
                     if self.sessions[data['streamSid']]['background_sound'] is True:
                         await self.stop_stream(data['streamSid'])
-                    session['ai_speaking'] = True
+                    # session['ai_speaking'] = True
                     with open(output_file, "ab") as f:
                         f.write(response_audio)
 
                 if data['streamSid'] and not self.twilio_service.is_empty(data['streamSid'], 'audio_buffer'):
                     audio_data = await self.twilio_service.get_or_dequeue_audio(data['streamSid'], 'audio_buffer')
                     # await self.transcribe_service.transcribe(audio_data)
-                    await session['deepgram_transcribe_service'].transcribe(audio_data)
-                    # await session['transcribe_service'].transcribe(audio_data)
+                    # await session['synthesis_service'].transcribe(audio_data)
+                    await session['transcribe_service'].transcribe(audio_data)
 
         except ConnectionClosedError as e:
             print(f"Connection closed with error: {e.code} - {e.reason}")
+            if session.get('synthesis_service') is not None:
+                await session['synthesis_service'].disconnect()
+            if session.get('transcribe_service') is not None:
+                await session['transcribe_service'].disconnect()  # Close the transcriber service
+                    
         except ConnectionClosedOK as e:
             print(f"Connection closed normally: {e.code} - {e.reason}")
         except Exception as e:
             print("Unexpected error:", e)
         finally:
             print("WebSocket connection closed.")
-            session['deepgram_transcribe_service'].cancel_transmit()
-            if session['stream_sid'] in self.chatgpt_service.conversations:
-                conversations = self.chatgpt_service.conversations[session['stream_sid']]
+            if self.agents[call_id]['STT']['name'] == 'Deepgram' and session['transcribe_service']:
+                session['transcribe_service'].cancel_transmit()
+            if session['stream_sid'] in self.ai_service.conversations:
+                conversations = self.ai_service.conversations[session['stream_sid']]
+
                 outputFile= f"recordings/{call_id}.wav"
-                await self.convert_mulaw_to_wav(f"recordings/{call_id}.mulaw", outputFile)
+                await convert_mulaw_to_wav(f"recordings/{call_id}.mulaw", outputFile)
                 # os.remove(output_file)
                 recordingUrl = await self.s3_service.uploadToS3(outputFile)
                 agent_id = self.agents[call_id]['id']
@@ -229,11 +250,14 @@ class CallHandler:
                     "integrations" : self.agents[call_id]['integrations'],
                     "event_id" : event_id,
                     "previous_convo_summary" : previous_convo_summary,
+                    "lead_appointment_id": self.agents[call_id].get('lead_appointment_id', None),
                 }
 
                 try:
                     response = await self.backend_service.update_conversation_info(data)
                     isBoom = self.agents[call_id]['isBoom']
+                    print("summary", response.get('summary'))
+                    print("isBoom" , isBoom)
                     if isBoom is not None or isBoom == True or isBoom == 'true':
                         await self.backend_service.update_conversation_bh({ "lead_id" : lead_id, "conversations": data['conversations']})
                     else:
@@ -246,21 +270,505 @@ class CallHandler:
                     import traceback
                     print(traceback.format_exc())
 
-                self.chatgpt_service.close_conversation(session['stream_sid'])
+
+                self.ai_service.close_conversation(session['stream_sid'])
                 self.twilio_service.remove_stream_from_queue(session['stream_sid'])
-                del self.sessions[session['stream_sid']]
                 self.agents[call_id]['websocket_closed'] = True
                 # self.flush_agent(call_id)
-
-            await session['deepgram_transcribe_service'].disconnect()
-            # session['transcribe_service'].close()  # Close the transcriber service
+            if session.get('synthesis_service') is not None:
+                await session['synthesis_service'].disconnect()
+            if session.get('transcribe_service') is not None:
+                await session['transcribe_service'].disconnect()  # Close the transcriber service
+                    
+            del self.sessions[session['stream_sid']]
             try:
                 await websocket.close()
             except Exception as e:
                 print("--Websocket connection Closed--")
     
     async def update_crm_data(self,call_id, lead_id: str, integrations, summary, appointment, prev_event_id, previous_convo_summary):
-        event = appointment['eventData']
+        # Log the integrations dictionary
+        logging.info(f"Integrations for call {call_id}: {integrations}")
+        event = appointment.get('eventData') if appointment else None
+        calendarEventData = appointment.get('calendarEventData') if appointment else None
+        # Get session info to extract account_id and connection_id for CINC
+        session_info = self.get_business_agent(call_id)
+        account_id = session_info.get("account_id") # This should be the account ID from the database
+        cinc_connection_id = session_info.get("integrations", {}).get("cinc_connection_id") # Get CINC specific connection_id
+        
+        print(f"DEBUG - update_crm_data: account_id={account_id}, cinc_connection_id={cinc_connection_id}")
+
+        # CINC Integration
+        # Check if CINC is available by connection_id existence
+        if cinc_connection_id and cinc_connection_id != "null" and cinc_connection_id != "" and account_id:
+            try:
+                logging.info(f"Processing CINC integration for account {account_id} with connection {cinc_connection_id}")
+                
+                # Check if summary has CINC data structure (cincLeadPostFormat or cincLeadPatchFormat)
+                cinc_data = None
+                if summary and isinstance(summary, dict):
+                    # Look for CINC format data in summary
+                    if 'info' in summary and 'contact' in summary['info']:
+                        cinc_data = summary.copy()
+                        
+                        # Handle Description field by converting it to notes array
+                        description = cinc_data.get('Description', '') or cinc_data.get('description', '')
+                        if description and description.strip():
+                            # Remove Description field as it will be converted to notes
+                            cinc_data.pop('Description', None)
+                            cinc_data.pop('description', None)
+                            
+                            # Add notes array with proper structure according to CINC API
+                            cinc_data["notes"] = [{
+                                "content": description,
+                                "category": "general",  # Use "general" category for AI call summaries
+                                "is_pinned": True,
+                                "created_by": session_info.get("agent_id"),  # Optional: add agent ID if available
+                            }]
+                    else:
+                        # If summary doesn't have CINC format, create basic structure
+                        description = summary.get('Description', '') or summary.get('description', '')
+                        cinc_data = {
+                            "info": {
+                                "contact": {
+                                    "email": summary.get('email', ''),
+                                    "first_name": summary.get('first_name', ''),
+                                    "last_name": summary.get('last_name', ''),
+                                    "phone_numbers": {
+                                        "cell_phone": summary.get('phone', '') or summary.get('cell_phone', ''),
+                                        "home_phone": summary.get('home_phone', ''),
+                                    }
+                                },
+                                "is_buyer": summary.get('is_buyer', True),  # Default to buyer for real estate
+                                "is_seller": summary.get('is_seller', False),
+                                "source": summary.get('source', 'AI Call Assistant'),
+                                "status": 'contacted' if lead_id else 'unworked',
+                            },
+                            "pipeline": summary.get('pipeline', {}),
+                            "timezone": summary.get('timezone', 'America/New_York'),
+                        }
+                        
+                        # Add notes array if description exists
+                        if description and description.strip():
+                            cinc_data["notes"] = [{
+                                "content": description,
+                                "category": "general",  # Use "general" category for AI call summaries
+                                "is_pinned": True,
+                                "created_by": session_info.get("agent_id"),  # Optional: add agent ID if available
+                            }]
+                
+                # Ensure required email field is present
+                if not cinc_data or not cinc_data.get('info', {}).get('contact', {}).get('email'):
+                    logging.warning("CINC integration skipped: No email address found in summary")
+                else:
+                    # Determine if we should create or update based on lead_id or email/phone search
+                    should_create_new = True
+                    existing_lead_id = lead_id
+                    
+                    # If no lead_id provided, try to find existing lead by phone or email
+                    if not lead_id or lead_id == "null" or lead_id == "":
+                        try:
+                            email = cinc_data['info']['contact']['email']
+                            phone = cinc_data['info']['contact'].get('phone_numbers', {}).get('cell_phone', '')
+                            
+                            # Try to find existing lead by phone first (if phone available)
+                            if phone:
+                                existing_leads = await self.cinc_service.get_leads(
+                                    account_id=account_id,
+                                    connection_id=cinc_connection_id,
+                                    # Use CINC API search by phone
+                                    params={"info.contact.phone_numbers.cell_phone": phone}
+                                )
+                                if existing_leads and existing_leads.get('body', {}).get('leads'):
+                                    existing_lead_id = existing_leads['body']['leads'][0]['id']
+                                    should_create_new = False
+                                    logging.info(f"Found existing CINC lead by phone: {existing_lead_id}")
+                                    
+                            # If not found by phone, try by email
+                            if should_create_new and email:
+                                existing_leads = await self.cinc_service.get_leads(
+                                    account_id=account_id,
+                                    connection_id=cinc_connection_id,
+                                    # Use CINC API search by email
+                                    params={"info.contact.email": email}
+                                )
+                                if existing_leads and existing_leads.get('body', {}).get('leads'):
+                                    existing_lead_id = existing_leads['body']['leads'][0]['id']
+                                    should_create_new = False
+                                    logging.info(f"Found existing CINC lead by email: {existing_lead_id}")
+                                    
+                        except Exception as search_error:
+                            logging.warning(f"Error searching for existing CINC lead: {search_error}")
+                    else:
+                        should_create_new = False  # We have a lead_id, so update existing
+                    
+                    if not should_create_new and existing_lead_id:
+                        # Update existing lead
+                        logging.info(f"Updating CINC lead {existing_lead_id}")
+                        result = await self.cinc_service.update_lead(
+                            account_id=account_id,
+                            lead_id=existing_lead_id,
+                            lead_data=cinc_data,
+                            connection_id=cinc_connection_id
+                        )
+                        logging.info(f"CINC lead updated successfully: {result}")
+                    else:
+                        # Create new lead
+                        logging.info("Creating new CINC lead")
+                        result = await self.cinc_service.create_lead(
+                            account_id=account_id,
+                            lead_data=cinc_data,
+                            connection_id=cinc_connection_id
+                        )
+                        logging.info(f"CINC lead created successfully: {result}")
+                        
+                        # Extract lead ID from response for future updates
+                        if result and isinstance(result, dict):
+                            new_lead_id = result.get('body', {}).get('id') or result.get('id')
+                            if new_lead_id:
+                                logging.info(f"New CINC lead ID: {new_lead_id}")
+                                
+            except Exception as e:
+                logging.error(f"Error in CINC integration for account {account_id}: {str(e)}")
+                # Continue with other integrations even if CINC fails
+            try:
+                # Prepare lead data for CINC update/create
+                from datetime import datetime, timezone
+                
+                cinc_lead_data = {
+                    "registered_date": datetime.now(timezone.utc).isoformat(),
+                    "created_by": "AI_AGENT",
+                    "info": {
+                        "contact": {},
+                        "source": "AI Call Assistant",
+                        "status": "contacted" if lead_id else "unworked"
+                    }
+                }
+
+                # Check if summary is already in CINC format (from Node.js backend)
+                if summary.get("info") and summary["info"].get("contact"):
+                    # Summary is already in CINC format, use it directly but merge with our defaults
+                    cinc_lead_data.update(summary)
+                    # Ensure required fields have defaults
+                    if not cinc_lead_data.get("registered_date"):
+                        cinc_lead_data["registered_date"] = datetime.now(timezone.utc).isoformat()
+                    if not cinc_lead_data.get("created_by"):
+                        cinc_lead_data["created_by"] = "AI_AGENT"
+                    if not cinc_lead_data["info"].get("source"):
+                        cinc_lead_data["info"]["source"] = "AI Call Assistant"
+                    if not cinc_lead_data["info"].get("status"):
+                        cinc_lead_data["info"]["status"] = "contacted" if lead_id else "unworked"
+                    
+                    # Fix phone number format for CINC (remove +1 prefix, keep just 10 digits)
+                    contact = cinc_lead_data["info"]["contact"]
+                    if contact.get("phone_numbers"):
+                        phone_numbers = contact["phone_numbers"]
+                        for phone_type in ["cell_phone", "home_phone"]:
+                            if phone_numbers.get(phone_type):
+                                phone = phone_numbers[phone_type]
+                                # Convert +11433435421 to 1433435421 (10 digits)
+                                digits = ''.join(filter(str.isdigit, phone))
+                                if len(digits) == 11 and digits.startswith('1'):
+                                    phone_numbers[phone_type] = digits[1:]  # Remove leading '1'
+                                elif len(digits) == 10:
+                                    phone_numbers[phone_type] = digits
+                                # Remove empty phone numbers
+                                if not phone_numbers[phone_type]:
+                                    del phone_numbers[phone_type]
+                else:
+                    # Summary is in flat format, map to CINC format
+                    contact = cinc_lead_data["info"]["contact"]
+                    if summary.get("email"): 
+                        contact["email"] = summary["email"]
+                    if summary.get("first_name"): 
+                        contact["first_name"] = summary["first_name"]
+                    if summary.get("last_name"): 
+                        contact["last_name"] = summary["last_name"]
+                    
+                    # Phone numbers - format for CINC (just 10 digits, no +1)
+                    phone_numbers = {}
+                    if summary.get("phone"): 
+                        phone = summary["phone"]
+                        digits = ''.join(filter(str.isdigit, phone))
+                        if len(digits) == 11 and digits.startswith('1'):
+                            phone_numbers["cell_phone"] = digits[1:]  # Remove leading '1'
+                        elif len(digits) == 10:
+                            phone_numbers["cell_phone"] = digits
+                    if summary.get("home_phone"): 
+                        phone = summary["home_phone"]
+                        digits = ''.join(filter(str.isdigit, phone))
+                        if len(digits) == 11 and digits.startswith('1'):
+                            phone_numbers["home_phone"] = digits[1:]  # Remove leading '1'
+                        elif len(digits) == 10:
+                            phone_numbers["home_phone"] = digits
+                    if phone_numbers: 
+                        contact["phone_numbers"] = phone_numbers
+
+                    # Map other CINC-specific fields from flat format
+                    if summary.get("is_buyer") is not None: 
+                        cinc_lead_data["info"]["is_buyer"] = summary["is_buyer"]
+                    if summary.get("is_seller") is not None: 
+                        cinc_lead_data["info"]["is_seller"] = summary["is_seller"]
+
+                    # Buyer details - Always include buyer object with all expected fields
+                    buyer = {}
+                    buyer["average_price"] = summary.get("average_price", 0)
+                    buyer["favorite_city"] = summary.get("favorite_city", "")
+                    buyer["timeline"] = summary.get("timeline", "")
+                    buyer["is_pre_qualified"] = summary.get("is_pre_qualified", False)
+                    # Always add buyer object for CINC
+                    cinc_lead_data["info"]["buyer"] = buyer
+
+                    # Pipeline stage - Always include pipeline object
+                    cinc_lead_data["pipeline"] = {
+                        "stage": summary.get("pipeline_stage", "")
+                    }
+
+                # Handle notes - Combine all notes into a single comprehensive note for CINC
+                note_parts = []
+                
+                # Add conversation summary if available
+                if summary.get("description") and summary["description"].strip():
+                    note_parts.append(f"Call Summary: {summary['description']}")
+                
+                # Add individual notes from the conversation if they exist in the summary
+                if summary.get("notes") and isinstance(summary["notes"], list):
+                    for note_item in summary["notes"]:
+                        if isinstance(note_item, dict) and note_item.get("content", "").strip():
+                            # Add category prefix if it exists
+                            category = note_item.get("category", "")
+                            content = note_item["content"]
+                            if category and category != "info":
+                                note_parts.append(f"{category.title()}: {content}")
+                            else:
+                                note_parts.append(content)
+                
+                # Add appointment information if exists
+                if appointment and appointment.get("start_time") and appointment.get("end_time"):
+                    appointment_time_str = format_datetime_range_human_readable(
+                        appointment["start_time"], appointment["end_time"]
+                    )
+                    if appointment_time_str.strip():
+                        note_parts.append(f"Appointment: {appointment_time_str}. Details: {appointment.get('summary', 'N/A')}")
+                
+                # Add basic contact info if no other notes exist
+                if not note_parts and (summary.get("first_name") or summary.get("email")):
+                    contact_info = []
+                    if summary.get("first_name"):
+                        contact_info.append(f"Name: {summary.get('first_name', '')} {summary.get('last_name', '')}")
+                    if summary.get("email"):
+                        contact_info.append(f"Email: {summary['email']}")
+                    if summary.get("phone"):
+                        contact_info.append(f"Phone: {summary['phone']}")
+                    
+                    if contact_info:
+                        note_parts.append(f"Contact captured via AI assistant: {', '.join(contact_info)}")
+                
+                # Combine all note parts into a single comprehensive note
+                if note_parts:
+                    combined_content = " | ".join(note_parts)  # Use " | " as separator
+                    cinc_lead_data["notes"] = [{
+                        "content": combined_content,
+                        "category": "call",
+                        "is_pinned": True,
+                        "created_by": "AI_AGENT"
+                    }]
+                
+                # Remove empty/null fields that might cause issues with CINC API
+                # For CINC, we need to be more careful about what we send
+                def clean_for_cinc_update(obj):
+                    """Clean data for CINC API - only include fields with actual values for updates"""
+                    if isinstance(obj, dict):
+                        cleaned = {}
+                        for k, v in obj.items():
+                            if v is None:
+                                continue
+                            elif isinstance(v, str) and v.strip() == "":
+                                # For CINC updates, skip empty strings entirely
+                                continue
+                            elif isinstance(v, dict):
+                                nested_cleaned = clean_for_cinc_update(v)
+                                if nested_cleaned:  # Only add if the dict has content
+                                    cleaned[k] = nested_cleaned
+                            elif isinstance(v, list):
+                                cleaned_list = [clean_for_cinc_update(item) for item in v if item is not None]
+                                if cleaned_list:  # Only add if the list has content
+                                    cleaned[k] = cleaned_list
+                            else:
+                                cleaned[k] = v
+                        return cleaned
+                    elif isinstance(obj, list):
+                        return [clean_for_cinc_update(item) for item in obj if item is not None]
+                    else:
+                        return obj
+                
+                cinc_lead_data = clean_for_cinc_update(cinc_lead_data)
+
+                # Debug: Print the final CINC lead data structure
+                print(f"DEBUG - CINC lead data to be sent: {cinc_lead_data}")
+
+                # Convert account_id to int as required by cinc_service
+                int_account_id = int(account_id)
+
+                if lead_id:
+                    # For CINC updates, we should only send fields that actually changed
+                    # This is more efficient and follows CINC best practices
+                    update_data = {}
+                    
+                    # Only include fields that have meaningful values to update
+                    if cinc_lead_data.get("info"):
+                        info_updates = {}
+                        info = cinc_lead_data["info"]
+                        
+                        # Contact updates (email, name, phone)
+                        if info.get("contact"):
+                            contact_updates = {}
+                            contact = info["contact"]
+                            if contact.get("email"):
+                                contact_updates["email"] = contact["email"]
+                            if contact.get("first_name"):
+                                contact_updates["first_name"] = contact["first_name"]
+                            if contact.get("last_name"):
+                                contact_updates["last_name"] = contact["last_name"]
+                            if contact.get("phone_numbers"):
+                                contact_updates["phone_numbers"] = contact["phone_numbers"]
+                            
+                            if contact_updates:
+                                info_updates["contact"] = contact_updates
+                        
+                        # Buyer updates (only if there are actual values)
+                        if info.get("buyer"):
+                            buyer_updates = {}
+                            buyer = info["buyer"]
+                            if buyer.get("average_price") and buyer["average_price"] > 0:
+                                buyer_updates["average_price"] = buyer["average_price"]
+                            if buyer.get("favorite_city") and buyer["favorite_city"].strip():
+                                buyer_updates["favorite_city"] = buyer["favorite_city"]
+                            if buyer.get("timeline") and buyer["timeline"].strip():
+                                buyer_updates["timeline"] = buyer["timeline"]
+                            if buyer.get("is_pre_qualified") is not None:
+                                buyer_updates["is_pre_qualified"] = buyer["is_pre_qualified"]
+                            
+                            if buyer_updates:
+                                info_updates["buyer"] = buyer_updates
+                        
+                        # Other info updates
+                        if info.get("is_buyer") is not None:
+                            info_updates["is_buyer"] = info["is_buyer"]
+                        if info.get("is_seller") is not None:
+                            info_updates["is_seller"] = info["is_seller"]
+                        if info.get("status"):
+                            info_updates["status"] = info["status"]
+                        
+                        if info_updates:
+                            update_data["info"] = info_updates
+                    
+                    # Pipeline updates
+                    if cinc_lead_data.get("pipeline") and cinc_lead_data["pipeline"].get("stage"):
+                        update_data["pipeline"] = {"stage": cinc_lead_data["pipeline"]["stage"]}
+                    
+                    # Notes updates
+                    if cinc_lead_data.get("notes") and len(cinc_lead_data["notes"]) > 0:
+                        # Filter out empty notes and ensure proper CINC format
+                        valid_notes = []
+                        for note in cinc_lead_data["notes"]:
+                            if note.get("content") and note["content"].strip():
+                                # Ensure each note has the required CINC format
+                                formatted_note = {
+                                    "content": note["content"],
+                                    "category": note.get("category", "info"),
+                                    "created_by": note.get("created_by", "AI_AGENT")
+                                }
+                                # Add optional fields if they exist
+                                if note.get("is_pinned") is not None:
+                                    formatted_note["is_pinned"] = note["is_pinned"]
+                                
+                                valid_notes.append(formatted_note)
+                        
+                        if valid_notes:
+                            update_data["notes"] = valid_notes
+                    
+                    # Only proceed with update if we have data to update
+                    if update_data:
+                        # CINC API requires email or ID to identify the lead for updates
+                        # Fetch existing lead to get email for identification
+                        try:
+                            existing_lead = await cinc_service_module.get_lead_details(
+                                account_id=int_account_id, 
+                                lead_id=lead_id,
+                                connection_id=cinc_connection_id
+                            )
+                            original_email = existing_lead.get("info", {}).get("contact", {}).get("email")
+                            if original_email and "info" in update_data:
+                                if "contact" not in update_data["info"]:
+                                    update_data["info"]["contact"] = {}
+                                # Always include the email to ensure CINC can identify the lead
+                                update_data["info"]["contact"]["email"] = original_email
+                        except Exception as e:
+                            print(f"DEBUG - Could not fetch existing lead for email: {e}")
+                            # Continue with update attempt anyway
+                        
+                        print(f"DEBUG - CINC update data (filtered): {update_data}")
+                        
+                        try:
+                            await cinc_service_module.update_lead(
+                                account_id=int_account_id, 
+                                lead_id=lead_id, 
+                                lead_data=update_data,
+                                connection_id=cinc_connection_id
+                            )
+                            logging.info(f"CINC lead {lead_id} updated for account {account_id} via connection {cinc_connection_id}")
+                        except Exception as e:
+                            # If the standard update fails, try the upsert method
+                            print(f"DEBUG - Standard CINC update failed, trying upsert method: {e}")
+                            logging.warning(f"CINC standard update failed for lead {lead_id}, attempting upsert: {e}")
+                            
+                            try:
+                                await cinc_service_module.update_lead_via_upsert(
+                                    account_id=int_account_id, 
+                                    lead_id=lead_id, 
+                                    lead_data=update_data,
+                                    connection_id=cinc_connection_id
+                                )
+                                logging.info(f"CINC lead {lead_id} updated via upsert for account {account_id} via connection {cinc_connection_id}")
+                            except Exception as upsert_error:
+                                print(f"DEBUG - Both CINC update methods failed: {upsert_error}")
+                                logging.error(f"All CINC update methods failed for lead {lead_id}: {upsert_error}")
+                                
+                    else:
+                        print(f"DEBUG - No meaningful updates to send to CINC for lead {lead_id}")
+                        logging.info(f"CINC lead {lead_id} - no updates needed for account {account_id}")
+                else:
+                    # Create new lead - check for email in nested structure
+                    contact_info = cinc_lead_data.get("info", {}).get("contact", {})
+                    has_email = contact_info.get("email")
+                    
+                    # If no email but have phone, create placeholder email
+                    if not has_email:
+                        phone_numbers = contact_info.get("phone_numbers", {})
+                        cell_phone = phone_numbers.get("cell_phone")
+                        if cell_phone:
+                            # Create placeholder email from phone number
+                            clean_phone = ''.join(filter(str.isdigit, cell_phone))
+                            placeholder_email = f"lead_{clean_phone}@placeholder.com"
+                            contact_info["email"] = placeholder_email
+                            has_email = True
+                            logging.info(f"Generated placeholder email for CINC lead: {placeholder_email}")
+                    
+                    if has_email:
+                        created_lead = await cinc_service_module.create_lead(
+                            account_id=int_account_id, 
+                            lead_data=cinc_lead_data,
+                            connection_id=cinc_connection_id
+                        )
+                    else:
+                        logging.warning(f"Cannot create CINC lead for account {account_id} - missing email")
+
+            except Exception as e:
+                logging.error(f"CINC lead create/update failed for account {account_id} (conn: {cinc_connection_id}): {e}")
+                import traceback
+                logging.error(traceback.format_exc())
+
 
         if integrations and integrations["hubspot_connection_id"] is not None and integrations["hubspot_connection_id"] != '':
             summary["email"] = summary['email'].replace(" ", "")
@@ -279,7 +787,7 @@ class CallHandler:
                     'contact' : summary,
                     'note' : notes
                 }
-                await self.chatgpt_service.hubspot_service.update_leads(integrations['hubspot_connection_id'], body)
+                await self.ai_service.hubspot_service.update_leads(integrations['hubspot_connection_id'], body)
             else:
                 if summary['phone'] == '' :
                     summary['phone'] = self.format_us_number_simple(self.agents[call_id]['from'])
@@ -288,7 +796,7 @@ class CallHandler:
                     'contact' : summary,
                     'note' : notes
                 }
-                await self.chatgpt_service.hubspot_service.store_leads(integrations['hubspot_connection_id'], body)
+                await self.ai_service.hubspot_service.store_leads(integrations['hubspot_connection_id'], body)
                 
 
         if integrations and integrations["salesforce_connection_id"] is not None and integrations["salesforce_connection_id"] != '':
@@ -315,7 +823,7 @@ class CallHandler:
                                 'Id' : lead_id,
                                 'lead' : summary
                             }
-                        await self.chatgpt_service.salesforce_service.update_leads(integrations['salesforce_connection_id'], body)
+                        await self.ai_service.salesforce_service.update_leads(integrations['salesforce_connection_id'], body)
                 else:
                     if summary['LastName'] == '' :
                         summary['LastName'] = summary['FirstName']
@@ -327,7 +835,7 @@ class CallHandler:
                         summary = self.remove_empty_values(summary)
                         if summary['LastName'] == summary['FirstName']:
                             summary['FirstName'] = ''
-                        await self.chatgpt_service.salesforce_service.store_leads(integrations['salesforce_connection_id'], summary)
+                        await self.ai_service.salesforce_service.store_leads(integrations['salesforce_connection_id'], summary)
             except Exception as e:
                 print("Lead Creat or Update failed" , e)
 
@@ -344,11 +852,11 @@ class CallHandler:
                                 'Id' : prev_event_id,
                                 'event' : event
                             }
-                            response = await self.chatgpt_service.salesforce_service.update_event(integrations['salesforce_connection_id'], body)
+                            response = await self.ai_service.salesforce_service.update_event(integrations['salesforce_connection_id'], body)
                         elif delete_appointment:
-                            response = await self.chatgpt_service.salesforce_service.delete_event(integrations['salesforce_connection_id'], {"Id" : prev_event_id})
+                            response = await self.ai_service.salesforce_service.delete_event(integrations['salesforce_connection_id'], {"Id" : prev_event_id})
                     else:
-                        response = await self.chatgpt_service.salesforce_service.create_event(integrations['salesforce_connection_id'], event)
+                        response = await self.ai_service.salesforce_service.create_event(integrations['salesforce_connection_id'], event)
                         if response and 'id' in response and 'id' in appointment:
                             appointment_id = appointment['id']
                             await self.backend_service.update_appointment({"appointment_id" : appointment_id, "event_id" : response['id']})
@@ -382,7 +890,7 @@ class CallHandler:
                                     'Note_Content' : summary['Description']
                                 } 
                         }
-                        await self.chatgpt_service.zoho_service.update_leads(integrations['zoho_connection_id'], body)
+                        await self.ai_service.zoho_service.update_leads(integrations['zoho_connection_id'], body)
                 else:
                     if summary['Last_Name'] == '' :
                         summary['Last_Name'] = summary['First_Name']
@@ -401,7 +909,7 @@ class CallHandler:
                                     'Note_Content' : summary['Description'] 
                                 } 
                         }
-                        await self.chatgpt_service.zoho_service.store_leads(integrations['zoho_connection_id'], body)
+                        await self.ai_service.zoho_service.store_leads(integrations['zoho_connection_id'], body)
             except Exception as e:
                 print("Lead Creat or Update failed" , e)
 
@@ -410,152 +918,222 @@ class CallHandler:
         # Google Calendar Event Handling
         if integrations and integrations.get("google_calendar_connection_id") and integrations["google_calendar_connection_id"] != '':
             try:
-                if event is not None and event != '' and appointment.get('newAppointment'):
-                    # The 'event' variable (derived from appointment['eventData']) is used as the payload.
-                    # Its structure must align with Google Calendar API requirements
+                print(f"DEBUG - Calendar Event Data Type: {type(calendarEventData)}")
+                print(f"DEBUG - Calendar Event Data: {calendarEventData}")
+                
+                if calendarEventData is not None and calendarEventData != '' and isinstance(calendarEventData, dict):
+                    # Validate required fields
+                    required_fields = ["subject", "startDateTime", "endDateTime"]
+                    missing_fields = [field for field in required_fields if not calendarEventData.get(field)]
                     
-                    # Transform the event data to Google Calendar API format
-                    google_event_payload = {
-                        "summary": event.get("Subject"),
-                        "description": event.get("Description"),
+                    if missing_fields:
+                        logging.warning(f"Missing required fields for Google Calendar: {missing_fields}")
+                        logging.warning(f"Calendar event data: {calendarEventData}")
+                    else:
+                        # Prepare Google Calendar event payload (using timezone-aware datetime)
+                        google_event_payload = {
+                        "summary": calendarEventData.get("subject"),
+                        "description": calendarEventData.get("description"),
+                        "location": calendarEventData.get("location", ""),
                         "start": {
-                            "dateTime": event.get("StartDateTime"),
-                            "timeZone": event.get("timezone"),
+                            "dateTime": calendarEventData.get('startDateTime'),
+                            "timeZone": calendarEventData.get("timezone", "America/New_York")
                         },
                         "end": {
-                            "dateTime": event.get("EndDateTime"),
-                            "timeZone": event.get("timezone")  # Adjust time zone as needed      
+                            "dateTime": calendarEventData.get('endDateTime'),
+                            "timeZone": calendarEventData.get("timezone", "America/New_York")
                         }
-                        # Attendees can be added her?e if available in 'event'
-                        # "attendees": event.get("attendees", []) 
                     }
-        
-                    
-                    response = await self.google_calendar_service.create_event(
-                        integrations['google_calendar_connection_id'],
-                        google_event_payload
-                    )
-                    if response and 'id' in response and 'id' in appointment:
-                        appointment_id = appointment['id'] # BoomersHub internal appointment ID
-                        await self.backend_service.update_appointment({
-                            "appointment_id": appointment_id,
-                            "google_calendar_event_id": response['id'] # Storing Google Calendar event ID
-                        })
-                        print(f"Successfully created Google Calendar event: {response['id']}")
-                    elif response:
-                        print(f"Google Calendar event creation response did not contain an ID: {response}")
-                    else:
-                        print("Google Calendar event creation returned no response.")
+
+                    # Handle appointment operations with proper priority: delete > update > create
+                    if appointment.get('deleteAppointment'):
+                        # Delete existing appointment
+                        # Use stored event ID from agent initialization
+                        google_calendar_event_id = self.agents.get(call_id, {}).get('google_calendar_event_id')
+                        
+                        print(f"DEBUG - Google Calendar Delete: stored_id={google_calendar_event_id}")
+                        
+                        if google_calendar_event_id:
+                            logging.info(f"Deleting Google Calendar event: {google_calendar_event_id}")
+                            await self.google_calendar_service.delete_event(
+                                integrations['google_calendar_connection_id'],
+                                google_calendar_event_id
+                            )
+                            logging.info(f"Google Calendar event deleted successfully")
+                        else:
+                            logging.warning("Google Calendar event ID not found for deletion")
+                    elif appointment.get('updateAppointment'):
+                        # Update existing appointment
+                        # Use stored event ID from agent initialization
+                        google_calendar_event_id = self.agents.get(call_id, {}).get('google_calendar_event_id')
+                        
+                        
+                        print(f"DEBUG - Google Calendar Update: stored_id={google_calendar_event_id}")
+                        
+                        if google_calendar_event_id:
+                            logging.info(f"Updating Google Calendar event: {google_calendar_event_id}")
+                            
+                            # For updates, only send essential fields (start and end time)
+                            google_update_payload = {
+                                "start": {
+                                    "dateTime": calendarEventData.get('startDateTime'),
+                                    "timeZone": calendarEventData.get("timezone", "America/New_York")
+                                },
+                                "end": {
+                                    "dateTime": calendarEventData.get('endDateTime'),
+                                    "timeZone": calendarEventData.get("timezone", "America/New_York")
+                                },
+                                "summary": calendarEventData.get("subject"),  # Add this
+                                "description": calendarEventData.get("description"),  # Add this
+                                "status": "confirmed"  # Add this to prevent cancellation
+                            }
+                            
+                            if google_update_payload and google_update_payload.get("start") and google_update_payload.get("end"):
+                                print(f"DEBUG - Google Calendar Update Payload: {google_update_payload}")
+                                response = await self.google_calendar_service.update_event(
+                                    integrations['google_calendar_connection_id'],
+                                    google_calendar_event_id,
+                                    google_update_payload
+                                )
+                                logging.info(f"Google Calendar event time updated successfully: {response}")
+                            else:
+                                logging.warning(f"Invalid payload for Google Calendar event update: {google_update_payload}")
+                                logging.warning("Missing required fields: start, end, or payload is empty")
+                        else:
+                            logging.warning("Google Calendar event ID not found for update")
+                    elif appointment.get('newAppointment'):
+                        # Create new appointment
+                        response = await self.google_calendar_service.create_event(
+                            integrations['google_calendar_connection_id'],
+                            google_event_payload
+                        )
+                        if response and 'id' in response and 'id' in appointment:
+                            appointment_id = appointment['id']  # BoomersHub internal appointment ID
+                            await self.backend_service.update_appointment({
+                                "appointment_id": appointment_id,
+                                "google_calendar_event_id": response['id']  # Storing Google Calendar event ID
+                            })
+                        elif response:
+                            pass  # Response without ID
+                        else:
+                            pass  # No response
             except Exception as e:
-                print(f"Google Calendar event creation failed: {str(e)}")
+                logging.error(f"Error in Google Calendar event handling: {str(e)}")
                 import traceback
-                print(traceback.format_exc())
+                traceback.print_exc()
+                import traceback
 
         # Outlook Calendar Event Handling
         if integrations and integrations.get("outlook_connection_id") and integrations["outlook_connection_id"] != '':
             try:
-                if event is not None and event != '' and appointment.get('newAppointment'):
-                    # Prepare attendees list
-                    outlook_attendees = []
-                    contact_email_outlook = None
-                    if summary and 'email' in summary and summary['email']: # HubSpot format
-                        contact_email_outlook = summary['email']
-                    elif summary and 'Email' in summary and summary['Email']: # Salesforce format
-                        contact_email_outlook = summary['Email']
+                print(f"DEBUG - Outlook Calendar Event Data: {calendarEventData}")
+                
+                if calendarEventData is not None and calendarEventData != '' and isinstance(calendarEventData, dict):
+                    # Validate required fields
+                    required_fields = ["subject", "startDateTime", "endDateTime", "timezone"]
+                    missing_fields = [field for field in required_fields if not calendarEventData.get(field)]
                     
-                    if contact_email_outlook:
-                        outlook_attendees.append(contact_email_outlook)
-                    
-                    # Transform event data to the format expected by the Nango script's 'fields'
-                    outlook_event_payload = {
-                        "subject": event.get("Subject"),
-                        "description": event.get("Description"),
-                        "startDateTime": event.get("StartDateTime"), # Expected as ISO 8601 string
-                        "endDateTime": event.get("EndDateTime"),     # Expected as ISO 8601 string
-                        "timeZone": event.get("timezone"), # Default if not in event
-                        "attendees": outlook_attendees # List of email strings
-                        # Add other fields like 'location' if your Nango script handles them
-                    }
-                    
-                    # Basic validation for fields required by the Nango script
-                    required_fields = ["subject", "startDateTime", "endDateTime", "timeZone"]
-                    if not all(outlook_event_payload.get(k) for k in required_fields):
-                        print(f"Outlook Calendar event payload (for Nango script) missing required fields: {outlook_event_payload}")
-                    else:
-                        response = await self.outlook_calendar_service.create_event(
-                            integrations['outlook_connection_id'],
-                            outlook_event_payload
-                        )
-                        if response and 'id' in response and 'id' in appointment:
-                            appointment_id = appointment['id']
-                            await self.backend_service.update_appointment({
-                                "appointment_id": appointment_id,
-                                "outlook_event_id": response['id']
-                            })
-                            print(f"Successfully created Outlook Calendar event: {response['id']}")
-                        elif response:
-                            print(f"Outlook Calendar event creation response did not contain an ID: {response}")
-                        else:
-                            print("Outlook Calendar event creation returned no response.")
+                    if missing_fields:
+                        logging.warning(f"Missing required fields for Outlook Calendar: {missing_fields}")
+                        logging.warning(f"Calendar event data: {calendarEventData}")
+                    else:                     
+                        # Transform event data to the format expected by the Nango script's 'fields'
+                        # Prepare attendees array from the calendar event data
+                        attendees = []
+                        if calendarEventData.get("attendeeEmail"):
+                            attendees.append(calendarEventData.get("attendeeEmail"))
+                        
+                        outlook_event_payload = {
+                            "subject": calendarEventData.get("subject"),
+                            "description": calendarEventData.get("description"),
+                            "location": calendarEventData.get("location", ""),
+                            "startDateTime": calendarEventData.get('startDateTime'), # Expected as ISO 8601 string
+                            "endDateTime": calendarEventData.get('endDateTime'),     # Expected as ISO 8601 string
+                            "timeZone": calendarEventData.get("timezone"), # IANA timezone 
+                            "attendees": attendees  # Provide actual attendees array from event data
+                        }
+                        
+                        # Handle appointment operations with proper priority: delete > update > create
+                        if appointment.get('deleteAppointment'):
+                            # Delete existing appointment
+                            # Use stored event ID from agent initialization
+                            outlook_calendar_event_id = self.agents.get(call_id, {}).get('outlook_calendar_event_id')
+                            
+                            print(f"DEBUG - Outlook Calendar Delete: stored_id={outlook_calendar_event_id}")
+                            
+                            if outlook_calendar_event_id:
+                                logging.info(f"Deleting Outlook Calendar event: {outlook_calendar_event_id}")
+                                await self.outlook_calendar_service.delete_event(
+                                    integrations['outlook_connection_id'],
+                                    outlook_calendar_event_id
+                                )
+                                logging.info(f"Outlook Calendar event deleted successfully")
+                            else:
+                                logging.warning("Outlook Calendar event ID not found for deletion")
+                        elif appointment.get('updateAppointment'):
+                            # Update existing appointment
+                            # Use stored event ID from agent initialization
+                            outlook_calendar_event_id = self.agents.get(call_id, {}).get('outlook_calendar_event_id')
+                            
+                            print(f"DEBUG - Outlook Calendar Update: stored_id={outlook_calendar_event_id}")
+                            
+                            if outlook_calendar_event_id:
+                                logging.info(f"Updating Outlook Calendar event: {outlook_calendar_event_id}")
+                                
+                                # For updates, only send essential fields (start and end time)
+                                outlook_update_payload = {
+                                    "start": {
+                                        "dateTime": calendarEventData.get('startDateTime'),
+                                        "timeZone": calendarEventData.get("timezone", "America/New_York")
+                                    },
+                                    "end": {
+                                        "dateTime": calendarEventData.get('endDateTime'),
+                                        "timeZone": calendarEventData.get("timezone", "America/New_York")
+                                    },
+                                    "subject": calendarEventData.get("subject"),  # Add this
+                                    "body": {  # Add this
+                                        "contentType": "html",
+                                        "content": calendarEventData.get("description", "")
+                                    }
+                                }
+                                
+                                # Only update if we have the required fields
+                                if outlook_update_payload.get("start") and outlook_update_payload.get("end"):
+                                    print(f"DEBUG - Outlook Calendar Update Payload: {outlook_update_payload}")
+                                    response = await self.outlook_calendar_service.update_event(
+                                        integrations['outlook_connection_id'],
+                                        outlook_calendar_event_id,
+                                        outlook_update_payload
+                                    )
+                                    logging.info(f"Outlook Calendar event time updated successfully: {response}")
+                                else:
+                                    logging.warning(f"Invalid payload for Outlook Calendar event update: {outlook_update_payload}")
+                                    logging.warning("Missing required fields: start or end objects")
+                            else:
+                                logging.warning("Outlook Calendar event ID not found for update")
+                        elif appointment.get('newAppointment'):
+                            # Create new appointment
+                            response = await self.outlook_calendar_service.create_event(
+                                integrations['outlook_connection_id'],
+                                outlook_event_payload
+                            )
+                            if response and 'id' in response and 'id' in appointment:
+                                appointment_id = appointment['id']
+                                await self.backend_service.update_appointment({
+                                    "appointment_id": appointment_id,
+                                    "outlook_calendar_event_id": response['id']
+                                })
+                            elif response:
+                                pass  # Response without ID
+                            else:
+                                pass  # No response
+                else:
+                    logging.warning("Missing required fields for Outlook Calendar event")
+                    logging.warning(f"Calendar event data: {calendarEventData}")
             except Exception as e:
-                print(f"Outlook Calendar event creation failed: {str(e)}")
+                logging.error(f"Error in Outlook Calendar event handling: {str(e)}")
                 import traceback
-                print(traceback.format_exc())
-
-        # Calendly Scheduled Event Handling
-        if integrations and integrations.get("calendly_connection_id") and integrations["calendly_connection_id"] != '':
-            try:
-                if event is not None and event != '' and appointment.get('newAppointment'):
-                    # Transform event data to the format expected by the Nango script's 'fields'
-                    # for creating a Calendly one-off event.
-                    
-                    # Assuming 'event' (from appointment['eventData']) contains the necessary details.
-                    # The Nango script handles mapping these fields to the actual Calendly API structure.
-                    calendly_event_payload = {
-                        "name": event.get("Subject"), # Maps to Nango script's fields.name
-                        "description": "30", # Maps to Nango script's fields.description
-                        "duration": event.get("DurationInMinutes"), # Maps to Nango script's fields.duration
-                        "locationType": event.get("LocationType", "Remote"), # Default to "custom" if not specified
-                        "location": "Remote", # Maps to Nango script's fields.location
-                        "startTime": event.get("StartDateTime"), # Maps to Nango script's fields.startTime
-                        "endTime": event.get("EndDateTime"), # Maps to Nango script's fields.endTime
-                        "inviteesCanChooseTime": event.get("InviteesCanChooseTime", False) # Default if not specified
-                        # Ensure 'event' provides these keys or add defaults.
-                        # 'host_uri' might be needed if not handled by Nango connection context.
-                    }
-                    
-                    # Basic validation for fields required by the Nango script
-                    required_calendly_fields = ["name", "duration", "locationType", "location", "startTime", "endTime"]
-                    if not all(calendly_event_payload.get(k) is not None for k in required_calendly_fields): # Check for None explicitly for boolean field
-                        print(f"Calendly one-off event payload (for Nango script) missing required fields: {calendly_event_payload}")
-                    else:
-                        response = await self.calendly_service.create_one_off_event_type(
-                            integrations['calendly_connection_id'],
-                            calendly_event_payload
-                        )
-                        # Calendly API for one-off event types might return the event URI or UUID.
-                        # The Nango script returns response.data.resource, which should contain the URI/UUID.
-                        event_resource_uri = None
-                        if response and response.get('uri'): # Nango script returns response.data.resource which has a 'uri'
-                            event_resource_uri = response.get('uri')
-                        elif response and response.get('uuid'): # Fallback if 'uuid' is directly available
-                            event_resource_uri = response.get('uuid')
-
-                        if event_resource_uri and 'id' in appointment:
-                            appointment_id = appointment['id']
-                            await self.backend_service.update_appointment({
-                                "appointment_id": appointment_id,
-                                "calendly_event_uuid": event_resource_uri # Storing URI or UUID
-                            })
-                            print(f"Successfully created Calendly one-off event: {event_resource_uri}")
-                        elif response:
-                            print(f"Calendly one-off event creation response did not contain expected URI/UUID: {response}")
-                        else:
-                            print("Calendly one-off event creation returned no response.")
-            except Exception as e:
-                print(f"Calendly scheduled event creation failed: {str(e)}")
-                import traceback
-                print(traceback.format_exc())
+                traceback.print_exc()
 
 
     def remove_empty_values(self, data: dict) -> dict:
@@ -592,7 +1170,7 @@ class CallHandler:
             on_transcript=self.create_on_transcript_handler(call_id),
             on_start=self.create_on_user_speech_handler(call_id),
             loop= self.loop,
-            speak_model = self.agents[call_sid]['voice']['model']
+            speak_model = self.agents[call_sid]['TTS']['voice']['model']
         )
 
     def create_on_transcript_handler(self, call_id: str):
@@ -610,7 +1188,7 @@ class CallHandler:
     async def stop_stream(self,call_id):
         # await asyncio.sleep(1)  # Wait for 1 second
         self.sessions[call_id]['ai_interrupt'] =  True
-        self.chatgpt_service.update_interrupt_status(call_id, True)
+        self.ai_service.update_interrupt_status(call_id, True)
         # self.sessions[call_id]['ai_speaking'] =  True
         # message = self.get_interrupt_message()
         await self.twilio_service.stop_audio_stream(self.sessions[call_id]['websocket'], call_id)
@@ -640,10 +1218,15 @@ class CallHandler:
         if call_id not in self.sessions or 'call_sid' not in self.sessions[call_id]:
             return
         self.sessions[call_id]['ai_interrupt'] =  False
-        self.chatgpt_service.update_interrupt_status(call_id, False)
+        self.ai_service.update_interrupt_status(call_id, False)
 
-        response = await self.chatgpt_service.generate_response(call_id, transcript, self.synthesize_response, self.sessions[call_id]['deepgram_transcribe_service'].flush_sp_ws)
+        # filler_audio = self.filler_mgr.next()
+        # await self.synthesize_response(filler_audio, call_id)
 
+        streamingResponse = True
+        if self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Elevenlabs':
+            streamingResponse = False
+        response = await self.ai_service.generate_response(call_id, transcript, self.synthesize_response, self.agents[self.sessions[call_id]['call_sid']]['aiClient'], self.sessions[call_id]['synthesis_service'].flush_sp_ws, streamingResponse)
         if 'End Call Message' in response or self.contains_any_word(transcript) or  self.contains_any_word(response):
             self.agents[self.sessions[call_id]['call_sid']]['end_call'] = True
             response = response.replace('End Call Message', '')
@@ -688,7 +1271,7 @@ class CallHandler:
             "knowledge" : self.agents[self.sessions[call_id]['call_sid']]['knowledge'],
             "aiInstructions" : self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'],
             "agentName" : self.agents[self.sessions[call_id]['call_sid']]['name'],
-            "gender" : self.agents[self.sessions[call_id]['call_sid']]['voice']['gender'],
+            "gender" : self.agents[self.sessions[call_id]['call_sid']]['TTS']['voice']['gender'],
             "integrations" : self.agents[self.sessions[call_id]['call_sid']]['integrations'],
             "new_knowledge" : self.agents[self.sessions[call_id]['call_sid']]['new_knowledge'],
         }
@@ -715,21 +1298,26 @@ class CallHandler:
         if not session or not text or text == '':
             return
         # start_time = datetime.now()
-        model = self.agents[self.sessions[call_id]['call_sid']]['voice']['model']
+        model = self.agents[self.sessions[call_id]['call_sid']]['TTS']['voice']['model']
         # Select TTS provider based on environment variable
-        tts_provider = settings.tts_provider.lower()
-        if tts_provider == "deepgram":
-            audio_stream = await session['deepgram_transcribe_service'].stream_text_to_speech(text, model, call_id, self.queue_audio)
+        if self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Deepgram':
+            audio_stream = await session['synthesis_service'].stream_text_to_speech(text, call_id, self.queue_audio)
         # elif tts_provider == "playht":
         #     audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
-        elif tts_provider == "elevenlabs":
-            audio_stream = await self.elevenlabs_service.stream_text_to_speech(text)
-            await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
-            await self.twilio_service.enqueue_audio(call_id, audio_stream, 'response_buffer')
-            result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
-            session['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
-            session['wait_duration'] = result['duration']
+        elif self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Elevenlabs':
+            audio_stream = await self.sessions[call_id]["synthesis_service"].stream_text_to_speech(text, model, self.agents[self.sessions[call_id]['call_sid']]['TTS']['model'], call_id, self.queue_audio)
+            # audio_stream = await self.sessions[call_id]["synthesis_service"].stream_text_to_speech(text, call_id, self.queue_audio)
+            
+            # await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
+            # await self.twilio_service.enqueue_audio(call_id, audio_stream, 'response_buffer')
+            # result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
+            # session['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
+            # session['wait_duration'] = result['duration']
+        elif self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Microsoft Azure':
+            audio_stream = await self.sessions[call_id]["synthesis_service"].stream_text_to_speech(text)
 
+        elif self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'PlayHT':
+            audio_stream = await session['synthesis_service'].stream_text_to_speech(text)
         else:
             raise ValueError(f"Unsupported TTS provider: {settings.tts_provider}")
 
@@ -749,8 +1337,8 @@ class CallHandler:
         if not session :
             return
         ai_interupted = session.get('ai_interrupt', False)
-        if not ai_interupted:
-            
+        if not ai_interupted and session['websocket'] is not None:
+            session['ai_speaking'] = True
             await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
             await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
             result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
@@ -759,55 +1347,10 @@ class CallHandler:
         # else:
         #     self.sessions[call_id]['ai_interrupt'] = False
 
-    def get_interrupt_message(self , type = 'check_availability'):
-        arrayObj = {
-            'interrupt': [
-                "Go ahead",
-                "Please, go ahead."
-                "Yes, do continue."
-                "Yes, please go on."
-                "I'm listening, please."
-                "Yes, please continue. "
-                "Of course, go ahead."
-                "Go ahead, I'm listening."
-                "Okay, I'm listening."
-                "Sure, please continue."
-            ],
-            'check_availability': [
-                "Are you around?",
-                "Still with me?",
-                "You there?",
-                "Did I lose you?",
-                "Are you gone?",
-                "Can you hear me?",
-                "Are you still online?",
-                "Just checking if you're still here.",
-                "Are you still listening?",
-                "Hello? Still there?"
-            ],
-            'end_call': [
-                "I understand you might be tied up. Feel free to message me when you're available. Wishing you a great day!",
-                "No worries if you're busy. Just reach out when you have a moment. Take care!",
-                "You may be caught up with something. Ping me whenever you're free. Have a wonderful day!",
-                "Totally fine if you're busy. Let's connect when you get a chance. Hope your day is going well!",
-                "If you're occupied, that's okay. Reach out anytime you're free. Have an awesome day!",
-                "I get that things can get hectic. Connect with me whenever you're free. Take it easy!",
-                "It seems like you might be busy. Just drop a message when you’re free. Enjoy your day!",
-                "All good if you’re swamped. Let’s talk whenever you have time. Wishing you a nice day!",
-                "You might have your hands full. Reach out whenever it works for you. Hope your day’s great!",
-                "Understandable if you're unavailable right now. Let's chat when you're free. Have a great one!"
-                ]
-        } 
-
-
-        return random.choice(arrayObj[type])
-
     def initialize_session_info(self, stream_sid, call_sid):
         # Initialize a session for this specific call
-        if stream_sid not in self.sessions:
-            self.sessions[stream_sid]={
-                "deepgram_transcribe_service": self.initialize_transcriber(call_sid, stream_sid, DeepgramService),
-                "transcribe_service" : self.initialize_transcriber(call_sid, stream_sid, TranscribeService),
+        
+        self.sessions[stream_sid] = {
                 "ai_speaking": False,
                 "ai_interrupt": False,
                 "wait_counter": 0,
@@ -817,8 +1360,48 @@ class CallHandler:
                 "background_sound": None,
                 "websocket" : None,
                 "call_sid" : call_sid,
-                "last_user_audio_time" : None
+                "last_user_audio_time" : None,
+                "call_initialized" : False
             }
+        if self.agents[call_sid]['STT']['name'] == 'Deepgram':
+            self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
+            # self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
+        elif self.agents[call_sid]['STT']['name'] == 'AssemblyAI':
+            self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(call_sid, stream_sid, TranscribeService)
+            # self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
+        else :
+            self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
+            # self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
+        
+
+
+        if self.agents[call_sid]['TTS']['name'] == 'Deepgram':
+            if self.agents[call_sid]['STT']['name'] == 'Deepgram':
+                self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
+            else :
+                self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
+        elif self.agents[call_sid]['TTS']['name'] == 'Elevenlabs':
+            self.sessions[stream_sid]["synthesis_service"] = self.elevenlabs_service
+        elif self.agents[call_sid]['TTS']['name'] == 'Microsoft Azure':
+            self.sessions[stream_sid]["synthesis_service"] = AzureService(self.loop)
+        elif self.agents[call_sid]['TTS']['name'] == 'PlayHT':
+            self.sessions[stream_sid]["synthesis_service"] = PlayHT(self.loop)
+        else:
+            self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
+
+        # if stream_sid not in self.sessions:
+        #     self.sessions[stream_sid]={
+        #         "ai_speaking": False,
+        #         "ai_interrupt": False,
+        #         "wait_counter": 0,
+        #         "wait_duration": 12,
+        #         "prev_wait_duration": 0,
+        #         "stream_sid": stream_sid,
+        #         "background_sound": None,
+        #         "websocket" : None,
+        #         "call_sid" : call_sid,
+        #         "last_user_audio_time" : None
+        #     }
 
     def formatToSalesforceNumber(self, phone):
         digits = re.sub(r'\D', '', phone)
@@ -860,7 +1443,33 @@ class CallHandler:
         self.agents[call_id]['from'] = data['from']
         self.agents[call_id]['previous_convo_summary'] = None
         self.agents[call_id]['new_knowledge'] = False
+        self.agents[call_id]['aiClient'] = api_response['data']['aiClient']
+        self.agents[call_id]['STT'] = api_response['data']['STT']
+        self.agents[call_id]['TTS'] = api_response['data']['TTS']
+
+        # Add timezone from backend response
+        if 'agent' in api_response['data'] and 'timezone' in api_response['data']['agent']:
+            self.agents[call_id]['timezone'] = api_response['data']['agent']['timezone']
+        else:
+            self.agents[call_id]['timezone'] = 'UTC'  # Default to UTC if not provided
         
+        print(f"DEBUG - Agent timezone: {self.agents[call_id]['timezone']}")
+
+        self.agents[call_id]['appointment'] = api_response['data']['appointment']
+        print(f"xxxxDEBUGxxxxx - Appointment data: {self.agents[call_id]['appointment']}")
+        # Extract and store calendar event IDs from the backend response, if available
+        appointment_data = api_response['data'].get('appointment', {})
+        google_calendar_event_id = appointment_data.get('googleCalendarEventId')
+        outlook_calendar_event_id = appointment_data.get('outlookCalendarEventId')
+        lead_appointment_id = appointment_data.get('appointmentId')
+
+        print(f"xxxxDEBUGxxxxx - Google Calendar Event ID: {google_calendar_event_id}")
+        print(f"xxxxDEBUGxxxxx - Outlook Calendar Event ID: {outlook_calendar_event_id}")
+
+        # Store these IDs in the agent for easy access later
+        self.agents[call_id]['google_calendar_event_id'] = google_calendar_event_id
+        self.agents[call_id]['outlook_calendar_event_id'] = outlook_calendar_event_id
+        self.agents[call_id]['lead_appointment_id'] = lead_appointment_id
         # Add user preference for allowing meeting conflicts
         if 'userPreference' in api_response['data'] and 'allowMeetingConflict' in api_response['data']['userPreference']:
             self.agents[call_id]['allowMeetingConflict'] = api_response['data']['userPreference']['allowMeetingConflict']
@@ -869,19 +1478,38 @@ class CallHandler:
 
         if 'appointment' in api_response['data'] and 'eventId' in api_response['data']['appointment']:
             self.agents[call_id]['event_id'] = api_response['data']['appointment']['eventId']
+    
 
         self.agents[call_id]['integrations'] = {
                 "hubspot_connection_id": None,
                 "zoho_connection_id": None,
                 "salesforce_connection_id": None,
                 "calendly_connection_id": None,
-                "google_calendar_connection_id": None
+                "google_calendar_connection_id": None,
+                "cinc_connection_id": None,
         }
         self.agents[call_id]['lead_id'] = None
         if 'integrations' in api_response['data']:
             self.agents[call_id]['integrations'] = api_response['data']['integrations']
+            print(f"DEBUG - Integrations received from backend: {api_response['data']['integrations']}")
+        else:
+            print("DEBUG - No integrations found in backend response")
+        
+        # Also add user_id to agent data for CINC integration
+        if 'user' in api_response['data'] and 'id' in api_response['data']['user']:
+            self.agents[call_id]['user_id'] = api_response['data']['user']['id']
+        elif 'userId' in api_response['data']:
+            self.agents[call_id]['user_id'] = api_response['data']['userId']
+        elif 'user_id' in api_response['data']:
+            self.agents[call_id]['user_id'] = api_response['data']['user_id']
+        elif 'agent' in api_response['data'] and 'user_id' in api_response['data']['agent']:
+            self.agents[call_id]['user_id'] = api_response['data']['agent']['user_id']
+        elif 'agent' in api_response['data'] and 'userId' in api_response['data']['agent']:
+            self.agents[call_id]['user_id'] = api_response['data']['agent']['userId']
+        else:
+            self.agents[call_id]['user_id'] = None
 
-            
+        
         response = self.twilio_service.initialize_call(call_id)
         # self.transcribe_service.connect()  # Connect the transcriber service
         # await self.initialize_session_info(call_id)
@@ -892,15 +1520,27 @@ class CallHandler:
         call_sid = self.twilio_service.make_call(phone_number)
         return call_sid
 
-    async def handle_stream_callback(self, data):
-        """Handle the stream callback to get the streamSid."""
-        stream_sid = data.get("StreamSid")
-        call_sid = data.get("CallSid")
+    async def process_all_info(self, stream_sid, call_sid):
         print(f"Stream SID: {stream_sid}, Call SID: {call_sid}")
-        self.initialize_session_info(stream_sid, call_sid)
-        await self.sessions[stream_sid]['deepgram_transcribe_service'].establish_dg_connection()
-
+        print("stt: ",self.agents[call_sid]['STT']['name'])
+        if self.agents[call_sid]['STT']['name'] == 'Deepgram':
+            await self.sessions[stream_sid]['transcribe_service'].establish_dg_connection(self.agents[call_sid]['STT']['model'])
+        else: self.sessions[stream_sid]['transcribe_service'].connect()
+        print("tts: ",self.agents[call_sid]['TTS']['name'])
+        
+        # if self.agents[call_sid]['TTS']['name'] == 'Elevenlabs':
+        #     await self.sessions[stream_sid]['synthesis_service'].establish_connection( self.agents[call_sid]['TTS']['voice']['model'], self.agents[call_sid]['TTS']['model'])
+        if self.agents[call_sid]['TTS']['name'] == 'Deepgram':
+            await self.sessions[stream_sid]['synthesis_service'].establish_sp_connection(self.agents[call_sid]['TTS']['voice']['model'])
+        elif self.agents[call_sid]['TTS']['name'] == 'Microsoft Azure':
+            await self.sessions[stream_sid]['synthesis_service'].establish_connection(self.agents[call_sid]['TTS']['voice']['model'], stream_sid, self.queue_audio)
+            # await self.sessions[stream_sid]['synthesis_service'].establish_connection(self.agents[call_sid]['TTS']['voice']['model'])
         # self.sessions[call_sid]['stream_sid'] = stream_sid
+        elif self.agents[call_sid]['TTS']['name'] == 'PlayHT':
+            await self.sessions[stream_sid]['synthesis_service'].establish_connection( self.agents[call_sid]['TTS']['voice']['model'], self.agents[call_sid]['TTS']['model'], stream_sid, self.queue_audio)
+        
+        print("Done initializing session info")
+
         updaedata= {
             "stream_sid" : stream_sid,
             "call_sid" : call_sid
@@ -921,43 +1561,91 @@ class CallHandler:
         phone = result['phone']
         description = result['description']
         existing_appointment = result['existing_appointment']
-        print("Existing appointment: ", existing_appointment)
+        
+        # Debug: Print current datetime for reference
+        from datetime import datetime
+        current_time = datetime.utcnow()
+        print(f"Current UTC time: {current_time.isoformat()}")
+        
+        # Get user's timezone and show current time in user's timezone
+        user_timezone = self.agents[call_sid].get('timezone', 'UTC')
+        print(f"User timezone: {user_timezone}")
+        
+        # Clean up the existing appointment string - remove duplicates and format nicely
+        if existing_appointment:
+            
+            # Split by comma, strip whitespace, and remove duplicates while preserving order
+            existing_appointment = sort_and_group_appointments(existing_appointment)
+            if existing_appointment:
+                appointments = []
+                seen = set()
+                for apt in existing_appointment.split(','):
+                    apt = apt.strip()
+                    if apt and apt not in seen:
+                        appointments.append(apt)
+                        seen.add(apt)
+
+            existing_appointment = ', '.join(appointments) if appointments else None
         isAllowMeetingConflict = self.agents[call_sid]['allowMeetingConflict']
         print("isAllowMeetingConflict: ", isAllowMeetingConflict)
-        await self.synthesize_response(greetings , stream_sid)
-        await self.sessions[stream_sid]['deepgram_transcribe_service'].flush_sp_ws()
-        await self.chatgpt_service.process_initial_message(stream_sid, self.get_agent_knowledge)
-        self.chatgpt_service.add_message(stream_sid, "assistant", greetings)
-        self.chatgpt_service.add_system_message(stream_sid, "assistant", greetings)
 
+        await self.ai_service.process_initial_message(stream_sid, self.get_agent_knowledge)
+        self.ai_service.add_message(stream_sid, "assistant", greetings)
+        self.ai_service.add_system_message(stream_sid, "assistant", greetings)
+        
         if fullname is not None and fullname != "":
-            self.chatgpt_service.add_message(stream_sid, "user", f"My Name is: {fullname}")
-            self.chatgpt_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Name of the user you will use in this conversation: {fullname}")
+            self.ai_service.add_message(stream_sid, "user", f"My Name is: {fullname}")
+            self.ai_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Name of the user you will use in this conversation: {fullname}")
         if email is not None and email != "":
-            self.chatgpt_service.add_message(stream_sid, "user", f"My Email Address is: {email}")
-            self.chatgpt_service.add_system_message(stream_sid, "system", f"Don't forget. This is the email address of the user you will use in this conversation : {email}.")
+            self.ai_service.add_message(stream_sid, "user", f"My Email Address is: {email}")
+            self.ai_service.add_system_message(stream_sid, "system", f"Don't forget. This is the email address of the user you will use in this conversation : {email}.")
         if phone is not None and phone != "":
-            self.chatgpt_service.add_message(stream_sid, "user", f"My Phone Number is: {phone}")
-            self.chatgpt_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Phone Number of the user you will use in this conversation: {phone}")
+            self.ai_service.add_message(stream_sid, "user", f"My Phone Number is: {phone}")
+            self.ai_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Phone Number of the user you will use in this conversation: {phone}")
         else:
-            self.chatgpt_service.add_system_message(stream_sid, "system", f"This is the Phone Number of the user you will use in this conversation and you can ask the user if he/she wants to change the phone number: {self.format_us_phone(self.agents[call_sid]['from'])}")
+            self.ai_service.add_system_message(stream_sid, "system", f"This is the Phone Number of the user you will use in this conversation and you can ask the user if he/she wants to change the phone number: {self.format_us_phone(self.agents[call_sid]['from'])}")
         if description is not None and description != "":
-            self.chatgpt_service.add_system_message(stream_sid, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
+            self.ai_service.add_system_message(stream_sid, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
        
-        if not isAllowMeetingConflict and existing_appointment is not None and existing_appointment != "":
-            print("Existing appointment found: ", existing_appointment)
-            self.chatgpt_service.add_system_message(
+            if not isAllowMeetingConflict and existing_appointment is not None and existing_appointment != "":
+             print("Existing appointment found: ", existing_appointment)
+            # user_timezone = self.agents[call_sid].get('timezone', 'UTC')
+            self.ai_service.add_system_message(
             stream_sid,
             "system",
-            f"""Task: if user wants to schedule an appointment or meeting.
+            f"""Task: Help user schedule a 30-minute appointment/meeting.
 
-            Specifics:
-            1. The booked time slots are: {existing_appointment}
-            2. If the existing_appointment variable indicates the slot is booked, inform the user it's unavailable and ask them to choose another time or date
+            IMPORTANT SCHEDULING RULES:
+            1. All meetings are exactly 30 minutes long
+            2. Meetings can start at any 30-minute interval (e.g., 10:00am, 10:30am, 11:00am, 11:30am, etc.)
+            3. A slot is available if there's no overlap with existing appointments
+
+            BOOKED TIME SLOTS: {existing_appointment}
+
+            INSTRUCTIONS:
+            - If user requests a time that does NOT conflict with booked slots, proceed with scheduling
+            - ONLY when user requests a time that CONFLICTS with booked slots:
+              * Inform them the requested time is unavailable
+              * Suggest 2-3 nearby available 30-minute slots on the same date
+              * Look for gaps between appointments (e.g., if 11:00am-11:30am is booked but 11:30am-12:00pm is free, suggest 11:30am-12:00pm)
+              * If no slots available on requested date, suggest alternative dates
+
+            Do not proactively list available times unless there's a scheduling conflict.
             """
         )
 
+        
+        await self.synthesize_response(greetings , stream_sid)
 
+        # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
+        await self.sessions[stream_sid]['synthesis_service'].flush_sp_ws()
+
+    async def handle_stream_callback(self, data):
+        """Handle the stream callback to get the streamSid."""
+        stream_sid = data.get("StreamSid")
+        call_sid = data.get("CallSid")
+        if stream_sid not in self.sessions:
+            self.initialize_session_info(stream_sid, call_sid)
         return "OK", 200
     
     def modify_greeting(self, name, greetings, call_sid):
@@ -996,7 +1684,7 @@ class CallHandler:
         elif self.agents[call_sid]['integrations']['salesforce_connection_id']:
 
             formatted_number = self.formatToSalesforceNumber(self.agents[call_sid]['from'])
-            result = await self.chatgpt_service.salesforce_service.get_lead_by_phone(self.agents[call_sid]['integrations']['salesforce_connection_id'], formatted_number)
+            result = await self.ai_service.salesforce_service.get_lead_by_phone(self.agents[call_sid]['integrations']['salesforce_connection_id'], formatted_number)
             
             if len(result) > 0:
                 details = result[0]
@@ -1012,7 +1700,7 @@ class CallHandler:
 
         elif self.agents[call_sid]['integrations']['hubspot_connection_id']:
 
-            result = await self.chatgpt_service.hubspot_service.get_contact_by_phone(self.agents[call_sid]['integrations']['hubspot_connection_id'], self.agents[call_sid]['from'])
+            result = await self.ai_service.hubspot_service.get_contact_by_phone(self.agents[call_sid]['integrations']['hubspot_connection_id'], self.agents[call_sid]['from'])
             
             if 'results' in result and len(result['results']) > 0:
                 details = result['results'][0]['properties']
@@ -1026,7 +1714,7 @@ class CallHandler:
 
         elif self.agents[call_sid]['integrations']['zoho_connection_id']:
 
-            result = await self.chatgpt_service.zoho_service.get_lead_by_phone(self.agents[call_sid]['integrations']['zoho_connection_id'], self.agents[call_sid]['from'])
+            result = await self.ai_service.zoho_service.get_lead_by_phone(self.agents[call_sid]['integrations']['zoho_connection_id'], self.agents[call_sid]['from'])
             
             if len(result) > 0:
                 details = result[0]
@@ -1040,10 +1728,64 @@ class CallHandler:
                 greetings = self.modify_greeting(fullname, greetings, call_sid)
                 self.agents[call_sid]['new_knowledge'] = True
 
+        elif self.agents[call_sid]['integrations']['cinc_connection_id']:
+            try:
+                # Get account_id from agent info
+                account_id = self.agents[call_sid].get('account_id')
+                if account_id:
+                    result = await self.cinc_service.get_leads_by_phone(
+                        account_id=account_id, 
+                        phone=self.agents[call_sid]['from'],
+                        connection_id=self.agents[call_sid]['integrations']['cinc_connection_id']
+                    )
+                    print(f"DEBUG - CINC lead search result: {result}")
+                    if result and len(result) > 0:
+                        # Use the first matching lead
+                        lead = result[0]
+                        contact_info = lead.get('info', {}).get('contact', {})
+                        
+                        # Extract contact information
+                        first_name = contact_info.get('first_name', '')
+                        last_name = contact_info.get('last_name', '')
+                        
+                        if first_name and last_name:
+                            fullname = f"{first_name} {last_name}"
+                        elif first_name:
+                            fullname = first_name
+                        elif last_name:
+                            fullname = last_name
+                        
+                        email = contact_info.get('email')
+                        
+                        # Get phone number from the lead
+                        phone_numbers = contact_info.get('phone_numbers', {})
+                        if phone_numbers.get('cell_phone'):
+                            phoneNumber = phone_numbers['cell_phone']
+                        elif phone_numbers.get('home_phone'):
+                            phoneNumber = phone_numbers['home_phone']
+                        
+                        # Extract description from notes if available
+                        notes = lead.get('notes', [])
+                        if notes:
+                            # Combine all note contents
+                            description = '; '.join([note.get('content', '') for note in notes if note.get('content')])
+                        
+                        # Set CINC lead ID for future updates
+                        crmUserId = lead.get('id')
+                        if crmUserId:
+                            self.agents[call_sid]['cinc_lead_id'] = crmUserId
+                        
+                        greetings = self.modify_greeting(fullname, greetings, call_sid)
+                        self.agents[call_sid]['new_knowledge'] = True
+
+                        print(f"DEBUG - Found CINC lead: {fullname}, Email: {email}, Phone: {phoneNumber}, Notes: {description}")
+
+            except Exception as e:
+                print(f"Error fetching CINC lead by phone {self.agents[call_sid]['from']}: {e}")
+
 
         if self.agents[call_sid]['integrations'].get('calendly_connection_id'):
             # Check if there are any scheduled events for this user in Calendly
-            print(f"Calendly connection ID: {self.agents[call_sid]['integrations']['calendly_connection_id']}")
 
             try:
                 # First get the user information
@@ -1083,20 +1825,50 @@ class CallHandler:
                         if events_collection and len(events_collection) > 0:
                             # Set existing_appointment with formatted times
                             appointment_times = []
+                            future_events = []
+                            
+                            # Get user's timezone
+                            user_timezone = self.agents[call_sid].get('timezone', 'UTC')
+                            print(f"Using user timezone for Calendly: {user_timezone}")
+                            
                             for event in events_collection:
                                 if 'start_time' in event:
-                                    # Only include future appointments
-                                    if is_future_datetime(event['start_time']):
+                                    # Check if this is a future appointment using user's timezone
+                                    is_future = (is_future_datetime(event['start_time'], user_timezone_str=user_timezone) and 
+                                               event.get('status') != 'canceled')
+                                    
+                                    if is_future:
                                         # Check if end_time is available in Calendly event
                                         end_time = event.get('end_time', None)
-                                        formatted_time = format_datetime_range_human_readable(event['start_time'], end_time)
-                                        appointment_times.append(formatted_time)
+                                        # Format time in user's timezone
+                                        formatted_time = format_datetime_range_human_readable(
+                                            event['start_time'], 
+                                            end_time, 
+                                            user_timezone_str=user_timezone
+                                        )
+                                        
+                                        if formatted_time and formatted_time.strip():  # Ensure valid formatted time
+                                            appointment_times.append(formatted_time)
+                                            future_events.append({
+                                                'name': event.get('name', 'Meeting'),
+                                                'start': event['start_time'],
+                                                'end': end_time,
+                                                'formatted_time': formatted_time
+                                            })
                             
                             if appointment_times:
+                                # Remove duplicates while preserving order
+                                unique_appointment_times = []
+                                seen = set()
+                                for time_str in appointment_times:
+                                    if time_str not in seen:
+                                        unique_appointment_times.append(time_str)
+                                        seen.add(time_str)
+                                
                                 if existing_appointment:
-                                    existing_appointment += ", " + ", ".join(appointment_times)
+                                    existing_appointment += ", " + ", ".join(unique_appointment_times)
                                 else:
-                                    existing_appointment = ", ".join(appointment_times)
+                                    existing_appointment = ", ".join(unique_appointment_times)
                             
                             # We have scheduled events, update description with this info
                             events_count = len(events_collection)
@@ -1130,13 +1902,19 @@ class CallHandler:
                 )
                 
                 # print("=== GOOGLE CALENDAR EVENTS ===",json.dumps(events_result, indent=2))
-                # Extract events from response format
+     
                 events_collection = []
                 if events_result and 'records' in events_result:
                     events_collection = events_result['records']
                 
                 if events_collection and len(events_collection) > 0:
                     appointment_times = []
+                    future_events = []
+                    
+                    # Get user's timezone
+                    user_timezone = self.agents[call_sid].get('timezone', 'UTC')
+                    # print(f"Using user timezone for Google Calendar: {user_timezone}")
+                    
                     for event in events_collection:
                         # Handle both all-day events (date) and timed events (dateTime)
                         start_datetime = None
@@ -1153,18 +1931,41 @@ class CallHandler:
                             elif 'date' in event['end']:
                                 end_datetime = event['end']['date']
                         
-                        if start_datetime:
-                            # Only include future appointments
-                            if is_future_datetime(start_datetime):
-                                formatted_time = format_datetime_range_human_readable(start_datetime, end_datetime)
+                        # Check if this is a future appointment using user's timezone
+                        is_future = (start_datetime and 
+                                   is_future_datetime(start_datetime, user_timezone_str=user_timezone) and
+                                   event.get('status') != 'cancelled')
+                        
+                        if is_future:
+                            # Format time in user's timezone
+                            formatted_time = format_datetime_range_human_readable(
+                                start_datetime, 
+                                end_datetime, 
+                                user_timezone_str=user_timezone
+                            )
+                            if formatted_time and formatted_time.strip():  # Ensure valid formatted time
                                 appointment_times.append(formatted_time)
+                                future_events.append({
+                                    'summary': event.get('summary', 'Meeting'),
+                                    'start': start_datetime,
+                                    'end': end_datetime,
+                                    'formatted_time': formatted_time
+                                })
                     
                     # Set existing_appointment with formatted times
                     if appointment_times:
+                        # Remove duplicates while preserving order
+                        unique_appointment_times = []
+                        seen = set()
+                        for time_str in appointment_times:
+                            if time_str not in seen:
+                                unique_appointment_times.append(time_str)
+                                seen.add(time_str)
+                        
                         if existing_appointment:
-                            existing_appointment += ", " + ", ".join(appointment_times)
+                            existing_appointment += ", " + ", ".join(unique_appointment_times)
                         else:
-                            existing_appointment = ", ".join(appointment_times)
+                            existing_appointment = ", ".join(unique_appointment_times)
                     
                     # We have scheduled events, update description with this info
                     events_count = len([t for t in appointment_times])  # Count only future events
@@ -1184,19 +1985,12 @@ class CallHandler:
                 
         # Check for Outlook calendar events
         if self.agents[call_sid]['integrations'].get('outlook_connection_id'):
-            # Check if there are any scheduled events for this user in Outlook Calendar
-            print(f"Outlook Calendar connection ID: {self.agents[call_sid]['integrations']['outlook_connection_id']}")
 
             try:
-                # Get events directly, NangoService's fetch_data for outlook events
-                # will typically fetch from the default calendar if no calendar_id is specified.
-                print(f"Fetching events from default Outlook calendar")
                 events_result = await self.outlook_calendar_service.get_events(
                     self.agents[call_sid]['integrations']['outlook_connection_id']
                 )
-                
-                # Display events in a well-formatted way
-                print("\n=== OUTLOOK CALENDAR EVENTS ===")
+                # print("=== OUTLOOK CALENDAR EVENTS ===", json.dumps(events_result, indent=2))
                 events_collection = []
                 
                 if events_result and 'records' in events_result:
@@ -1204,43 +1998,64 @@ class CallHandler:
                 
                 if events_collection and len(events_collection) > 0:
                     appointment_times = []
+                    future_events = []
+                    
+                    # Get user's timezone
+                    user_timezone = self.agents[call_sid].get('timezone', 'UTC')
+                    
                     for event in events_collection:
-                        print(f"\nEvent:")
-                        print(f"  Subject: {event.get('subject', 'N/A')}")
-                        
+                       
                         start_datetime = None
                         end_datetime = None
                         
                         if 'start' in event:
                             start = event['start'].get('dateTime', 'N/A')
                             timezone = event['start'].get('timeZone', 'N/A')
-                            print(f"  Start: {start} ({timezone})")
                             if start != 'N/A':
                                 start_datetime = start
                             
                         if 'end' in event:
                             end = event['end'].get('dateTime', 'N/A')
                             timezone = event['end'].get('timeZone', 'N/A')
-                            print(f"  End: {end} ({timezone})")
                             if end != 'N/A':
                                 end_datetime = end
                         
-                        # Only include future appointments
-                        if start_datetime and is_future_datetime(start_datetime):
-                            formatted_time = format_datetime_range_human_readable(start_datetime, end_datetime)
-                            appointment_times.append(formatted_time)
-                            
-                        print(f"  Location: {event.get('location', {}).get('displayName', 'N/A')}")
-                        print(f"  Status: {event.get('showAs', 'N/A')}")
-                        
-                    print("===============================\n")
-                    
-                    # Set existing_appointment with formatted times
-                    if appointment_times:
-                        if existing_appointment:
-                            existing_appointment += ", " + ", ".join(appointment_times)
+                        # Check if this is a future appointment using user's timezone
+                        is_future = start_datetime and is_future_datetime(start_datetime, user_timezone_str=user_timezone)
+                        is_cancelled = event.get('isCancelled', False)
+                        if start_datetime and is_future and not is_cancelled:
+                            # Format time in user's timezone
+                            formatted_time = format_datetime_range_human_readable(
+                                start_datetime, 
+                                end_datetime, 
+                                user_timezone_str=user_timezone
+                            )
+                            if formatted_time and formatted_time.strip():  # Ensure valid formatted time
+                                appointment_times.append(formatted_time)
+                                future_events.append({
+                                    'subject': event.get('subject', 'Meeting'),
+                                    'start': start_datetime,
+                                    'end': end_datetime,
+                                    'formatted_time': formatted_time
+                                })
+                            else:
+                                pass
                         else:
-                            existing_appointment = ", ".join(appointment_times)
+                            pass
+                                           
+                    if appointment_times:
+                        # Remove duplicates while preserving order
+                        unique_appointment_times = []
+                        seen = set()
+                        for time_str in appointment_times:
+                            if time_str not in seen:
+                                unique_appointment_times.append(time_str)
+                                seen.add(time_str)
+                        
+                        if existing_appointment:
+                            existing_appointment += ", " + ", ".join(unique_appointment_times)
+                        else:
+                            existing_appointment = ", ".join(unique_appointment_times)
                     
                 else:
                     print("No upcoming Outlook Calendar events found.")
@@ -1262,66 +2077,6 @@ class CallHandler:
                 audio_stream = await self.twilio_service.get_background_sound()
                 self.twilio_service.background_sound = audio_stream
             await self.twilio_service.send_audio_stream(self.sessions[call_id]['websocket'], call_id, self.twilio_service.background_sound)
-
-    async def process_file(self, file: UploadFile):
-        """
-        Process the uploaded file based on its MIME type and content.
-
-        Supports: TXT, DOC/DOCX, PDF
-        """
-        # Read the file content
-        file_content = await file.read()
-
-        # Process based on MIME type
-        if file.content_type == "text/plain":
-            # Process TXT file
-            return file_content.decode("utf-8")
-
-        elif file.content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            # Process DOCX file
-            from io import BytesIO
-            doc = Document(BytesIO(file_content))
-            return "\n".join([paragraph.text for paragraph in doc.paragraphs])
-
-        elif file.content_type == "application/pdf":
-            # Process PDF file
-            from io import BytesIO
-            pdf_reader = PdfReader(BytesIO(file_content))
-            text = ""
-            for page in pdf_reader.pages:
-                text += page.extract_text()
-            return text
-
-        else:
-            # Unsupported file type
-            print("Unsupported file type. Please upload TXT, DOC/DOCX, or PDF files.")
-            return None
-
-    async def convert_mulaw_to_wav(self, mulaw_file, wav_file):
-        # Define WAV file settings
-        wav_fp = wave.open(wav_file, 'wb')
-        wav_fp.setnchannels(1)  # Mono channel
-        wav_fp.setsampwidth(2)  # 16-bit samples
-        wav_fp.setframerate(8000)  # 8 kHz sampling rate
-
-        # Read the μ-law file
-        with open(mulaw_file, 'rb') as mulaw_fp:
-            while True:
-                chunk = mulaw_fp.read(1024)
-                if not chunk:
-                    break
-
-                # Convert μ-law to linear PCM
-                pcm_chunk = audioop.ulaw2lin(chunk, 2)
-
-                # Write the PCM chunk to the WAV file
-                wav_fp.writeframes(pcm_chunk)
-
-        wav_fp.close()
-        if os.path.exists(mulaw_file):
-                os.remove(mulaw_file)
-        else:
-            print("The file does not exist")
 
     async def complete_status_callback(self, data):
         """Handle the stream callback to get the streamSid."""
@@ -1402,4 +2157,4 @@ class CallHandler:
             allowed_integrations: List of integration IDs the user is allowed to connect to (optional) 
            
         """
-        return await self.chatgpt_service.get_nango_session_token(user_id, allowed_integrations)
+        return await self.ai_service.get_nango_session_token(user_id, allowed_integrations)
