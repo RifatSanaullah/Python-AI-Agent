@@ -37,7 +37,7 @@ import soundfile as sf
 import time , re
 import traceback
 from app.utils.responseformat import hubspot_patch_format
-from app.utils.datetime_formatter import format_datetime_human_readable, format_datetime_range_human_readable, is_future_datetime
+from app.utils.datetime_formatter import format_datetime_human_readable, format_datetime_range_human_readable, is_future_datetime, sort_and_group_appointments
 import json, asyncio
 from app.services import cinc_service as cinc_service_module # Added CINC service module
 from typing import Dict, Any # Ensure Dict and Any are imported for type hinting
@@ -1550,15 +1550,18 @@ class CallHandler:
         
         # Clean up the existing appointment string - remove duplicates and format nicely
         if existing_appointment:
-            # Split by comma, strip whitespace, and remove duplicates while preserving order
-            appointments = []
-            seen = set()
-            for apt in existing_appointment.split(','):
-                apt = apt.strip()
-                if apt and apt not in seen:
-                    appointments.append(apt)
-                    seen.add(apt)
             
+            # Split by comma, strip whitespace, and remove duplicates while preserving order
+            existing_appointment = sort_and_group_appointments(existing_appointment)
+            if existing_appointment:
+                appointments = []
+                seen = set()
+                for apt in existing_appointment.split(','):
+                    apt = apt.strip()
+                    if apt and apt not in seen:
+                        appointments.append(apt)
+                        seen.add(apt)
+
             existing_appointment = ', '.join(appointments) if appointments else None
         isAllowMeetingConflict = self.agents[call_sid]['allowMeetingConflict']
         print("isAllowMeetingConflict: ", isAllowMeetingConflict)
