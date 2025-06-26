@@ -114,3 +114,64 @@ def json_serial(self, obj):
         if isinstance(obj, (datetime, date)):
             return obj.isoformat()
         raise TypeError ("Type %s not serializable" % type(obj))
+
+
+async def estimate_speech_duration(text, wpm=150, include_pauses=True):
+    """
+    Estimate speech duration from text.
+    
+    Args:
+        text (str): The text to analyze
+        wpm (int): Words per minute (default 150 for average speech)
+        include_pauses (bool): Add time for punctuation pauses
+    
+    Returns:
+        dict: Duration in seconds, minutes, and formatted time
+    """
+    import re
+    
+    # Count words (split by whitespace, remove empty strings)
+    words = len([word for word in text.split() if word.strip()])
+    
+    # Calculate base duration in minutes
+    base_duration_minutes = words / wpm
+    
+    # Add pause time for punctuation if requested
+    pause_time = 0
+    if include_pauses:
+        # Count punctuation that typically causes pauses
+        periods = text.count('.')
+        commas = text.count(',')
+        semicolons = text.count(';')
+        colons = text.count(':')
+        exclamations = text.count('!')
+        questions = text.count('?')
+        dashes = text.count('—') + text.count('--')
+        
+        # Estimate pause durations (in seconds)
+        pause_time = (
+            periods * 0.4 +          # Period: 0.5 sec
+            commas * 0.1 +           # Comma: 0.2 sec
+            semicolons * 0.2 +       # Semicolon: 0.3 sec
+            colons * 0.2 +           # Colon: 0.3 sec
+            exclamations * 0.3 +     # Exclamation: 0.4 sec
+            questions * 0.3 +        # Question: 0.4 sec
+            dashes * 0.2             # Dash: 0.3 sec
+        )
+    
+    # Total duration in seconds
+    total_seconds = (base_duration_minutes * 60) + pause_time
+    
+    # Format time
+    minutes = int(total_seconds // 60)
+    seconds = int(total_seconds % 60)
+    
+    return {
+        'total_seconds': round(total_seconds, 1),
+        'minutes': minutes,
+        'seconds': seconds,
+        'formatted': f"{minutes}:{seconds:02d}",
+        'word_count': words,
+        'estimated_wpm': wpm
+    }
+    
