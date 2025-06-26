@@ -58,8 +58,8 @@ async def incoming_call(request: Request, call_handler: CallHandler = Depends(ge
     data = await request.form()
     application_sid = data.get('ApplicationSid')
     direction = data.get('Direction')
-    fromNumber ="+16692060795"
-    dialed_number =  "+16692000795"
+    fromNumber = data.get('From')
+    dialed_number =  data.get('To')
     call_id = data.get("CallSid")
     print(data.get("IsBoom"))
     data = {
