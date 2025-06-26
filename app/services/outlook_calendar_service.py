@@ -16,7 +16,7 @@ class OutlookCalendarService(NangoService):
     async def get_events(self, connection_id: str, calendar_id: Optional[str] = None, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         logger.info(f"Fetching Outlook calendar events with connection_id: {connection_id}")
         try:
-            result = await self.fetch_data(connection_id, "events", params, 'outlook')
+            result = await self.fetch_data(connection_id, "get-events", params, 'outlook')
             logger.info(f"Successfully fetched Outlook calendar events")
             return result
         except Exception as e:

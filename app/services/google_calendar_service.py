@@ -16,7 +16,7 @@ class GoogleCalendarService(NangoService):
 
         logger.info(f"Fetching Google Calendar events with connection_id: {connection_id}")
         try:
-            result = await self.fetch_data(connection_id, "google-calendar/events", params, 'google-calendar')
+            result = await self.fetch_data(connection_id, "get-events", params, 'google-calendar')
             logger.info(f"Successfully fetched Google Calendar events")
             return result
         except Exception as e:
