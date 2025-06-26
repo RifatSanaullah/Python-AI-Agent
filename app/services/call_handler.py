@@ -43,7 +43,7 @@ from app.services import cinc_service as cinc_service_module # Added CINC servic
 from typing import Dict, Any # Ensure Dict and Any are imported for type hinting
 
 from app.adapters.filler_manager import FillerManager
-
+from app.helpers.utils import estimate_speech_duration
 
 # Configure logging
 logging.basicConfig(
@@ -172,16 +172,16 @@ class CallHandler:
                                             # Step 2: Check if the decoded data is empty
                                             # Convert byte data to an AudioSegment instance
 
-                    result = await self.is_silent_or_empty_mulaw_numpy(chunk_bytes)
-                    is_audio_silent = result['is_silent']
-
-                    # is_audio_silent = await self.is_mulaw_stream_silent_base64(chunk_bytes)
+                    # result = await self.is_silent_or_empty_mulaw_numpy(chunk_bytes)
                     # is_audio_silent = result['is_silent']
 
-                    if not is_audio_silent:
-                        # await self.on_user_speech(data['streamSid'])
-                        self.sessions[data['streamSid']]['last_user_audio_time'] =  None
-                        self.sessions[data['streamSid']]['wait_counter'] = 0
+                    # # is_audio_silent = await self.is_mulaw_stream_silent_base64(chunk_bytes)
+                    # # is_audio_silent = result['is_silent']
+
+                    # if not is_audio_silent:
+                    #     # await self.on_user_speech(data['streamSid'])
+                    #     self.sessions[data['streamSid']]['last_user_audio_time'] =  None
+                    #     self.sessions[data['streamSid']]['wait_counter'] = 0
 
                     with open(output_file, "ab") as f:
                         f.write(chunk_bytes)
@@ -1222,19 +1222,23 @@ class CallHandler:
 
         # filler_audio = self.filler_mgr.next()
         # await self.synthesize_response(filler_audio, call_id)
-
+        self.sessions[call_id]['prev_wait_duration'] = 0
+        self.sessions[call_id]['wait_duration'] = 0
         streamingResponse = True
         if self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Elevenlabs':
             streamingResponse = False
         response = await self.ai_service.generate_response(call_id, transcript, self.synthesize_response, self.agents[self.sessions[call_id]['call_sid']]['aiClient'], self.sessions[call_id]['synthesis_service'].flush_sp_ws, streamingResponse)
-        if 'End Call Message' in response or self.contains_any_word(transcript) or  self.contains_any_word(response):
+        if 'End Call Message' in response  or  self.contains_any_word(response):
             self.agents[self.sessions[call_id]['call_sid']]['end_call'] = True
             response = response.replace('End Call Message', '')
             # Schedule the call to end after 2 seconds
             # wait_time = self.sessions[call_id]['wait_duration']
             # if self.sessions[call_id]['last_transcript_time']:
+            estamitate_result = await estimate_speech_duration(response, 180)
+            print("estamitate_result: ", estamitate_result)
+            wait_time = estamitate_result['total_seconds'] + 1
             # wait_time = self.sessions[call_id]['wait_duration'] + self.sessions[call_id]['prev_wait_duration']
-            wait_time = 15
+            # wait_time = 15
             print("wait_time: ", wait_time)
             self.clear_timer()
             self.timer = Timer(wait_time, self.twilio_service.hangup_call, args=[self.sessions[call_id]['call_sid']])
@@ -1253,8 +1257,8 @@ class CallHandler:
                         )
             self.timer.start()
         self.sessions[call_id]['last_transcript_time'] = None
-        self.sessions[call_id]['prev_wait_duration'] = 0
-        self.sessions[call_id]['wait_duration'] = 0
+        # self.sessions[call_id]['prev_wait_duration'] = 0
+        # self.sessions[call_id]['wait_duration'] = 0
         print(f"Response: {response}")
         # await self.synthesize_response(response, call_id)
 
@@ -1341,9 +1345,9 @@ class CallHandler:
             session['ai_speaking'] = True
             await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
             await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
-            result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
-            session['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
-            session['wait_duration'] = result['duration']
+            # result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
+            # self.sessions[call_id]['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
+            # self.sessions[call_id]['wait_duration'] = result['duration']
         # else:
         #     self.sessions[call_id]['ai_interrupt'] = False
 
