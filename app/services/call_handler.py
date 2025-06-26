@@ -37,7 +37,7 @@ import soundfile as sf
 import time , re
 import traceback
 from app.utils.responseformat import hubspot_patch_format
-from app.utils.datetime_formatter import format_datetime_human_readable, format_datetime_range_human_readable, is_future_datetime
+from app.utils.datetime_formatter import format_datetime_human_readable, format_datetime_range_human_readable, is_future_datetime, sort_and_group_appointments
 import json, asyncio
 from app.services import cinc_service as cinc_service_module # Added CINC service module
 from typing import Dict, Any # Ensure Dict and Any are imported for type hinting
@@ -250,11 +250,13 @@ class CallHandler:
                     "integrations" : self.agents[call_id]['integrations'],
                     "event_id" : event_id,
                     "previous_convo_summary" : previous_convo_summary,
+                    "lead_appointment_id": self.agents[call_id].get('lead_appointment_id', None),
                 }
 
                 try:
                     response = await self.backend_service.update_conversation_info(data)
                     isBoom = self.agents[call_id]['isBoom']
+                    print("summary", response.get('summary'))
                     print("isBoom" , isBoom)
                     if isBoom is not None or isBoom == True or isBoom == 'true':
                         await self.backend_service.update_conversation_bh({ "lead_id" : lead_id, "conversations": data['conversations']})
@@ -288,7 +290,7 @@ class CallHandler:
         # Log the integrations dictionary
         logging.info(f"Integrations for call {call_id}: {integrations}")
         event = appointment.get('eventData') if appointment else None
-        
+        calendarEventData = appointment.get('calendarEventData') if appointment else None
         # Get session info to extract account_id and connection_id for CINC
         session_info = self.get_business_agent(call_id)
         account_id = session_info.get("account_id") # This should be the account ID from the database
@@ -916,27 +918,40 @@ class CallHandler:
         # Google Calendar Event Handling
         if integrations and integrations.get("google_calendar_connection_id") and integrations["google_calendar_connection_id"] != '':
             try:
-                if event is not None and event != '':
-                    google_event_payload = {
-                        "summary": event.get("Subject"),
-                        "description": event.get("Description"),
+                print(f"DEBUG - Calendar Event Data Type: {type(calendarEventData)}")
+                print(f"DEBUG - Calendar Event Data: {calendarEventData}")
+                
+                if calendarEventData is not None and calendarEventData != '' and isinstance(calendarEventData, dict):
+                    # Validate required fields
+                    required_fields = ["subject", "startDateTime", "endDateTime"]
+                    missing_fields = [field for field in required_fields if not calendarEventData.get(field)]
+                    
+                    if missing_fields:
+                        logging.warning(f"Missing required fields for Google Calendar: {missing_fields}")
+                        logging.warning(f"Calendar event data: {calendarEventData}")
+                    else:
+                        # Prepare Google Calendar event payload (using timezone-aware datetime)
+                        google_event_payload = {
+                        "summary": calendarEventData.get("subject"),
+                        "description": calendarEventData.get("description"),
+                        "location": calendarEventData.get("location", ""),
                         "start": {
-                            "dateTime": event.get("StartDateTime"),
-                            "timeZone": event.get("timezone"),
+                            "dateTime": calendarEventData.get('startDateTime'),
+                            "timeZone": calendarEventData.get("timezone", "America/New_York")
                         },
                         "end": {
-                            "dateTime": event.get("EndDateTime"),
-                            "timeZone": event.get("timezone") 
+                            "dateTime": calendarEventData.get('endDateTime'),
+                            "timeZone": calendarEventData.get("timezone", "America/New_York")
                         }
                     }
 
                     # Handle appointment operations with proper priority: delete > update > create
                     if appointment.get('deleteAppointment'):
                         # Delete existing appointment
-                        # Try both camelCase and snake_case key formats for compatibility
-                        google_calendar_event_id = (appointment.get('googleCalendarEventId') or 
-                                                   appointment.get('google_calendar_event_id') or 
-                                                   prev_event_id)
+                        # Use stored event ID from agent initialization
+                        google_calendar_event_id = self.agents.get(call_id, {}).get('google_calendar_event_id')
+                        
+                        print(f"DEBUG - Google Calendar Delete: stored_id={google_calendar_event_id}")
                         
                         if google_calendar_event_id:
                             logging.info(f"Deleting Google Calendar event: {google_calendar_event_id}")
@@ -949,37 +964,41 @@ class CallHandler:
                             logging.warning("Google Calendar event ID not found for deletion")
                     elif appointment.get('updateAppointment'):
                         # Update existing appointment
-                        # Try both camelCase and snake_case key formats for compatibility
-                        google_calendar_event_id = (appointment.get('googleCalendarEventId') or 
-                                                   appointment.get('google_calendar_event_id') or 
-                                                   prev_event_id)
+                        # Use stored event ID from agent initialization
+                        google_calendar_event_id = self.agents.get(call_id, {}).get('google_calendar_event_id')
+                        
+                        
+                        print(f"DEBUG - Google Calendar Update: stored_id={google_calendar_event_id}")
                         
                         if google_calendar_event_id:
                             logging.info(f"Updating Google Calendar event: {google_calendar_event_id}")
                             
-                            # For updates, only send the fields that are changing (start and end time)
-                            update_payload = {}
-                            if event.get("StartDateTime"):
-                                update_payload["start"] = {
-                                    "dateTime": event.get("StartDateTime"),
-                                    "timeZone": event.get("timezone")
-                                }
-                            if event.get("EndDateTime"):
-                                update_payload["end"] = {
-                                    "dateTime": event.get("EndDateTime"),
-                                    "timeZone": event.get("timezone")
-                                }
+                            # For updates, only send essential fields (start and end time)
+                            google_update_payload = {
+                                "start": {
+                                    "dateTime": calendarEventData.get('startDateTime'),
+                                    "timeZone": calendarEventData.get("timezone", "America/New_York")
+                                },
+                                "end": {
+                                    "dateTime": calendarEventData.get('endDateTime'),
+                                    "timeZone": calendarEventData.get("timezone", "America/New_York")
+                                },
+                                "summary": calendarEventData.get("subject"),  # Add this
+                                "description": calendarEventData.get("description"),  # Add this
+                                "status": "confirmed"  # Add this to prevent cancellation
+                            }
                             
-                            # Only update if we have start/end times to update
-                            if update_payload:
+                            if google_update_payload and google_update_payload.get("start") and google_update_payload.get("end"):
+                                print(f"DEBUG - Google Calendar Update Payload: {google_update_payload}")
                                 response = await self.google_calendar_service.update_event(
                                     integrations['google_calendar_connection_id'],
                                     google_calendar_event_id,
-                                    update_payload
+                                    google_update_payload
                                 )
                                 logging.info(f"Google Calendar event time updated successfully: {response}")
                             else:
-                                logging.warning("No start/end time provided for Google Calendar event update")
+                                logging.warning(f"Invalid payload for Google Calendar event update: {google_update_payload}")
+                                logging.warning("Missing required fields: start, end, or payload is empty")
                         else:
                             logging.warning("Google Calendar event ID not found for update")
                     elif appointment.get('newAppointment'):
@@ -1007,39 +1026,40 @@ class CallHandler:
         # Outlook Calendar Event Handling
         if integrations and integrations.get("outlook_connection_id") and integrations["outlook_connection_id"] != '':
             try:
-                if event is not None and event != '':
-                    # Prepare attendees list
-                    outlook_attendees = []
-                    contact_email_outlook = None
-                    if summary and 'email' in summary and summary['email']: # HubSpot format
-                        contact_email_outlook = summary['email']
-                    elif summary and 'Email' in summary and summary['Email']: # Salesforce format
-                        contact_email_outlook = summary['Email']
+                print(f"DEBUG - Outlook Calendar Event Data: {calendarEventData}")
+                
+                if calendarEventData is not None and calendarEventData != '' and isinstance(calendarEventData, dict):
+                    # Validate required fields
+                    required_fields = ["subject", "startDateTime", "endDateTime", "timezone"]
+                    missing_fields = [field for field in required_fields if not calendarEventData.get(field)]
                     
-                    if contact_email_outlook:
-                        outlook_attendees.append(contact_email_outlook)
-                    
-                    # Transform event data to the format expected by the Nango script's 'fields'
-                    outlook_event_payload = {
-                        "subject": event.get("Subject"),
-                        "description": event.get("Description"),
-                        "startDateTime": event.get("StartDateTime"), # Expected as ISO 8601 string
-                        "endDateTime": event.get("EndDateTime"),     # Expected as ISO 8601 string
-                        "timeZone": event.get("timezone"), # Default if not in event
-                        "attendees": outlook_attendees # List of email strings
-                        # Add other fields like 'location' if your Nango script handles them
-                    }
-                    
-                    # Handle appointment operations with proper priority: delete > update > create
-                    # Basic validation for fields required by the Nango script
-                    required_fields = ["subject", "startDateTime", "endDateTime", "timeZone"]
-                    if all(outlook_event_payload.get(k) for k in required_fields):
+                    if missing_fields:
+                        logging.warning(f"Missing required fields for Outlook Calendar: {missing_fields}")
+                        logging.warning(f"Calendar event data: {calendarEventData}")
+                    else:                     
+                        # Transform event data to the format expected by the Nango script's 'fields'
+                        # Prepare attendees array from the calendar event data
+                        attendees = []
+                        if calendarEventData.get("attendeeEmail"):
+                            attendees.append(calendarEventData.get("attendeeEmail"))
+                        
+                        outlook_event_payload = {
+                            "subject": calendarEventData.get("subject"),
+                            "description": calendarEventData.get("description"),
+                            "location": calendarEventData.get("location", ""),
+                            "startDateTime": calendarEventData.get('startDateTime'), # Expected as ISO 8601 string
+                            "endDateTime": calendarEventData.get('endDateTime'),     # Expected as ISO 8601 string
+                            "timeZone": calendarEventData.get("timezone"), # IANA timezone 
+                            "attendees": attendees  # Provide actual attendees array from event data
+                        }
+                        
+                        # Handle appointment operations with proper priority: delete > update > create
                         if appointment.get('deleteAppointment'):
                             # Delete existing appointment
-                            # Try both camelCase and snake_case key formats for compatibility
-                            outlook_calendar_event_id = (appointment.get('outlookCalendarEventId') or 
-                                                        appointment.get('outlook_calendar_event_id') or 
-                                                        prev_event_id)
+                            # Use stored event ID from agent initialization
+                            outlook_calendar_event_id = self.agents.get(call_id, {}).get('outlook_calendar_event_id')
+                            
+                            print(f"DEBUG - Outlook Calendar Delete: stored_id={outlook_calendar_event_id}")
                             
                             if outlook_calendar_event_id:
                                 logging.info(f"Deleting Outlook Calendar event: {outlook_calendar_event_id}")
@@ -1052,33 +1072,43 @@ class CallHandler:
                                 logging.warning("Outlook Calendar event ID not found for deletion")
                         elif appointment.get('updateAppointment'):
                             # Update existing appointment
-                            # Try both camelCase and snake_case key formats for compatibility
-                            outlook_calendar_event_id = (appointment.get('outlookCalendarEventId') or 
-                                                        appointment.get('outlook_calendar_event_id') or 
-                                                        prev_event_id)
+                            # Use stored event ID from agent initialization
+                            outlook_calendar_event_id = self.agents.get(call_id, {}).get('outlook_calendar_event_id')
+                            
+                            print(f"DEBUG - Outlook Calendar Update: stored_id={outlook_calendar_event_id}")
                             
                             if outlook_calendar_event_id:
                                 logging.info(f"Updating Outlook Calendar event: {outlook_calendar_event_id}")
                                 
-                                # For updates, only send the fields that are changing (start and end time)
-                                update_payload = {}
-                                if event.get("StartDateTime"):
-                                    update_payload["startDateTime"] = event.get("StartDateTime")
-                                if event.get("EndDateTime"):
-                                    update_payload["endDateTime"] = event.get("EndDateTime")
-                                if event.get("timezone"):
-                                    update_payload["timeZone"] = event.get("timezone")
+                                # For updates, only send essential fields (start and end time)
+                                outlook_update_payload = {
+                                    "start": {
+                                        "dateTime": calendarEventData.get('startDateTime'),
+                                        "timeZone": calendarEventData.get("timezone", "America/New_York")
+                                    },
+                                    "end": {
+                                        "dateTime": calendarEventData.get('endDateTime'),
+                                        "timeZone": calendarEventData.get("timezone", "America/New_York")
+                                    },
+                                    "subject": calendarEventData.get("subject"),  # Add this
+                                    "body": {  # Add this
+                                        "contentType": "html",
+                                        "content": calendarEventData.get("description", "")
+                                    }
+                                }
                                 
-                                # Only update if we have start/end times to update
-                                if update_payload.get("startDateTime") or update_payload.get("endDateTime"):
+                                # Only update if we have the required fields
+                                if outlook_update_payload.get("start") and outlook_update_payload.get("end"):
+                                    print(f"DEBUG - Outlook Calendar Update Payload: {outlook_update_payload}")
                                     response = await self.outlook_calendar_service.update_event(
                                         integrations['outlook_connection_id'],
                                         outlook_calendar_event_id,
-                                        update_payload
+                                        outlook_update_payload
                                     )
                                     logging.info(f"Outlook Calendar event time updated successfully: {response}")
                                 else:
-                                    logging.warning("No start/end time provided for Outlook Calendar event update")
+                                    logging.warning(f"Invalid payload for Outlook Calendar event update: {outlook_update_payload}")
+                                    logging.warning("Missing required fields: start or end objects")
                             else:
                                 logging.warning("Outlook Calendar event ID not found for update")
                         elif appointment.get('newAppointment'):
@@ -1097,8 +1127,9 @@ class CallHandler:
                                 pass  # Response without ID
                             else:
                                 pass  # No response
-                    else:
-                        logging.warning("Missing required fields for Outlook Calendar event")
+                else:
+                    logging.warning("Missing required fields for Outlook Calendar event")
+                    logging.warning(f"Calendar event data: {calendarEventData}")
             except Exception as e:
                 logging.error(f"Error in Outlook Calendar event handling: {str(e)}")
                 import traceback
@@ -1426,6 +1457,19 @@ class CallHandler:
 
         self.agents[call_id]['appointment'] = api_response['data']['appointment']
         print(f"xxxxDEBUGxxxxx - Appointment data: {self.agents[call_id]['appointment']}")
+        # Extract and store calendar event IDs from the backend response, if available
+        appointment_data = api_response['data'].get('appointment', {})
+        google_calendar_event_id = appointment_data.get('googleCalendarEventId')
+        outlook_calendar_event_id = appointment_data.get('outlookCalendarEventId')
+        lead_appointment_id = appointment_data.get('appointmentId')
+
+        print(f"xxxxDEBUGxxxxx - Google Calendar Event ID: {google_calendar_event_id}")
+        print(f"xxxxDEBUGxxxxx - Outlook Calendar Event ID: {outlook_calendar_event_id}")
+
+        # Store these IDs in the agent for easy access later
+        self.agents[call_id]['google_calendar_event_id'] = google_calendar_event_id
+        self.agents[call_id]['outlook_calendar_event_id'] = outlook_calendar_event_id
+        self.agents[call_id]['lead_appointment_id'] = lead_appointment_id
         # Add user preference for allowing meeting conflicts
         if 'userPreference' in api_response['data'] and 'allowMeetingConflict' in api_response['data']['userPreference']:
             self.agents[call_id]['allowMeetingConflict'] = api_response['data']['userPreference']['allowMeetingConflict']
@@ -1529,15 +1573,18 @@ class CallHandler:
         
         # Clean up the existing appointment string - remove duplicates and format nicely
         if existing_appointment:
-            # Split by comma, strip whitespace, and remove duplicates while preserving order
-            appointments = []
-            seen = set()
-            for apt in existing_appointment.split(','):
-                apt = apt.strip()
-                if apt and apt not in seen:
-                    appointments.append(apt)
-                    seen.add(apt)
             
+            # Split by comma, strip whitespace, and remove duplicates while preserving order
+            existing_appointment = sort_and_group_appointments(existing_appointment)
+            if existing_appointment:
+                appointments = []
+                seen = set()
+                for apt in existing_appointment.split(','):
+                    apt = apt.strip()
+                    if apt and apt not in seen:
+                        appointments.append(apt)
+                        seen.add(apt)
+
             existing_appointment = ', '.join(appointments) if appointments else None
         isAllowMeetingConflict = self.agents[call_sid]['allowMeetingConflict']
         print("isAllowMeetingConflict: ", isAllowMeetingConflict)
@@ -1560,17 +1607,30 @@ class CallHandler:
         if description is not None and description != "":
             self.ai_service.add_system_message(stream_sid, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
        
-        if not isAllowMeetingConflict and existing_appointment is not None and existing_appointment != "":
-            print("Existing appointment found: ", existing_appointment)
-            user_timezone = self.agents[call_sid].get('timezone', 'UTC')
+            if not isAllowMeetingConflict and existing_appointment is not None and existing_appointment != "":
+             print("Existing appointment found: ", existing_appointment)
+            # user_timezone = self.agents[call_sid].get('timezone', 'UTC')
             self.ai_service.add_system_message(
             stream_sid,
             "system",
-            f"""Task: if user wants to schedule an appointment or meeting.
+            f"""Task: Help user schedule a 30-minute appointment/meeting.
 
-            Specifics:
-            1. The booked time slots are: {existing_appointment}
-            2. If the existing_appointment variable indicates the slot is booked, inform the user it's unavailable and ask them to choose another time slots or date
+            IMPORTANT SCHEDULING RULES:
+            1. All meetings are exactly 30 minutes long
+            2. Meetings can start at any 30-minute interval (e.g., 10:00am, 10:30am, 11:00am, 11:30am, etc.)
+            3. A slot is available if there's no overlap with existing appointments
+
+            BOOKED TIME SLOTS: {existing_appointment}
+
+            INSTRUCTIONS:
+            - If user requests a time that does NOT conflict with booked slots, proceed with scheduling
+            - ONLY when user requests a time that CONFLICTS with booked slots:
+              * Inform them the requested time is unavailable
+              * Suggest 2-3 nearby available 30-minute slots on the same date
+              * Look for gaps between appointments (e.g., if 11:00am-11:30am is booked but 11:30am-12:00pm is free, suggest 11:30am-12:00pm)
+              * If no slots available on requested date, suggest alternative dates
+
+            Do not proactively list available times unless there's a scheduling conflict.
             """
         )
 

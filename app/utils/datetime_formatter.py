@@ -335,11 +335,11 @@ def format_datetime_range_human_readable(start_datetime_str, end_datetime_str=No
         end_time_str = format_time(end_dt)
         
         # Add timezone info if user timezone is specified
-        timezone_info = ""
-        if user_timezone_str and user_timezone_str != 'UTC':
-            timezone_info = f" {user_timezone_str}"
+        # timezone_info = ""
+        # if user_timezone_str and user_timezone_str != 'UTC':
+        #     timezone_info = f" {user_timezone_str}"
         
-        return f'{month} {day}{suffix} ({start_time_str} to {end_time_str}{timezone_info})'
+        return f'{month} {day}{suffix} ({start_time_str} to {end_time_str}'
         
     except Exception as e:
         print(f"Error formatting datetime range {start_datetime_str} to {end_datetime_str}: {str(e)}")
@@ -443,3 +443,87 @@ def format_datetime_human_readable(datetime_str, timezone_str=None, user_timezon
     except Exception as e:
         print(f"Error formatting datetime {datetime_str}: {str(e)}")
         return datetime_str
+
+
+def sort_and_group_appointments(appointments_str: str) -> str:
+    """
+    Sort and group appointments by date.
+    
+    Args:
+        appointments_str: String containing appointments separated by commas
+        
+    Returns:
+        Sorted and grouped appointments string
+    """
+    if not appointments_str:
+        return ""
+        
+    # Split into individual appointments
+    appointments = [apt.strip() for apt in appointments_str.split(',')]
+    
+    # Parse appointments into structured data for sorting
+    parsed_appointments = []
+    for apt in appointments:
+        try:
+            # Extract date and time parts
+            # Example format: "June 29th (2pm to 2:30pm UTC-05:00)"
+            date_part = apt[:apt.find('(')].strip()
+            time_part = apt[apt.find('('):].strip()
+            
+            # Parse month and day
+            month = date_part.split()[0]  # June
+            day = int(''.join(filter(str.isdigit, date_part.split()[1])))  # 29 from 29th
+            
+            # Convert month to number for sorting
+            months = {
+                'January': 1, 'February': 2, 'March': 3, 'April': 4,
+                'May': 5, 'June': 6, 'July': 7, 'August': 8,
+                'September': 9, 'October': 10, 'November': 11, 'December': 12
+            }
+            month_num = months[month]
+            
+            # Parse time for secondary sorting
+            time_str = time_part[1:time_part.find(' UTC')].lower()  # "2pm to 2:30pm"
+            start_time = time_str.split(' to ')[0]  # "2pm"
+            
+            # Convert time to 24-hour format for sorting
+            hour = int(''.join(filter(str.isdigit, start_time[:-2])))
+            if start_time.endswith('pm') and hour != 12:
+                hour += 12
+            elif start_time.endswith('am') and hour == 12:
+                hour = 0
+                
+            parsed_appointments.append({
+                'original': apt,
+                'sort_key': (month_num, day, hour),
+                'month': month,
+                'day': day
+            })
+        except Exception as e:
+            print(f"Error parsing appointment: {apt} - {str(e)}")
+            continue
+    
+    # Sort appointments
+    parsed_appointments.sort(key=lambda x: x['sort_key'])
+    
+    # Group by date and join
+    current_date = None
+    grouped_appointments = []
+    current_group = []
+    
+    for apt in parsed_appointments:
+        date_key = (apt['month'], apt['day'])
+        
+        if date_key != current_date:
+            if current_group:
+                grouped_appointments.append(', '.join(current_group))
+            current_group = [apt['original']]
+            current_date = date_key
+        else:
+            current_group.append(apt['original'])
+            
+    # Add the last group
+    if current_group:
+        grouped_appointments.append(', '.join(current_group))
+    
+    return ', '.join(grouped_appointments)
