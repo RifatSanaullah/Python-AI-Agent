@@ -171,12 +171,15 @@ class DeepgramService:
                 # with self.lock:
 
                 # Schedule new task: wait 2 seconds, then emit final transcript
-                self.transmit_task = asyncio.create_task(self.transmit_after_delay())
+               self.transmit_task = asyncio.run_coroutine_threadsafe(
+                    self.transmit_after_delay(),
+                    self.loop
+                )
                 print('Final' , self.complete_sentence)
 
 
     def cancel_transmit(self):
-         if self.transmit_task and not self.transmit_task.done():
+         if self.transmit_task:
             self.transmit_task.cancel()
 
     async def on_started(self, message, **kwargs):
