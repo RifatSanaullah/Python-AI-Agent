@@ -978,7 +978,10 @@ class CallHandler:
                                 "end": {
                                     "dateTime": calendarEventData.get('endDateTime'),
                                     "timeZone": calendarEventData.get("timezone", "America/New_York")
-                                }
+                                },
+                                "summary": calendarEventData.get("subject"),  # Add this
+                                "description": calendarEventData.get("description"),  # Add this
+                                "status": "confirmed"  # Add this to prevent cancellation
                             }
                             
                             if google_update_payload and google_update_payload.get("start") and google_update_payload.get("end"):
@@ -1077,11 +1080,16 @@ class CallHandler:
                                 outlook_update_payload = {
                                     "start": {
                                         "dateTime": calendarEventData.get('startDateTime'),
-                                        "timeZone": calendarEventData.get("timezone")
+                                        "timeZone": calendarEventData.get("timezone", "America/New_York")
                                     },
                                     "end": {
                                         "dateTime": calendarEventData.get('endDateTime'),
-                                        "timeZone": calendarEventData.get("timezone")
+                                        "timeZone": calendarEventData.get("timezone", "America/New_York")
+                                    },
+                                    "subject": calendarEventData.get("subject"),  # Add this
+                                    "body": {  # Add this
+                                        "contentType": "html",
+                                        "content": calendarEventData.get("description", "")
                                     }
                                 }
                                 
