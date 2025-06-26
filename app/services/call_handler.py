@@ -5,7 +5,7 @@ import logging
 import time
 import numpy as np
 from sqlalchemy.orm import Session
-# from app.services.playht_service import PlayHT
+from app.services.playht_service import PlayHT
 from app.services.twilio_service import TwilioService
 from app.services.ai_service import AIService
 # from app.services.ai_service_v2 import AIService
@@ -42,6 +42,9 @@ import json, asyncio
 from app.services import cinc_service as cinc_service_module # Added CINC service module
 from typing import Dict, Any # Ensure Dict and Any are imported for type hinting
 
+from app.adapters.filler_manager import FillerManager
+
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -63,6 +66,7 @@ class CallHandler:
         self.calendly_service = CalendlyService()
         self.google_calendar_service = GoogleCalendarService()
         self.outlook_calendar_service = OutlookCalendarService()
+        self.filler_mgr = FillerManager()
         self.cinc_service = cinc_service_module # Initialize CINC Service
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.sessions = {}
@@ -1184,6 +1188,10 @@ class CallHandler:
             return
         self.sessions[call_id]['ai_interrupt'] =  False
         self.ai_service.update_interrupt_status(call_id, False)
+
+        # filler_audio = self.filler_mgr.next()
+        # await self.synthesize_response(filler_audio, call_id)
+
         streamingResponse = True
         if self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Elevenlabs':
             streamingResponse = False
@@ -1277,6 +1285,8 @@ class CallHandler:
         elif self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Microsoft Azure':
             audio_stream = await self.sessions[call_id]["synthesis_service"].stream_text_to_speech(text)
 
+        elif self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'PlayHT':
+            audio_stream = await session['synthesis_service'].stream_text_to_speech(text)
         else:
             raise ValueError(f"Unsupported TTS provider: {settings.tts_provider}")
 
@@ -1343,6 +1353,8 @@ class CallHandler:
             self.sessions[stream_sid]["synthesis_service"] = self.elevenlabs_service
         elif self.agents[call_sid]['TTS']['name'] == 'Microsoft Azure':
             self.sessions[stream_sid]["synthesis_service"] = AzureService(self.loop)
+        elif self.agents[call_sid]['TTS']['name'] == 'PlayHT':
+            self.sessions[stream_sid]["synthesis_service"] = PlayHT(self.loop)
         else:
             self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
 
@@ -1480,6 +1492,9 @@ class CallHandler:
             await self.sessions[stream_sid]['synthesis_service'].establish_connection(self.agents[call_sid]['TTS']['voice']['model'], stream_sid, self.queue_audio)
             # await self.sessions[stream_sid]['synthesis_service'].establish_connection(self.agents[call_sid]['TTS']['voice']['model'])
         # self.sessions[call_sid]['stream_sid'] = stream_sid
+        elif self.agents[call_sid]['TTS']['name'] == 'PlayHT':
+            await self.sessions[stream_sid]['synthesis_service'].establish_connection( self.agents[call_sid]['TTS']['voice']['model'], self.agents[call_sid]['TTS']['model'], stream_sid, self.queue_audio)
+        
         print("Done initializing session info")
 
         updaedata= {

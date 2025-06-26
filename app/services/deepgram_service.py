@@ -36,7 +36,7 @@ class DeepgramService:
             encoding='mulaw',
             sample_rate=8000,
             smart_format=True,
-            vad_events=True,
+            # vad_events=True,
             utterance_end_ms="1000",
             interim_results=True,
             endpointing=400,  # Much shorter silence detection
@@ -143,10 +143,9 @@ class DeepgramService:
     async def transmit_after_delay(self):
         try:
             if self.is_sentence_complete(self.complete_sentence):
-                await asyncio.sleep(0.6)  # Wait for more speech
+                await asyncio.sleep(0.2)  # Wait for more speech
             else:
-                await asyncio.sleep(1)  # Wait for more speech
-
+                await asyncio.sleep(0.4)  # Wait for more speech
             # with self.lock:
             if self.on_transcript and self.complete_sentence.strip():
                 sentence = self.complete_sentence
@@ -172,15 +171,12 @@ class DeepgramService:
                 # with self.lock:
 
                 # Schedule new task: wait 2 seconds, then emit final transcript
-                self.transmit_task = asyncio.run_coroutine_threadsafe(
-                    self.transmit_after_delay(),
-                    self.loop
-                )
+                self.transmit_task = asyncio.create_task(self.transmit_after_delay())
                 print('Final' , self.complete_sentence)
 
 
     def cancel_transmit(self):
-        if self.transmit_task:
+         if self.transmit_task and not self.transmit_task.done():
             self.transmit_task.cancel()
 
     async def on_started(self, message, **kwargs):
