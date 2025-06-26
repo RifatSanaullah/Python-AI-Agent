@@ -171,7 +171,7 @@ class DeepgramService:
                 # with self.lock:
 
                 # Schedule new task: wait 2 seconds, then emit final transcript
-               self.transmit_task = asyncio.run_coroutine_threadsafe(
+                self.transmit_task = asyncio.run_coroutine_threadsafe(
                     self.transmit_after_delay(),
                     self.loop
                 )
