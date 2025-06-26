@@ -1584,17 +1584,30 @@ class CallHandler:
         if description is not None and description != "":
             self.ai_service.add_system_message(stream_sid, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
        
-        if not isAllowMeetingConflict and existing_appointment is not None and existing_appointment != "":
-            print("Existing appointment found: ", existing_appointment)
-            user_timezone = self.agents[call_sid].get('timezone', 'UTC')
+            if not isAllowMeetingConflict and existing_appointment is not None and existing_appointment != "":
+             print("Existing appointment found: ", existing_appointment)
+            # user_timezone = self.agents[call_sid].get('timezone', 'UTC')
             self.ai_service.add_system_message(
             stream_sid,
             "system",
-            f"""Task: if user wants to schedule an appointment or meeting.
+            f"""Task: Help user schedule a 30-minute appointment/meeting.
 
-            Specifics:
-            1. The booked time slots are: {existing_appointment}
-            2. If the existing_appointment variable indicates the slot is booked, inform the user it's unavailable and ask them to choose another time slots or date
+            IMPORTANT SCHEDULING RULES:
+            1. All meetings are exactly 30 minutes long
+            2. Meetings can start at any 30-minute interval (e.g., 10:00am, 10:30am, 11:00am, 11:30am, etc.)
+            3. A slot is available if there's no overlap with existing appointments
+
+            BOOKED TIME SLOTS: {existing_appointment}
+
+            INSTRUCTIONS:
+            - If user requests a time that does NOT conflict with booked slots, proceed with scheduling
+            - ONLY when user requests a time that CONFLICTS with booked slots:
+              * Inform them the requested time is unavailable
+              * Suggest 2-3 nearby available 30-minute slots on the same date
+              * Look for gaps between appointments (e.g., if 11:00am-11:30am is booked but 11:30am-12:00pm is free, suggest 11:30am-12:00pm)
+              * If no slots available on requested date, suggest alternative dates
+
+            Do not proactively list available times unless there's a scheduling conflict.
             """
         )
 
