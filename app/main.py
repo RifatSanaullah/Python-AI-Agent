@@ -1,6 +1,9 @@
 # app/main.py
 import uvicorn
+import logging
 from dotenv import load_dotenv
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 from fastapi import FastAPI, Request, Depends, WebSocket, HTTPException
 from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse, RedirectResponse # Keep RedirectResponse
 from app.services.call_handler import CallHandler
@@ -13,6 +16,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.services.nango_service import NangoService # Added NangoService import back
 from app.services import cinc_service
 from typing import Optional, Dict, Any # Added Dict and Any for type hinting
+from app.services.cinc_webhook_service import register_cinc_webhook, fetch_and_print_lead_details
+from app.services.cinc_webhook_service import fetch_and_print_lead_details
 
 load_dotenv()
 
@@ -31,6 +36,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.post("/cinc/register-webhook")
+async def register_webhook(request: Request):
+    """
+    Register the CINC webhook.
+    """
+    result = await register_cinc_webhook()
+    if result:
+        return {"status": "success", "data": result}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to register webhook with CINC")
+
+@app.post("/new-cinc-lead")
+async def receive_webhook(request: Request):
+    """
+    Receive and process webhooks from CINC API.
+    """
+    try:
+        data = await request.json()
+        event_type = data.get("type")
+        if event_type == "lead.created":
+            lead_info = data.get("lead", {})
+            logger.info(f"New lead created: {lead_info}")
+            lead_id = lead_info.get("id")
+            connection_id = "a064bb5d-881d-4cdd-83ea-6427594df59a"
+            account_id = 1
+            if lead_id :
+                await fetch_and_print_lead_details(account_id, lead_id, connection_id)
+        else:
+            logger.info(f"Received event of type: {event_type}")
+
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Error processing webhook: {e}")
+        raise HTTPException(status_code=400, detail="Invalid request")
 
 
 # Create global service instance
@@ -351,6 +390,30 @@ async def disconnect_cinc_integration(account_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete CINC connection: {str(e)}")
 
+
+@app.get("/cinc/webhook-info")
+async def get_cinc_webhook_info():
+    """
+    Retrieve the registered webhook information from CINC API.
+    """
+    import requests
+    CINC_API_BASE_URL = "https://public.cincapi.com/v2"
+    headers = {
+        'Authorization': 'eyJhbGciOiJSUzI1NiIsImtpZCI6IlJscDI4aFJHV0xoRkF5MyIsInR5cCI6IkpXVCJ9.eyJmaXJzdF9uYW1lIjoiTWFoaXIiLCJsYXN0X25hbWUiOiJNdXNsZWgiLCJlbWFpbCI6Im1haGlyLm11c2xlaEBib29tZXJzaHViLmNvbSIsInBob25lIjoiIiwiYXVkIjoicHVibGljIiwic2NvcGUiOiJhcGk6cmVhZCBhcGk6Y3JlYXRlIGFwaTp1cGRhdGUgYXBpOmV2ZW50IiwianRpIjoiZTYzMTNkMzAtZTZhYS00YTg1LThmM2MtNjVlOWZmYWY3OWJiIiwic3ViIjoiNzZkMjBkYWQtNmVhOC00ZTI3LWFlOTUtYmY0OGFlNmU2YWQxIiwidXNlcl90eXBlIjoiYWdlbnQiLCJsZWdhY3lfaWQiOiJNTTREMkQ1NTNCRTg4QTQzMzZBMUE4NUUzN0EzNkQzOEEwIiwidXNlcm5hbWUiOiJtYWhpci5tdXNsZWhAYm9vbWVyc2h1Yi5jb20iLCJyb2xlIjpbImNsaWVudCIsImJyb2tlciJdLCJpZHAiOiJpbnRlZ3JhdG9yIiwiY2xpZW50X25hbWUiOiJWZXJiYWNhbGwiLCJzaXRlIjoiRE4yM0VERTAzQ0IyMEE0OUNFOUE4Rjg1REIwQkZGOEQzQSIsImNsaWVudF9pZCI6IjA5ZDFkZjkwLTVkNDItNDhmOC05ZjM0LTVjYWY2Yzc2Njg3MyIsImFtciI6WyJwd2QiXSwibmJmIjoxNzUxMDQxNzgxLCJleHAiOjE3NTEwNDI2ODEsImlhdCI6MTc1MTA0MTc4MSwiaXNzIjoiaHR0cHM6Ly9hdXRodjIuY2luY2FwaS5jb20vaW50ZWdyYXRvciIsImxhc3RfbG9naW5fZGF0ZSI6MTc1MDk1NjE2MzAwN30.OxxvZrP7MTXVLpxl9IhQklyjd_kyt0R3LpJtvu6QZEEaOFeb307wKGqYT9JPEiJ-8MDGFPVFqUtHta4njzjY48EmQtDdxP8oZw-QBLcpFkgzums3Eh2r5ybuxoo17-Lm024LEMSJPF9jS_e_7aYbLYV5Va3o1Eifh1S9EerM3f6t7WPrgoKuMDg63VdSnRP0SZB8weTKNHDYYiN6bi7tuXtd-9XvZG-6cgHWO3xAV32o_Rtb2pxk8Qm0zXagNg0op5pUOgQIfK0365wnv0vq93_hCfH2DIcEg6WZlvL4EjWIK6k_YFaidhk7rbytFGd7bRAOBaSjy9U1HqYALO5zVQ'
+    }
+    try:
+        response = requests.get(f"{CINC_API_BASE_URL}/site/webhook", headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        error_content = None
+        if e.response is not None:
+            try:
+                error_content = e.response.json()
+            except Exception:
+                error_content = e.response.text
+        return {"error": str(e), "response": error_content}
+        
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
