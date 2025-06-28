@@ -4,7 +4,7 @@ import logging
 from dotenv import load_dotenv
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-from fastapi import FastAPI, Request, Depends, WebSocket, HTTPException
+from fastapi import FastAPI, Request,Header, Depends, WebSocket, HTTPException
 from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse, RedirectResponse # Keep RedirectResponse
 from app.services.call_handler import CallHandler
 from contextlib import asynccontextmanager
@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.services.nango_service import NangoService # Added NangoService import back
 from app.services import cinc_service
 from typing import Optional, Dict, Any # Added Dict and Any for type hinting
-from app.services.cinc_webhook_service import register_cinc_webhook, fetch_and_print_lead_details
+from app.services.cinc_webhook_service import fetch_and_print_lead_details
 from app.services.cinc_webhook_service import fetch_and_print_lead_details
 
 load_dotenv()
@@ -36,41 +36,46 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/cinc/register-webhook")
-async def register_webhook(request: Request):
-    """
-    Register the CINC webhook.
-    """
-    result = await register_cinc_webhook()
-    if result:
-        return {"status": "success", "data": result}
-    else:
-        raise HTTPException(status_code=500, detail="Failed to register webhook with CINC")
-
 @app.post("/new-cinc-lead")
-async def receive_webhook(request: Request):
+async def receive_webhook(
+    request: Request,
+    x_webhook_secret: Optional[str] = Header(None)
+):
     """
     Receive and process webhooks from CINC API.
     """
     try:
+        # 1. Print and verify the incoming webhook secret
+        if not x_webhook_secret:
+            raise HTTPException(status_code=401, detail="Missing X-Webhook-Secret")
+        
+        logger.info(f"📥 Webhook received with secret: {x_webhook_secret}")
+
+        # 2. Parse the body
         data = await request.json()
+        logger.info(f"📦 Webhook data: {data}")
         event_type = data.get("type")
+
         if event_type == "lead.created":
             lead_info = data.get("lead", {})
-            logger.info(f"New lead created: {lead_info}")
+            logger.info(f"🆕 New lead created: {lead_info}")
+
             lead_id = lead_info.get("id")
+
+            # 🔐 Optional: lookup connection by secret here
             connection_id = "a064bb5d-881d-4cdd-83ea-6427594df59a"
             account_id = 1
-            if lead_id :
+
+            if lead_id:
                 await fetch_and_print_lead_details(account_id, lead_id, connection_id)
         else:
-            logger.info(f"Received event of type: {event_type}")
+            logger.info(f"ℹ️ Received event of type: {event_type}")
 
         return {"status": "success"}
-    except Exception as e:
-        logger.error(f"Error processing webhook: {e}")
-        raise HTTPException(status_code=400, detail="Invalid request")
 
+    except Exception as e:
+        logger.error(f"❌ Error processing webhook: {e}")
+        raise HTTPException(status_code=400, detail="Invalid request")
 
 # Create global service instance
 call_handler_instance = None
