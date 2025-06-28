@@ -41,11 +41,7 @@ async def receive_webhook(
     request: Request,
     x_webhook_secret: Optional[str] = Header(None)
 ):
-    """
-    Receive and process webhooks from CINC API.
-    """
     try:
-        # 1. Print and verify the incoming webhook secret
         if not x_webhook_secret:
             raise HTTPException(status_code=401, detail="Missing X-Webhook-Secret")
         
