@@ -1565,9 +1565,9 @@ class CallHandler:
             self.timer.start()
             return
 
-        await self.synthesize_response("This call may be monitored or recorded for quality and training purposes." , stream_sid)
-        # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
-        await self.sessions[stream_sid]['synthesis_service'].flush_sp_ws()
+        # await self.synthesize_response("This call may be monitored or recorded for quality and training purposes." , stream_sid)
+        # # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
+        # await self.sessions[stream_sid]['synthesis_service'].flush_sp_ws()
         greetings = self.agents[call_sid]['greetings']
         result = await self.gather_contact_info(call_sid, greetings)
         fullname = result['fullname']
