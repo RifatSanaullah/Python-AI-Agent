@@ -135,9 +135,6 @@ class CallHandler:
                     self.sessions[data['streamSid']]['websocket'] = websocket
                     self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
                     session = self.sessions[data['streamSid']]
-                    if session['call_initialized'] == False:
-                        await self.process_all_info(data['streamSid'], call_id)
-                        self.sessions[data['streamSid']]['call_initialized'] = True
                     # if self.agents[data['streamSid']['call_sid']]['STT']['name'] == 'Deepgram':
                     #     session['transcribe_service'].establish_dg_connection(self.agents[data['streamSid']['call_sid']]['STT']['model'])
                     # else: session['transcribe_service'].connect()
@@ -1661,6 +1658,9 @@ class CallHandler:
         call_sid = data.get("CallSid")
         if stream_sid not in self.sessions:
             self.initialize_session_info(stream_sid, call_sid)
+            if session['call_initialized'] == False:
+                await self.process_all_info(data['streamSid'], call_id)
+                self.sessions[data['streamSid']]['call_initialized'] = True
         return "OK", 200
     
     def modify_greeting(self, name, greetings, call_sid):
