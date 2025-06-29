@@ -146,6 +146,27 @@ async def get_cinc_access_token(account_id: int, connection_id: Optional[str] = 
 
     return tokens["access_token"]
 
+async def register_cinc_webhook(access_token: str, connection_id: str):
+    webhook_url = f"{settings.base_url}/new-cinc-lead"
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': access_token
+    }
+
+    data = {
+        "url": webhook_url,
+        "event_filters": ["lead.created"],
+        "headers": {
+            "X-Webhook-Secret": connection_id 
+        }
+    }
+    try:
+        response = requests.post(f"{CINC_API_BASE_URL}/site/webhook", headers=headers, json=data)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"error": str(e)}
+
 def get_authorization_url(state: Optional[str] = None, account_id: Optional[str] = None) -> str:
     auth_url = f"{CINC_AUTH_BASE_URL}/authorize" 
     composite_state_parts = []
@@ -196,15 +217,14 @@ async def exchange_code_for_token(auth_code: str, composite_state: Optional[str]
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(token_url, data=payload)
+            response = await client.post(token_url, data=payload)  # Debugging line
             response.raise_for_status()
             token_data = response.json()
             storage_payload = {
                 "access_token": token_data.get("access_token"),
                 "refresh_token": token_data.get("refresh_token"),
                 "expires_in": token_data.get("expires_in"),
-                "connection_id": token_data.get("connection_id"), # CINC's specific connection_id
-                "account_id": token_data.get("account_id") # CINC's account_id should come from token response
+                "account_id": token_data.get("account_id") # 
             }
 
             # For OAuth flow, the account_id is passed directly from the state
@@ -215,7 +235,31 @@ async def exchange_code_for_token(auth_code: str, composite_state: Optional[str]
                 # If account_id is not a number, raise an error
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid account_id format for token storage")
 
-            await store_cinc_tokens(account_id=account_id_int, token_data=storage_payload)
+            # Store tokens and get the connection_id from backend response
+            backend_response = await _backend_handler.store_cinc_token_in_db(account_id=account_id_int, token_data=storage_payload)
+            
+            # Extract connection_id from backend response
+            connection_id = None
+            if isinstance(backend_response, dict):
+                connection_id = backend_response.get("connection_id")
+            
+            # Update cache with the connection_id
+            cache_key = _get_cache_key(account_id_int, connection_id)
+            cached_token = storage_payload.copy()
+            cached_token["connection_id"] = connection_id
+            cached_token["_cached_at"] = datetime.now(timezone.utc)
+            _token_cache[cache_key] = cached_token       
+            # Register webhook after successful token storage using backend's connection_id
+            if connection_id and token_data.get("access_token"):
+                try:
+                    webhook_result = await register_cinc_webhook(
+                        access_token=token_data["access_token"], 
+                        connection_id=connection_id
+                    )
+                    print(f"Webhook registration result: {webhook_result}")
+                except Exception as webhook_error:
+                    print(f"Failed to register webhook for connection_id {connection_id}: {webhook_error}")
+                    # Don't fail the entire flow if webhook registration fails
             
             return {**token_data, "account_id_for_storage": account_id_for_storage, "original_csrf_state": original_csrf_state}
         except httpx.HTTPStatusError as e:
@@ -470,11 +514,6 @@ async def create_lead(account_id: int, lead_data: Dict[str, Any], connection_id:
 
 async def update_lead(account_id: int, lead_id: str, lead_data: Dict[str, Any], connection_id: Optional[str] = None) -> Dict[str, Any]:    
     endpoint = f"/site/leads/{lead_id}"
-    # Notes should already be handled in call_handler.py, so we don't process Description here
-    # This prevents duplicate notes from being created
-    
-    # CINC API requires a complete lead object for updates, not just partial changes
-    # First, fetch the existing lead data
     try:
         existing_lead = await get_lead_details(account_id, lead_id, connection_id=connection_id)
         
@@ -622,6 +661,7 @@ async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optiona
             return []
 
         # Get leads from CINC using the actual cleaned phone number
+        print(f"Fetching leads for phone number: {clean_phone}")
         leads_response = await get_leads(account_id, connection_id=connection_id, phone=clean_phone)
         leads_list = leads_response.get("leads", [])
         

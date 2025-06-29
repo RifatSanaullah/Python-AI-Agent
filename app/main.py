@@ -1,7 +1,10 @@
 # app/main.py
 import uvicorn
+import logging
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Depends, WebSocket, HTTPException
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+from fastapi import FastAPI, Request,Header, Depends, WebSocket, HTTPException
 from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse, RedirectResponse # Keep RedirectResponse
 from app.services.call_handler import CallHandler
 from contextlib import asynccontextmanager
@@ -13,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.services.nango_service import NangoService # Added NangoService import back
 from app.services import cinc_service
 from typing import Optional, Dict, Any # Added Dict and Any for type hinting
+from app.services.cinc_webhook_service import fetch_and_trigger_outbound
 
 load_dotenv()
 
@@ -31,7 +35,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.post("/new-cinc-lead")
+async def receive_webhook(
+    request: Request,
+    x_webhook_secret: Optional[str] = Header(None)
+):
+    try:
+        if not x_webhook_secret:
+            raise HTTPException(status_code=401, detail="Missing X-Webhook-Secret")
+        
+        logger.info(f"📥 Webhook received with secret: {x_webhook_secret}")
 
+
+        # Get connection info by secret (which is actually the connection_id)
+        connection = await BackendHandler().get_connection_by_id(x_webhook_secret)
+       
+        # Check if the connection_id from backend matches the x_webhook_secret
+        if not connection or connection.get("connection_id") != x_webhook_secret:
+            logger.error("❌ Webhook secret does not match any valid connection_id")
+            raise HTTPException(status_code=403, detail="Invalid or unauthorized webhook secret")
+
+        account_id = connection.get("account_id")
+        connection_id = connection.get("connection_id")
+
+        data = await request.json()
+        event_type = data.get("type")
+
+        if event_type == "lead.created":
+            lead_info = data.get("lead", {})
+            lead_id = lead_info.get("id")
+            if lead_id:
+                await fetch_and_trigger_outbound(account_id, lead_id, connection_id)
+        else:
+            logger.info(f"ℹ️ Received event of type: {event_type}")
+
+        return {"status": "success"}
+
+    except Exception as e:
+        logger.error(f"❌ Error processing webhook: {e}")
+        raise HTTPException(status_code=400, detail="Invalid request")
 
 # Create global service instance
 call_handler_instance = None
@@ -350,7 +392,6 @@ async def disconnect_cinc_integration(account_id: str):
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete CINC connection: {str(e)}")
-
-
+     
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

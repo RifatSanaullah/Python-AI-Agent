@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     cinc_redirect_uri: str = os.getenv("CINC_REDIRECT_URI", "http://localhost:8000/cinc/callback") # Ensure this is the backend callback
     frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000") # Updated base frontend URL
     frontend_cinc_callback_path: str = os.getenv("FRONTEND_CINC_CALLBACK_PATH", "/dashboard/account/api-integration") # Corrected path
+    cinc_wait_seconds: int = int(os.getenv("CINC_WAIT_SECONDS", 60))
     azure_key: str = os.getenv("AZURE_KEY")
     azure_endpoint: str = os.getenv("AZURE_ENDPOINT")
     azure_region: str = os.getenv("AZURE_REGION")

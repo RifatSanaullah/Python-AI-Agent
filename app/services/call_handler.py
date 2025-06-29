@@ -773,8 +773,8 @@ class CallHandler:
         if integrations and integrations["hubspot_connection_id"] is not None and integrations["hubspot_connection_id"] != '':
             summary["email"] = summary['email'].replace(" ", "")
             summary["phone"] = self.format_us_number_simple(summary["phone"])
-            if summary['phone'] != self.agents[call_id]['from']:
-                summary['mobilephone'] = self.format_us_number_simple(self.agents[call_id]['from'])
+            if summary['phone'] != self.agents[call_id]['leadbound']:
+                summary['mobilephone'] = self.format_us_number_simple(self.agents[call_id]['leadbound'])
             notes  = summary['description']
             summary['description'] = ''
             if lead_id:
@@ -790,7 +790,7 @@ class CallHandler:
                 await self.ai_service.hubspot_service.update_leads(integrations['hubspot_connection_id'], body)
             else:
                 if summary['phone'] == '' :
-                    summary['phone'] = self.format_us_number_simple(self.agents[call_id]['from'])
+                    summary['phone'] = self.format_us_number_simple(self.agents[call_id]['leadbound'])
                 summary = self.remove_empty_values(summary)
                 body = {
                     'contact' : summary,
@@ -802,8 +802,8 @@ class CallHandler:
         if integrations and integrations["salesforce_connection_id"] is not None and integrations["salesforce_connection_id"] != '':
             summary["Email"] = summary['Email'].replace(" ", "").replace(",",'')
             summary["Phone"] = self.formatToSalesforceNumber(summary["Phone"])
-            if summary['Phone'] != self.agents[call_id]['from']:
-                summary['MobilePhone'] = self.formatToSalesforceNumber(self.agents[call_id]['from'])
+            if summary['Phone'] != self.agents[call_id]['leadbound']:
+                summary['MobilePhone'] = self.formatToSalesforceNumber(self.agents[call_id]['leadbound'])
             # Update CRM Contact
             try:
                 if lead_id:
@@ -831,7 +831,7 @@ class CallHandler:
                         summary['Company'] = 'N/A'
                     if summary['LastName'] != '':
                         if summary['Phone'] == '' :
-                            summary['Phone'] = self.formatToSalesforceNumber(self.agents[call_id]['from'])
+                            summary['Phone'] = self.formatToSalesforceNumber(self.agents[call_id]['leadbound'])
                         summary = self.remove_empty_values(summary)
                         if summary['LastName'] == summary['FirstName']:
                             summary['FirstName'] = ''
@@ -867,8 +867,8 @@ class CallHandler:
         if integrations and integrations["zoho_connection_id"] is not None and integrations["zoho_connection_id"] != '':
             summary["Email"] = summary['Email'].replace(" ", "").replace(",",'')
             summary["Phone"] = self.format_us_number_simple(summary["Phone"])
-            if summary['Phone'] != self.agents[call_id]['from']:
-                summary['Mobile'] = self.format_us_number_simple(self.agents[call_id]['from'])
+            if summary['Phone'] != self.agents[call_id]['leadbound']:
+                summary['Mobile'] = self.format_us_number_simple(self.agents[call_id]['leadbound'])
             # Update CRM Contact
             try:
                 if lead_id:
@@ -898,7 +898,7 @@ class CallHandler:
                         summary['Company'] = 'N/A'
                     if summary['Last_Name'] != '':
                         if summary['Phone'] == '' :
-                            summary['Phone'] = self.format_us_number_simple(self.agents[call_id]['from'])
+                            summary['Phone'] = self.format_us_number_simple(self.agents[call_id]['leadbound'])
                         summary = self.remove_empty_values(summary)
                         if summary['Last_Name'] == summary['First_Name']:
                             summary['First_Name'] = ''
@@ -1445,6 +1445,13 @@ class CallHandler:
         self.agents[call_id]['end_call'] = False
         self.agents[call_id]['route_call'] = False
         self.agents[call_id]['from'] = data['from']
+        self.agents[call_id]['to'] = data['to']
+        # Determine leadbound number based on call direction
+        self.agents[call_id]['direction'] = data['direction']
+        if data['direction'] == 'outbound-api':
+            self.agents[call_id]['leadbound'] = data['to']
+        else:
+            self.agents[call_id]['leadbound'] = data['from']
         self.agents[call_id]['previous_convo_summary'] = None
         self.agents[call_id]['new_knowledge'] = False
         self.agents[call_id]['aiClient'] = api_response['data']['aiClient']
@@ -1739,7 +1746,7 @@ class CallHandler:
                 if account_id:
                     result = await self.cinc_service.get_leads_by_phone(
                         account_id=account_id, 
-                        phone=self.agents[call_sid]['from'],
+                        phone=self.agents[call_sid]['leadbound'],
                         connection_id=self.agents[call_sid]['integrations']['cinc_connection_id']
                     )
                     print(f"DEBUG - CINC lead search result: {result}")
