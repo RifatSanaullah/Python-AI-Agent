@@ -1,5 +1,6 @@
 import requests
 import logging
+from app.services.backend_service import BackendHandler
 from app.config import settings
 import app.services.cinc_service as cinc_service
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -18,18 +19,38 @@ logger = logging.getLogger(__name__)
 CINC_API_BASE_URL = "https://public.cincapi.com/v2"
 
 
-async def fetch_and_print_lead_details(account_id: int, lead_id: str, connection_id: str = None):
+async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_id: str = None):
     try:
         lead_details = await cinc_service.get_lead_details(account_id, lead_id, connection_id)
-        # cell_phone = lead_details['info']['contact']['phone_numbers']['cell_phone']
-        cell_phone = "+8801768082039"
+        cell_phone = lead_details['info']['contact']['phone_numbers']['cell_phone']
         print(f"Cell phone: {cell_phone}")
-
         async def make_outbound_call():
             try:
-                call_handler = CallHandler()
-                call_sid = await call_handler.make_outgoing_call(cell_phone)
-                logger.info(f"[CRON] Made outbound call to {cell_phone}, call_sid: {call_sid}")
+                update_data = {
+                    "pipeline": {
+                        "stage": "Attempted Contact",
+                        "history": [
+                            {
+                                "stage": "Attempted Contact",
+                                "staged_date": datetime.now().isoformat(),
+                            }
+                        ],
+                    }
+                }
+                result = await cinc_service.update_lead(
+                    account_id, 
+                    lead_id, 
+                    lead_data=update_data,
+                    connection_id=connection_id
+                )
+                print(f"Lead updated: {result}")
+                backend = BackendHandler()
+                payload = {
+                    "phone_number": cell_phone,
+                    "account_id": account_id,
+                }
+                response = await backend.cinc_outbound_call(payload)
+                print(f"[CRON] Outbound call triggered for {cell_phone}, response: {response}")
             except Exception as e:
                 logger.error(f"[CRON] Failed to make outbound call to {cell_phone}: {e}")
 
@@ -37,7 +58,7 @@ async def fetch_and_print_lead_details(account_id: int, lead_id: str, connection
             asyncio.run(make_outbound_call())
 
         # Schedule the outbound call after the configured wait time
-        run_date = datetime.now() + timedelta(minutes=settings.cinc_wait_min)
+        run_date = datetime.now() + timedelta(seconds=settings.cinc_wait_seconds)
         scheduler.add_job(sync_make_outbound_call, 'date', run_date=run_date)
 
         return lead_details

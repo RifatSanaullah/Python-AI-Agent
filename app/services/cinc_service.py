@@ -252,7 +252,6 @@ async def exchange_code_for_token(auth_code: str, composite_state: Optional[str]
             # Register webhook after successful token storage using backend's connection_id
             if connection_id and token_data.get("access_token"):
                 try:
-                    print(f"Registering webhook for connection_id: {connection_id} with access_token: {token_data['access_token']}")
                     webhook_result = await register_cinc_webhook(
                         access_token=token_data["access_token"], 
                         connection_id=connection_id
@@ -515,11 +514,6 @@ async def create_lead(account_id: int, lead_data: Dict[str, Any], connection_id:
 
 async def update_lead(account_id: int, lead_id: str, lead_data: Dict[str, Any], connection_id: Optional[str] = None) -> Dict[str, Any]:    
     endpoint = f"/site/leads/{lead_id}"
-    # Notes should already be handled in call_handler.py, so we don't process Description here
-    # This prevents duplicate notes from being created
-    
-    # CINC API requires a complete lead object for updates, not just partial changes
-    # First, fetch the existing lead data
     try:
         existing_lead = await get_lead_details(account_id, lead_id, connection_id=connection_id)
         
@@ -667,6 +661,7 @@ async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optiona
             return []
 
         # Get leads from CINC using the actual cleaned phone number
+        print(f"Fetching leads for phone number: {clean_phone}")
         leads_response = await get_leads(account_id, connection_id=connection_id, phone=clean_phone)
         leads_list = leads_response.get("leads", [])
         

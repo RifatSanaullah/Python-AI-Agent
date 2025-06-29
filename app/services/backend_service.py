@@ -1,7 +1,7 @@
 import httpx
 from app.config import settings
 from typing import Any, Dict, Optional
-from fastapi import FastAPI, Response, HTTPException # Added HTTPException
+from fastapi import FastAPI, Response, HTTPException 
 
 class BackendHandler:
     def __init__(self):
@@ -330,3 +330,34 @@ class BackendHandler:
         except Exception as e:
             # Consider logging: logger.error(f"Unexpected error deleting CINC token for account_id {account_id} / connection_id {connection_id}: {e}")
             raise HTTPException(status_code=500, detail=f"Unexpected error deleting CINC token: {str(e)}")
+
+    async def get_connection_by_id(self, connection_id: str) -> Optional[Dict[str, Any]]:
+        url = f"{self.NODE_BACKEND_BASE_URL}/cinc/connection/{connection_id}"
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            print(f"HTTP error while getting connection by id: {e.response.status_code} {e.response.text}")
+            raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+        except httpx.RequestError as e:
+            print(f"Request error while getting connection by id: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            print(f"Unexpected error while getting connection by id: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    async def cinc_outbound_call(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        url = f"{self.OTHER_BACKEND_URL}/call/cinc-outbound-call"
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=data, timeout=20)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            print(f"HTTP error while calling cinc-outbound-call: {e.response.status_code} {e.response.text}")
+            raise
+        except httpx.RequestError as e:
+            print(f"Request error while calling cinc-outbound-call: {str(e)}")
+            raise
