@@ -1564,6 +1564,10 @@ class CallHandler:
             self.timer = Timer(5, self.twilio_service.hangup_call, args=[call_sid])
             self.timer.start()
             return
+
+        await self.synthesize_response("This call may be monitored or recorded for quality and training purposes." , stream_sid)
+        # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
+        await self.sessions[stream_sid]['synthesis_service'].flush_sp_ws()
         greetings = self.agents[call_sid]['greetings']
         result = await self.gather_contact_info(call_sid, greetings)
         fullname = result['fullname']
@@ -1614,7 +1618,7 @@ class CallHandler:
             self.ai_service.add_message(stream_sid, "user", f"My Phone Number is: {phone}")
             self.ai_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Phone Number of the user you will use in this conversation: {phone}")
         else:
-            self.ai_service.add_system_message(stream_sid, "system", f"This is the Phone Number of the user you will use in this conversation and you can ask the user if he/she wants to change the phone number: {self.format_us_phone(self.agents[call_sid]['from'])}")
+            self.ai_service.add_system_message(stream_sid, "system", f"This is the Phone Number of the user you will use in this conversation and you can ask the user if he/she wants to change the phone number: {self.format_us_phone(self.agents[call_sid]['leadbound'])}")
         if description is not None and description != "":
             self.ai_service.add_system_message(stream_sid, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
        
@@ -1682,7 +1686,7 @@ class CallHandler:
         isBoom = self.agents[call_sid]['isBoom']
 
         if isBoom is not None or isBoom == True or isBoom == 'true':
-            result = await self.backend_service.get_lead_info_boom({"phone" : self.agents[call_sid]['from'] })
+            result = await self.backend_service.get_lead_info_boom({"phone" : self.agents[call_sid]['leadbound'] })
             if result and 'data' in result and result['data'] is not None:
                 details = result['data']
                 fullname = details['firstName']
@@ -1694,7 +1698,7 @@ class CallHandler:
                 self.agents[call_sid]['new_knowledge'] = True
         elif self.agents[call_sid]['integrations']['salesforce_connection_id']:
 
-            formatted_number = self.formatToSalesforceNumber(self.agents[call_sid]['from'])
+            formatted_number = self.formatToSalesforceNumber(self.agents[call_sid]['leadbound'])
             result = await self.ai_service.salesforce_service.get_lead_by_phone(self.agents[call_sid]['integrations']['salesforce_connection_id'], formatted_number)
             
             if len(result) > 0:
@@ -1711,7 +1715,7 @@ class CallHandler:
 
         elif self.agents[call_sid]['integrations']['hubspot_connection_id']:
 
-            result = await self.ai_service.hubspot_service.get_contact_by_phone(self.agents[call_sid]['integrations']['hubspot_connection_id'], self.agents[call_sid]['from'])
+            result = await self.ai_service.hubspot_service.get_contact_by_phone(self.agents[call_sid]['integrations']['hubspot_connection_id'], self.agents[call_sid]['leadbound'])
             
             if 'results' in result and len(result['results']) > 0:
                 details = result['results'][0]['properties']
@@ -1725,7 +1729,7 @@ class CallHandler:
 
         elif self.agents[call_sid]['integrations']['zoho_connection_id']:
 
-            result = await self.ai_service.zoho_service.get_lead_by_phone(self.agents[call_sid]['integrations']['zoho_connection_id'], self.agents[call_sid]['from'])
+            result = await self.ai_service.zoho_service.get_lead_by_phone(self.agents[call_sid]['integrations']['zoho_connection_id'], self.agents[call_sid]['leadbound'])
             
             if len(result) > 0:
                 details = result[0]
@@ -1792,7 +1796,7 @@ class CallHandler:
                         print(f"DEBUG - Found CINC lead: {fullname}, Email: {email}, Phone: {phoneNumber}, Notes: {description}")
 
             except Exception as e:
-                print(f"Error fetching CINC lead by phone {self.agents[call_sid]['from']}: {e}")
+                print(f"Error fetching CINC lead by phone {self.agents[call_sid]['leadbound']}: {e}")
 
 
         if self.agents[call_sid]['integrations'].get('calendly_connection_id'):

@@ -658,7 +658,8 @@ async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optiona
             pass  # Already in correct format
         else:
             print(f"Invalid phone number format: {phone}, treating as new call")
-            return []
+            pass
+            # return []
 
         # Get leads from CINC using the actual cleaned phone number
         print(f"Fetching leads for phone number: {clean_phone}")
