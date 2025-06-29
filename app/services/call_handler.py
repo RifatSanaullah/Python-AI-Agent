@@ -1659,7 +1659,7 @@ class CallHandler:
         if stream_sid not in self.sessions:
             self.initialize_session_info(stream_sid, call_sid)
             if self.sessions[stream_sid]['call_initialized'] == False:
-                await self.process_all_info(stream_sid, call_id)
+                await self.process_all_info(stream_sid, call_sid)
                 self.sessions[stream_sid]['call_initialized'] = True
         return "OK", 200
     
