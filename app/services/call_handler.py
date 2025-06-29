@@ -1658,9 +1658,9 @@ class CallHandler:
         call_sid = data.get("CallSid")
         if stream_sid not in self.sessions:
             self.initialize_session_info(stream_sid, call_sid)
-            if session['call_initialized'] == False:
-                await self.process_all_info(data['streamSid'], call_id)
-                self.sessions[data['streamSid']]['call_initialized'] = True
+            if self.sessions[stream_sid]['call_initialized'] == False:
+                await self.process_all_info(stream_sid, call_id)
+                self.sessions[stream_sid]['call_initialized'] = True
         return "OK", 200
     
     def modify_greeting(self, name, greetings, call_sid):
