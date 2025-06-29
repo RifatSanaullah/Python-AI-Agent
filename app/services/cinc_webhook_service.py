@@ -23,9 +23,20 @@ async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_i
     try:
         lead_details = await cinc_service.get_lead_details(account_id, lead_id, connection_id)
         cell_phone = lead_details['info']['contact']['phone_numbers']['cell_phone']
-        print(f"Cell phone: {cell_phone}")
+        print(f"lead_details: {lead_details}")
+        
         async def make_outbound_call():
             try:
+                # Check lead status after wait time - only call if still "New Lead"
+                current_lead_details = await cinc_service.get_lead_details(account_id, lead_id, connection_id)
+                current_stage = current_lead_details.get('pipeline', {}).get('stage', '')
+                
+                if current_stage != "New Lead":
+                    print(f"[CRON] Lead {lead_id} is not in 'New Lead' stage (current: {current_stage}). Skipping outbound call.")
+                    return
+                
+                print(f"[CRON] Lead {lead_id} is in 'New Lead' stage. Making outbound call.")
+                
                 update_data = {
                     "pipeline": {
                         "stage": "Attempted Contact",
