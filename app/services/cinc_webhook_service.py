@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 CINC_API_BASE_URL = "https://public.cincapi.com/v2"
 
 
-async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_id: str = None):
+async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_id: str, update_details):
     try:
         # lead_details = await cinc_service.get_lead_details(account_id, lead_id, connection_id)
         # cell_phone = lead_details['info']['contact']['phone_numbers']['cell_phone']
@@ -28,6 +28,7 @@ async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_i
                 # Check lead status after wait time - only call if still "New Lead"
                 # current_lead_details = await cinc_service.get_lead_details(account_id, lead_id, connection_id)
                 current_lead_details = await cinc_service.get_lead_details(account_id, lead_id, connection_id)
+                update_details(account_id, current_lead_details)
                 current_stage = current_lead_details.get('pipeline', {}).get('stage', '')
                 cell_phone = current_lead_details['info']['contact']['phone_numbers']['cell_phone']
                 

@@ -34,11 +34,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Create global service instance
+call_handler_instance = None
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global call_handler_instance
+    call_handler_instance = CallHandler()
+    yield
+    # Cleanup code if needed
+
+app.router.lifespan_context = lifespan
+
+
+def get_call_handler():
+    return call_handler_instance
+    
 @app.post("/new-cinc-lead")
 async def receive_webhook(
     request: Request,
-    x_webhook_secret: Optional[str] = Header(None)
+    x_webhook_secret: Optional[str] = Header(None),
+    call_handler: CallHandler = Depends(get_call_handler)
 ):
     try:
         if not x_webhook_secret:
@@ -65,7 +81,7 @@ async def receive_webhook(
             lead_info = data.get("lead", {})
             lead_id = lead_info.get("id")
             if lead_id:
-                await fetch_and_trigger_outbound(account_id, lead_id, connection_id)
+                await fetch_and_trigger_outbound(account_id, lead_id, connection_id, call_handler.update_details)
         else:
             logger.info(f"ℹ️ Received event of type: {event_type}")
 
@@ -75,21 +91,7 @@ async def receive_webhook(
         logger.error(f"❌ Error processing webhook: {e}")
         raise HTTPException(status_code=400, detail="Invalid request")
 
-# Create global service instance
-call_handler_instance = None
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global call_handler_instance
-    call_handler_instance = CallHandler()
-    yield
-    # Cleanup code if needed
-
-app.router.lifespan_context = lifespan
-
-
-def get_call_handler():
-    return call_handler_instance
 
 @app.websocket("/audio-stream/{call_id}")
 async def audio_stream(call_id : str, websocket: WebSocket, call_handler: CallHandler = Depends(get_call_handler)):

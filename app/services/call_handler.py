@@ -74,6 +74,10 @@ class CallHandler:
         self.completed_sessions = {}
         self.timer = None
         self.loop= asyncio.get_running_loop()
+        self.prefetched_details = {}
+
+    def update_details(self, account_id, details):
+        self.prefetched_details[account_id] = details
 
     def get_business_agent(self, call_id: str):
         """Retrieve specific AI agent/business logic based on the dialed number."""
@@ -1803,11 +1807,15 @@ class CallHandler:
                 # Get account_id from agent info
                 account_id = self.agents[call_sid].get('account_id')
                 if account_id:
-                    result = await self.cinc_service.get_leads_by_phone(
-                        account_id=account_id, 
-                        phone=self.agents[call_sid]['leadbound'],
-                        connection_id=self.agents[call_sid]['integrations']['cinc_connection_id']
-                    )
+                    if account_id in self.prefetched_details:
+                        result = self.prefetched_details[account_id]
+                        del self.prefetched_details[account_id]
+                    else:
+                        result = await self.cinc_service.get_leads_by_phone(
+                            account_id=account_id, 
+                            phone=self.agents[call_sid]['leadbound'],
+                            connection_id=self.agents[call_sid]['integrations']['cinc_connection_id']
+                        )
                     print(f"DEBUG - CINC lead search result: {result}")
                     if result and len(result) > 0:
                         # Use the first matching lead
