@@ -36,7 +36,8 @@ async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_i
                     "account_id": account_id,
                 }
                 connection_data = await backend.get_connection_details(payload)
-                await update_details(account_id, current_lead_details, cell_phone, connection_data['agent_phone'])
+                print(connection_data, cell_phone)
+                await update_details(account_id, current_lead_details, cell_phone, connection_data['agent_phone']['phone'])
                 
                 if current_stage != "New Lead":
                     print(f"[CRON] Lead {lead_id} is not in 'New Lead' stage (current: {current_stage}). Skipping outbound call.")

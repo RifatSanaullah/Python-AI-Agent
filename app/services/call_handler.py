@@ -91,10 +91,13 @@ class CallHandler:
     async def update_details(self, account_id, details, phone, agentPhone):
         self.prefetched_details[account_id] = details
         call_id = self.update_state_calls(phone)
+        formattedPhone= self.format_us_number_simple(phone)
+        if not formattedPhone.startswith('+'):
+            formattedPhone = "+" + formattedPhone
         data = {
             "call_sid" : call_id,
             "from" : agentPhone,
-            "to" : phone,
+            "to" : formattedPhone,
             "application_sid" : None,
             "direction" : 'outbound-api',
             "isBoom": False,

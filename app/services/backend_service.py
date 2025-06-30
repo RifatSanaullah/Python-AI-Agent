@@ -368,7 +368,8 @@ class BackendHandler:
             async with httpx.AsyncClient() as client:
                 response = await client.post(url, json=data, timeout=20)
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            return result['data']
         except httpx.HTTPStatusError as e:
             print(f"HTTP error while calling cinc-outbound-call: {e.response.status_code} {e.response.text}")
             raise
