@@ -65,12 +65,6 @@ async def receive_webhook(
 
         # Get connection info by secret (which is actually the connection_id)
         connection = await BackendHandler().get_connection_by_id(x_webhook_secret)
-
-        payload = {
-                    "phone_number": cell_phone,
-                    "account_id": account_id,
-        }
-        connection_data = await BackendHandler().get_connection_details(payload)
        
         # Check if the connection_id from backend matches the x_webhook_secret
         if not connection or connection.get("connection_id") != x_webhook_secret:
@@ -87,7 +81,7 @@ async def receive_webhook(
             lead_info = data.get("lead", {})
             lead_id = lead_info.get("id")
             if lead_id:
-                await fetch_and_trigger_outbound(account_id, lead_id, connection_id, call_handler.update_details, connection_data)
+                await fetch_and_trigger_outbound(account_id, lead_id, connection_id, call_handler.update_details)
         else:
             logger.info(f"ℹ️ Received event of type: {event_type}")
 

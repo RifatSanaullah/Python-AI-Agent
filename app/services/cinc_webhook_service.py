@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 CINC_API_BASE_URL = "https://public.cincapi.com/v2"
 
 
-async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_id: str, update_details, connection_data):
+async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_id: str, update_details):
     try:
         # lead_details = await cinc_service.get_lead_details(account_id, lead_id, connection_id)
         # cell_phone = lead_details['info']['contact']['phone_numbers']['cell_phone']
@@ -30,6 +30,12 @@ async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_i
                 current_lead_details = await cinc_service.get_lead_details(account_id, lead_id, connection_id)
                 current_stage = current_lead_details.get('pipeline', {}).get('stage', '')
                 cell_phone = current_lead_details['info']['contact']['phone_numbers']['cell_phone']
+                backend = BackendHandler()
+                payload = {
+                    "phone_number": cell_phone,
+                    "account_id": account_id,
+                }
+                connection_data = await backend.get_connection_details(payload)
                 await update_details(account_id, current_lead_details, cell_phone, connection_data['agent_phone'])
                 
                 if current_stage != "New Lead":
@@ -56,7 +62,6 @@ async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_i
                     connection_id=connection_id
                 )
                 print(f"Lead updated: {result}")
-                backend = BackendHandler()
                 payload = {
                     "phone_number": cell_phone,
                     "account_id": account_id,
