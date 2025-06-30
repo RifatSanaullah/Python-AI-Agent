@@ -90,10 +90,10 @@ class CallHandler:
 
     async def update_details(self, account_id, details, phone, agentPhone):
         self.prefetched_details[account_id] = details
-        call_id = self.update_state_calls(phone)
         formattedPhone= self.format_us_number_simple(phone)
         if not formattedPhone.startswith('+'):
             formattedPhone = "+" + formattedPhone
+        call_id = self.update_state_calls(formattedPhone)
         data = {
             "call_sid" : call_id,
             "from" : agentPhone,
@@ -1613,6 +1613,7 @@ class CallHandler:
         # await self.initialize_session_info(call_id)
             return response
         else:
+            print(self.calls)
             u_call_id = self.calls[data['to']]
             del self.calls[data['to']]
             response = self.twilio_service.initialize_call(u_call_id)
