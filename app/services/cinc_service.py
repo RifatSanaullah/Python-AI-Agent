@@ -674,7 +674,7 @@ async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optiona
             # return []
         
         # Exactly one lead found - proceed with enriching it
-        lead = leads_list[len(lead_list) - 1]
+        lead = leads_list[len(leads_list) - 1]
         lead_id = lead.get('id')
         if lead_id:
             try:

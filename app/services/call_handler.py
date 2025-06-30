@@ -1234,7 +1234,7 @@ class CallHandler:
         # await asyncio.sleep(1)  # Wait for 1 second
         # self.sessions[call_id]['ai_interrupt'] =  True
         self.ai_service.update_interrupt_status(call_id, True)
-        await self.twilio_service.stop_audio_stream(self.agents[call_id]['websocket'], self.agents[call_id]['stream_sid'])
+        await self.twilio_service.stop_audio_stream(self.sessions[self.agents[call_id]['stream_sid']]['websocket'], self.agents[call_id]['stream_sid'])
         # self.sessions[call_id]['ai_speaking'] =  True
         # message = self.get_interrupt_message()
         # await self.synthesize_response(message, call_id)
