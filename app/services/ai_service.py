@@ -409,6 +409,9 @@ class AIService:
             self.ai_interrupt[conversation_id] = False
         self.ai_interrupt[conversation_id] = status
         
+    def get_interrupt_status(self, conversation_id):
+        return self.ai_interrupt[conversation_id]
+
     async def generate_response(self, conversation_id, message: str, synthesize_response,ai_client, flush_ws, streamingResponse):
 
         
