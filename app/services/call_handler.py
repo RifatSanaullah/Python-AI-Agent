@@ -73,7 +73,7 @@ class CallHandler:
         self.agents = {}
         self.completed_sessions = {}
         self.timer = None
-        self.loop= asyncio.get_running_loop()
+        self.loop= None
         self.prefetched_details = {}
         self.calls = {}
 
