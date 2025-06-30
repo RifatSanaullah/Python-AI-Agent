@@ -76,7 +76,7 @@ class CallHandler:
         self.loop= asyncio.get_running_loop()
         self.prefetched_details = {}
         self.calls = {}
-        self.locks = {}
+        self.lock = {}
 
 
     async def _get_or_create_lock(self, call_sid):
@@ -109,10 +109,7 @@ class CallHandler:
             "direction" : 'outbound-api',
             "isBoom": False,
         }
-        lock = await self._get_or_create_lock(call_id)
-        async with lock:
-            # Initialize transcriber safely
-            await self.update_agent_data(call_id, data)
+        await self.update_agent_data(call_id, data)
 
 
     def get_business_agent(self, call_id: str):
@@ -1482,6 +1479,8 @@ class CallHandler:
 
 
     async def update_agent_data(self, call_id, data):
+        if call_id in self.agents:
+            return
         api_response = await self.backend_service.create_call_info(data)
         self.agents[call_id] = api_response['data']['agent']
         self.agents[call_id]['isBoom'] = data['isBoom']
@@ -1615,8 +1614,8 @@ class CallHandler:
 
         
     async def handle_call(self, call_id: str, data):
-        print("Handling call...")
-        if data['direction'] != 'outbound-api':
+        print("Handling call...", data)
+        if data['direction'] is not 'outbound-api':
             await self.update_agent_data(call_id, data)
             response = self.twilio_service.initialize_call(call_id)
         # self.transcribe_service.connect()  # Connect the transcriber service
