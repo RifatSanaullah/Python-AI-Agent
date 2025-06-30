@@ -671,10 +671,10 @@ async def get_leads_by_phone(account_id: int, phone: str, connection_id: Optiona
             return []
         elif len(leads_list) > 1:
             print(f"Multiple leads found for phone number: {clean_phone} (count: {len(leads_list)}), treating as new call")
-            return []
+            # return []
         
         # Exactly one lead found - proceed with enriching it
-        lead = leads_list[0]
+        lead = leads_list[len(lead_list) - 1]
         lead_id = lead.get('id')
         if lead_id:
             try:
