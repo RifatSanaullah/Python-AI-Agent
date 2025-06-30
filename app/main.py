@@ -150,34 +150,34 @@ async def recording_status_callback(request: Request, call_handler: CallHandler 
 async def complete_status_callback(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
     data = await request.form()
     fromNumber = data.get('From')
-    if fromNumber == settings.boom_number:
-        # Handle incoming call from Boom number
-        data = {
-            "CallDuration" : data.get("CallDuration"),
-            "From" : fromNumber,
-            "CallSid" : data.get("CallSid"),
-        }
-        response = await BackendHandler.complete_status_callback(data)
-        return PlainTextResponse(content=str(response), media_type="application/xml")
+    # if fromNumber == settings.boom_number:
+    #     # Handle incoming call from Boom number
+    #     data = {
+    #         "CallDuration" : data.get("CallDuration"),
+    #         "From" : fromNumber,
+    #         "CallSid" : data.get("CallSid"),
+    #     }
+    #     response = await BackendHandler.complete_status_callback(data)
+    #     return PlainTextResponse(content=str(response), media_type="application/xml")
 
-    else:
-        return await call_handler.complete_status_callback(data)
+    # else:
+    return await call_handler.complete_status_callback(data)
 
 @app.post("/fallback_status_callback")
 async def fallback_status_callback(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
     data = await request.form()
     fromNumber = data.get('From')
 
-    if fromNumber == settings.boom_number:
-        # Handle incoming call from Boom number
-        data = {
-            "From" : fromNumber,
-        }
-        response = await BackendHandler.fallback_status_callback(data)
-        return PlainTextResponse(content=str(response), media_type="application/xml")
+    # if fromNumber == settings.boom_number:
+    #     # Handle incoming call from Boom number
+    #     data = {
+    #         "From" : fromNumber,
+    #     }
+    #     response = await BackendHandler.fallback_status_callback(data)
+    #     return PlainTextResponse(content=str(response), media_type="application/xml")
 
-    else:
-        return await call_handler.fallback_status_callback(data)
+    # else:
+    return await call_handler.fallback_status_callback(data)
 
 
 @app.post("/nango-callback")

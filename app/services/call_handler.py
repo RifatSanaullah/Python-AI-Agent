@@ -1865,11 +1865,8 @@ class CallHandler:
                 # Get account_id from agent info
                 account_id = self.agents[call_sid].get('account_id')
                 if account_id:
-                    if account_id in self.prefetched_details:
-                        result = self.prefetched_details[account_id]
-                        del self.prefetched_details[account_id]
-                    else:
-                        result = await self.cinc_service.get_leads_by_phone(
+
+                    result = await self.cinc_service.get_leads_by_phone(
                             account_id=account_id, 
                             phone=self.agents[call_sid]['leadbound'],
                             connection_id=self.agents[call_sid]['integrations']['cinc_connection_id']
