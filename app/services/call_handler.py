@@ -1684,11 +1684,6 @@ class CallHandler:
         # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
         await self.agents[call_sid]['synthesis_service'].flush_sp_ws()
         
-        updaedata= {
-            "stream_sid" : stream_sid,
-            "call_sid" : call_sid
-        }
-        await self.backend_service.update_call_info(updaedata)
 
         #         fullname = result['fullname']
         # greetings = result['greetings']
@@ -1766,6 +1761,11 @@ class CallHandler:
             Do not proactively list available times unless there's a scheduling conflict.
             """
         )
+        # updaedata= {
+        #     "stream_sid" : stream_sid,
+        #     "call_sid" : call_sid
+        # }
+        # await self.backend_service.update_call_info(updaedata)
 
     async def handle_stream_callback(self, data):
         """Handle the stream callback to get the streamSid."""
