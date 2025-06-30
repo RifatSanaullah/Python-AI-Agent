@@ -83,7 +83,7 @@ class TwilioService:
         print("Initializing call...")
         response = VoiceResponse()
         # response.record(recording_status_callback=f"{settings.base_url}/recording_status_callback")
-        response.say("This call may be monitored or recorded for quality and training purposes.")
+        response.say("Wait till the user connect to you.")
         connect = Connect()
         connect.stream(
             url=f"wss://{settings.domain}/audio-stream/{call_sid}",
