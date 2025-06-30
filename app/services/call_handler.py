@@ -1754,7 +1754,7 @@ class CallHandler:
         greetings = self.agents[call_sid]['greetings']
 
 
-        await self.synthesize_response(greetings , call_id)
+        await self.synthesize_response(greetings , call_sid)
         # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
         await self.agents[call_sid]['synthesis_service'].flush_sp_ws()
         
