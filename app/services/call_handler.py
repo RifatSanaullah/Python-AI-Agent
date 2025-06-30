@@ -76,6 +76,13 @@ class CallHandler:
         self.loop= asyncio.get_running_loop()
         self.prefetched_details = {}
         self.calls = {}
+        self.locks = {}
+
+
+    async def _get_or_create_lock(self, call_sid):
+        if call_sid not in self.locks:
+            self.locks[call_sid] = asyncio.Lock()
+        return self.locks[call_sid]
 
     def generate_call_sid_uuid(self):
         """Generate a call SID using UUID4 (most random)"""
@@ -102,7 +109,10 @@ class CallHandler:
             "direction" : 'outbound-api',
             "isBoom": False,
         }
-        await self.update_agent_data(call_id, data)
+        lock = await self._get_or_create_lock(call_id)
+        async with lock:
+            # Initialize transcriber safely
+            await self.update_agent_data(call_id, data)
 
 
     def get_business_agent(self, call_id: str):
@@ -1566,11 +1576,41 @@ class CallHandler:
         self.agents[call_id]['description'] = result['description']
         self.agents[call_id]['existing_appointment'] = result['existing_appointment']
 
-
-        # self.agents[call_id]["synthesis_service"] = self.agents[call_id]["transcribe_service"]
+        if self.agents[call_id]['STT']['name'] == 'Deepgram':
+            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, DeepgramService)
+            await self.agents[call_id]['transcribe_service'].establish_dg_connection(self.agents[call_id]['STT']['model'])
+            # self.agents[call_id]["synthesis_service"] = self.agents[call_id]["transcribe_service"]
+        elif self.agents[call_id]['STT']['name'] == 'AssemblyAI':
+            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, TranscribeService)
+            self.agents[call_id]['transcribe_service'].connect()
+            # self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
+        else :
+            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, DeepgramService)
+            await self.agents[call_id]['transcribe_service'].establish_dg_connection(self.agents[call_id]['STT']['model'])
+            # self.agents[call_id]["synthesis_service"] = self.agents[call_id]["transcribe_service"]
         
 
 
+        if self.agents[call_id]['TTS']['name'] == 'Deepgram':
+            if self.agents[call_id]['STT']['name'] == 'Deepgram':
+                self.agents[call_id]["synthesis_service"] = self.agents[call_id]["transcribe_service"]
+            else :
+                self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(call_id, DeepgramService)
+
+            await self.agents[call_id]['synthesis_service'].establish_sp_connection(self.agents[call_id]['TTS']['voice']['model'])
+
+        elif self.agents[call_id]['TTS']['name'] == 'Elevenlabs':
+            self.agents[call_id]["synthesis_service"] = self.elevenlabs_service
+            await self.agents[call_id]['synthesis_service'].establish_connection( self.agents[call_id]['TTS']['voice']['model'], self.agents[call_id]['TTS']['model'])
+        elif self.agents[call_id]['TTS']['name'] == 'Microsoft Azure':
+            self.agents[call_id]["synthesis_service"] = AzureService(self.loop)
+            await self.agents[call_id]['synthesis_service'].establish_connection(self.agents[call_id]['TTS']['voice']['model'])
+        elif self.agents[call_id]['TTS']['name'] == 'PlayHT':
+            self.agents[call_id]["synthesis_service"] = PlayHT(self.loop)
+            await self.agents[call_id]['synthesis_service'].establish_connection( self.agents[call_id]['TTS']['voice']['model'], self.agents[call_id]['TTS']['model'])
+        else:
+            self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(call_id, DeepgramService)
+            await self.agents[call_id]['synthesis_service'].establish_sp_connection(self.agents[call_id]['TTS']['voice']['model'])
 
 
         
@@ -1616,39 +1656,6 @@ class CallHandler:
         # elif self.agents[call_sid]['TTS']['name'] == 'PlayHT':
         #     await self.sessions[stream_sid]['synthesis_service'].establish_connection( self.agents[call_sid]['TTS']['voice']['model'], self.agents[call_sid]['TTS']['model'], stream_sid, self.queue_audio)
         
-        if self.agents[call_sid]['STT']['name'] == 'Deepgram':
-            self.agents[call_sid]["transcribe_service"] = self.initialize_transcriber(call_sid, DeepgramService)
-            await self.agents[call_sid]['transcribe_service'].establish_dg_connection(self.agents[call_sid]['STT']['model'])
-            # self.agents[call_id]["synthesis_service"] = self.agents[call_id]["transcribe_service"]
-        elif self.agents[call_sid]['STT']['name'] == 'AssemblyAI':
-            self.agents[call_sid]["transcribe_service"] = self.initialize_transcriber(call_id, TranscribeService)
-            self.agents[call_sid]['transcribe_service'].connect()
-            # self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
-        else :
-            self.agents[call_sid]["transcribe_service"] = self.initialize_transcriber(call_sid, DeepgramService)
-            await self.agents[call_sid]['transcribe_service'].establish_dg_connection(self.agents[call_sid]['STT']['model'])
-
-        if self.agents[call_sid]['TTS']['name'] == 'Deepgram':
-            if self.agents[call_sid]['STT']['name'] == 'Deepgram':
-                self.agents[call_sid]["synthesis_service"] = self.agents[call_sid]["transcribe_service"]
-            else :
-                self.agents[call_sid]["synthesis_service"] = self.initialize_transcriber(call_sid, DeepgramService)
-
-            await self.agents[call_sid]['synthesis_service'].establish_sp_connection(self.agents[call_sid]['TTS']['voice']['model'])
-
-        elif self.agents[call_sid]['TTS']['name'] == 'Elevenlabs':
-            self.agents[call_sid]["synthesis_service"] = self.elevenlabs_service
-            await self.agents[call_sid]['synthesis_service'].establish_connection( self.agents[call_sid]['TTS']['voice']['model'], self.agents[call_sid]['TTS']['model'])
-        elif self.agents[call_sid]['TTS']['name'] == 'Microsoft Azure':
-            self.agents[call_sid]["synthesis_service"] = AzureService(self.loop)
-            await self.agents[call_sid]['synthesis_service'].establish_connection(self.agents[call_sid]['TTS']['voice']['model'])
-        elif self.agents[call_sid]['TTS']['name'] == 'PlayHT':
-            self.agents[call_sid]["synthesis_service"] = PlayHT(self.loop)
-            await self.agents[call_sid]['synthesis_service'].establish_connection( self.agents[call_sid]['TTS']['voice']['model'], self.agents[call_sid]['TTS']['model'])
-        else:
-            self.agents[call_sid]["synthesis_service"] = self.initialize_transcriber(call_sid, DeepgramService)
-            await self.agents[call_sid]['synthesis_service'].establish_sp_connection(self.agents[call_sid]['TTS']['voice']['model'])
-
         await self.agents[call_sid]['transcribe_service'].update_call_id(stream_sid, self.queue_audio)
         await self.agents[call_sid]['synthesis_service'].update_call_id(stream_sid, self.queue_audio)
 
