@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 CINC_API_BASE_URL = "https://public.cincapi.com/v2"
 
 
-async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_id: str, update_details):
+async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_id: str, update_details, connection_data):
     try:
         # lead_details = await cinc_service.get_lead_details(account_id, lead_id, connection_id)
         # cell_phone = lead_details['info']['contact']['phone_numbers']['cell_phone']
@@ -28,9 +28,9 @@ async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_i
                 # Check lead status after wait time - only call if still "New Lead"
                 # current_lead_details = await cinc_service.get_lead_details(account_id, lead_id, connection_id)
                 current_lead_details = await cinc_service.get_lead_details(account_id, lead_id, connection_id)
-                update_details(account_id, current_lead_details)
                 current_stage = current_lead_details.get('pipeline', {}).get('stage', '')
                 cell_phone = current_lead_details['info']['contact']['phone_numbers']['cell_phone']
+                await update_details(account_id, current_lead_details, cell_phone, connection_data['agent_phone'])
                 
                 if current_stage != "New Lead":
                     print(f"[CRON] Lead {lead_id} is not in 'New Lead' stage (current: {current_stage}). Skipping outbound call.")

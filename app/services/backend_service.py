@@ -361,3 +361,17 @@ class BackendHandler:
         except httpx.RequestError as e:
             print(f"Request error while calling cinc-outbound-call: {str(e)}")
             raise
+
+    async def get_connection_details(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        url = f"{self.OTHER_BACKEND_URL}/call/get-connection-details"
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=data, timeout=20)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            print(f"HTTP error while calling cinc-outbound-call: {e.response.status_code} {e.response.text}")
+            raise
+        except httpx.RequestError as e:
+            print(f"Request error while calling cinc-outbound-call: {str(e)}")
+            raise

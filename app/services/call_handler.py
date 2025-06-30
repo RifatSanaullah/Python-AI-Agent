@@ -30,7 +30,7 @@ from app.config import settings
 from pydub import AudioSegment
 from threading import Timer
 import numpy as np
-
+import uuid
 from io import BytesIO
 import numpy as np
 import soundfile as sf
@@ -75,9 +75,32 @@ class CallHandler:
         self.timer = None
         self.loop= asyncio.get_running_loop()
         self.prefetched_details = {}
+        self.calls = {}
 
-    def update_details(self, account_id, details):
+    def generate_call_sid_uuid(self):
+        """Generate a call SID using UUID4 (most random)"""
+        return f"CA{uuid.uuid4().hex}"
+
+    def update_state_calls(self, phone):
+        call_id = self.generate_call_sid_uuid()
+
+        self.calls[phone] = call_id
+
+        return call_id
+
+    async def update_details(self, account_id, details, phone, agentPhone):
         self.prefetched_details[account_id] = details
+        call_id = self.update_state_calls(phone)
+        data = {
+            "call_sid" : call_id,
+            "from" : agentPhone,
+            "to" : phone,
+            "application_sid" : None,
+            "direction" : 'outbound-api',
+            "isBoom": False,
+        }
+        await self.update_agent_data(call_id, data)
+
 
     def get_business_agent(self, call_id: str):
         """Retrieve specific AI agent/business logic based on the dialed number."""
@@ -135,10 +158,15 @@ class CallHandler:
                 if data["event"] in ("connected", "start"):
                     print(f"Media WS: Received event '{data['event']}'")
                     continue
+                if data['streamSid'] and data['streamSid'] not in self.sessions:
+                    self.initialize_session_info(data['streamSid'], call_id)
+                    session = self.sessions[data['streamSid']]
                 if data['streamSid'] and self.sessions[data['streamSid']]['websocket'] is None:
+
                     self.sessions[data['streamSid']]['websocket'] = websocket
                     self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
                     session = self.sessions[data['streamSid']]
+          
                     if session['call_initialized'] == False:
                         await self.process_all_info(data['streamSid'], call_id)
                         self.sessions[data['streamSid']]['call_initialized'] = True
@@ -1438,9 +1466,9 @@ class CallHandler:
             return f"({area_code}) {first_part}-{second_part}"
         else:
             return number
-        
-    async def handle_call(self, call_id: str, data):
-        print("Handling call...")
+
+
+    async def update_agent_data(self, call_id, data):
         api_response = await self.backend_service.create_call_info(data)
         self.agents[call_id] = api_response['data']['agent']
         self.agents[call_id]['isBoom'] = data['isBoom']
@@ -1567,17 +1595,29 @@ class CallHandler:
         elif self.agents[call_id]['TTS']['name'] == 'PlayHT':
             self.agents[call_id]["synthesis_service"] = PlayHT(self.loop)
             await self.agents[call_id]['synthesis_service'].establish_connection( self.agents[call_id]['TTS']['voice']['model'], self.agents[call_id]['TTS']['model'])
-
         else:
             self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(call_id, DeepgramService)
             await self.agents[call_id]['synthesis_service'].establish_sp_connection(self.agents[call_id]['TTS']['voice']['model'])
 
 
-        response = self.twilio_service.initialize_call(call_id)
+        
+    async def handle_call(self, call_id: str, data):
+        print("Handling call...")
+        if data['direction'] != 'outbound-api':
+            await self.update_agent_data(call_id, data)
+            response = self.twilio_service.initialize_call(call_id)
         # self.transcribe_service.connect()  # Connect the transcriber service
         # await self.initialize_session_info(call_id)
+            return response
+        else:
+            u_call_id = self.calls[data['to']]
+            del self.calls[data['to']]
+            response = self.twilio_service.initialize_call(u_call_id)
+        # self.transcribe_service.connect()  # Connect the transcriber service
+        # await self.initialize_session_info(call_id)
+            return response
 
-        return response
+    
 
     async def make_outgoing_call(self, phone_number: str):
         call_sid = self.twilio_service.make_call(phone_number)
@@ -1718,8 +1758,7 @@ class CallHandler:
         """Handle the stream callback to get the streamSid."""
         stream_sid = data.get("StreamSid")
         call_sid = data.get("CallSid")
-        if stream_sid not in self.sessions:
-            self.initialize_session_info(stream_sid, call_sid)
+  
         return "OK", 200
     
     def modify_greeting(self, name, greetings, call_sid):

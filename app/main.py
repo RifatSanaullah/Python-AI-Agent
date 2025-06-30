@@ -65,6 +65,12 @@ async def receive_webhook(
 
         # Get connection info by secret (which is actually the connection_id)
         connection = await BackendHandler().get_connection_by_id(x_webhook_secret)
+
+        payload = {
+                    "phone_number": cell_phone,
+                    "account_id": account_id,
+        }
+        connection_data = await BackendHandler().get_connection_details(payload)
        
         # Check if the connection_id from backend matches the x_webhook_secret
         if not connection or connection.get("connection_id") != x_webhook_secret:
@@ -81,7 +87,7 @@ async def receive_webhook(
             lead_info = data.get("lead", {})
             lead_id = lead_info.get("id")
             if lead_id:
-                await fetch_and_trigger_outbound(account_id, lead_id, connection_id, call_handler.update_details)
+                await fetch_and_trigger_outbound(account_id, lead_id, connection_id, call_handler.update_details, connection_data)
         else:
             logger.info(f"ℹ️ Received event of type: {event_type}")
 
@@ -125,6 +131,7 @@ async def outgoing_call(phone_number: str, call_handler: CallHandler = Depends(g
 @app.post("/stream_callback")
 async def stream_callback(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
     data = await request.form()
+    print(data)
     return await call_handler.handle_stream_callback(data)
 
 @app.post("/process-file/")
