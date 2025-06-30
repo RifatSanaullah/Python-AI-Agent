@@ -103,13 +103,13 @@ class PlayHT:
                     "voice": voice,
                     "sample_rate": 8000,  
                     "output_format": "mulaw",
-                    "speed": 1.0,
-                    "temperature": 0.7,
-                    "top_p": 0.8,
-                    "repetition_penalty": 3.0,
+                    "speed": 0.9,
+                    "temperature": 1.7,
+                    "top_p": 0.87,
+                    "repetition_penalty": 7.7,
                     "voice_guidance": 0,
-                    "style_guidance": 0.5,
-                    "text_guidance": 0.75,
+                    "style_guidance": 10,
+                    "text_guidance": 1,
                 }
         print(f"PlayHT connection established with voice: {voice}, model: {model}")
             
