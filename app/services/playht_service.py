@@ -75,7 +75,12 @@ class PlayHT:
         except Exception as e:
             print(f"Error getting WebSocket URL: {e}")
             return False
-    async def establish_connection(self,  voice:str, model, call_id, queue_audio):
+
+    async def update_call_id(self, call_id, queue_audio):
+        self.queue_audio = queue_audio
+        self.call_id = call_id
+
+    async def establish_connection(self,  voice:str, model):
         self.voice_engine = model
         """Establish connection to PlayHT API"""
         if not await self._get_websocket_url():
@@ -107,8 +112,6 @@ class PlayHT:
                     "text_guidance": 0.75,
                 }
         print(f"PlayHT connection established with voice: {voice}, model: {model}")
-        self.queue_audio = queue_audio
-        self.call_id = call_id
             
         self.websocket = await websockets.connect(self.websocket_url)
         self.is_connected = True

@@ -52,13 +52,14 @@ class DeepgramService:
         self.dg_connection = None
         self.sp_dg_connection = None
         self.queue_audio = {}
+        self.call_id = None
         # self.lock_exit = threading.Lock()
         # self.exit = False
         
     def is_sentence_complete(self, sentence):
         return bool(re.search(r'[.!?]$', sentence.strip()))
 
-    async def stream_text_to_speech(self, text: str, call_id, queue_audio):
+    async def stream_text_to_speech(self, text: str):
         try:
             # options = SpeakOptions(
             #     model= model,
@@ -68,18 +69,21 @@ class DeepgramService:
             # )
             # response = self.speaker.stream({"text": text}, options)
             # return response.stream.getbuffer()
-            self.queue_audio = {
-                'call_id': call_id,
-                "queue_audio": queue_audio
-            }
+
             await self.sp_dg_connection.send_text(text)
             # self._socket.send(json.dumps({"type": "Speak", "text": text}))
         except Exception as e:
             print(f"An error occurred: {e}")
             raise
 
+    async def update_call_id(self, call_id, queue_audio=None):
+        self.call_id = call_id
+        self.queue_audio = {
+                'call_id': call_id,
+                "queue_audio": queue_audio
+            }
 
-    async def establish_dg_connection(self , model = "nova-3"):
+    async def establish_dg_connection(self , model = "nova-3",):
         print("Establishing Deepgram Connection....")
         if self.dg_connection:
             await self.dg_connection.finish()
@@ -150,7 +154,7 @@ class DeepgramService:
             if self.on_transcript and self.complete_sentence.strip():
                 sentence = self.complete_sentence
                 self.complete_sentence = ''
-                await self.on_transcript(sentence.strip())
+                await self.on_transcript(sentence.strip(), self.call_id)
             self.transmit_task = None
         except asyncio.CancelledError:
             # Canceled because more speech came in
@@ -163,7 +167,7 @@ class DeepgramService:
         sentence = result.channel.alternatives[0].transcript
         if sentence:
             self.cancel_transmit()
-            await self.on_start()
+            await self.on_start(self.call_id)
             print("Transcript: ", sentence, "is_final: ", is_final)
             if is_final and sentence.strip():
                 print("sentence: ", sentence)

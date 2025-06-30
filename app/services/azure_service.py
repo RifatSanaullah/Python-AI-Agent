@@ -80,14 +80,16 @@ class AzureService:
                 )
         print("Speech synthesis completed.")
         
-    async def establish_connection(self, voice:str, call_id, queue_audio):
-        self.speech_config.speech_synthesis_voice_name = voice
-
+    async def update_call_id(self, call_id, queue_audio):
+        
         if 'call_id' not in self.queue_audio:
                 self.queue_audio = {
                     'call_id': call_id,
                     "queue_audio": queue_audio
         }
+        
+    async def establish_connection(self, voice:str):
+        self.speech_config.speech_synthesis_voice_name = voice
 
         self.speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=self.speech_config, audio_config=None)
         # self.speech_synthesizer.synthesizing.connect(lambda evt: print("[audio]", end=""))

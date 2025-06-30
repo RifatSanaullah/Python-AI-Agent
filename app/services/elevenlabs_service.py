@@ -9,7 +9,15 @@ class ElevenLabsService:
         # self.voice_id = settings.elevenlabs_voice_id
         self.queue_audio = {}
         self.text_queue = asyncio.Queue()
-    async def stream_text_to_speech(self, text: str, voice: str, model: str, call_id,  queue_audio=None):
+
+
+    async def update_call_id(self, call_id, queue_audio=None):
+        self.queue_audio = {
+                'call_id': call_id,
+                "queue_audio": queue_audio
+            }
+
+    async def stream_text_to_speech(self, text: str, voice: str, model: str):
         """
         Convert text to speech using ElevenLabs API and return complete μ-law encoded audio.
         

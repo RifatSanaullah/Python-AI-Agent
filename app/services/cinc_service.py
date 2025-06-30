@@ -377,7 +377,6 @@ async def get_leads(account_id: int, connection_id: Optional[str] = None, phone:
     
     if isinstance(response, dict) and "body" in response:
         return response["body"]
-    print("ooooooool",response)
     return response
 
 async def get_lead_details(account_id: int, lead_id: str, connection_id: Optional[str] = None, fields: Optional[List[str]] = None) -> Dict[str, Any]:    
