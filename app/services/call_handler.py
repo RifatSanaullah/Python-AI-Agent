@@ -1611,82 +1611,7 @@ class CallHandler:
             self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(call_id, DeepgramService)
             await self.agents[call_id]['synthesis_service'].establish_sp_connection(self.agents[call_id]['TTS']['voice']['model'])
 
-        fullname =self.agents[call_id]['fullname']
-        greetings = self.agents[call_id]['greetings']
-        email = self.agents[call_id]['email']
-        phone = self.agents[call_id]['phone']
-        description =self.agents[call_id]['description']
-        existing_appointment =self.agents[call_id]['existing_appointment']
-      
-        current_time = datetime.utcnow()
-        print(f"Current UTC time: {current_time.isoformat()}")
-        
-        # Get user's timezone and show current time in user's timezone
-        user_timezone = self.agents[call_id].get('timezone', 'UTC')
-        print(f"User timezone: {user_timezone}")
-        
-        # Clean up the existing appointment string - remove duplicates and format nicely
-        if existing_appointment:
-            
-            # Split by comma, strip whitespace, and remove duplicates while preserving order
-            existing_appointment = sort_and_group_appointments(existing_appointment)
-            if existing_appointment:
-                appointments = []
-                seen = set()
-                for apt in existing_appointment.split(','):
-                    apt = apt.strip()
-                    if apt and apt not in seen:
-                        appointments.append(apt)
-                        seen.add(apt)
 
-            existing_appointment = ', '.join(appointments) if appointments else None
-        isAllowMeetingConflict = self.agents[call_id]['allowMeetingConflict']
-        print("isAllowMeetingConflict: ", isAllowMeetingConflict)
-
-        await self.ai_service.process_initial_message(stream_sid, self.get_agent_knowledge)
-        self.ai_service.add_message(stream_sid, "assistant", greetings)
-        self.ai_service.add_system_message(stream_sid, "assistant", greetings)
-        
-        if fullname is not None and fullname != "":
-            self.ai_service.add_message(stream_sid, "user", f"My Name is: {fullname}")
-            self.ai_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Name of the user you will use in this conversation: {fullname}")
-        if email is not None and email != "":
-            self.ai_service.add_message(stream_sid, "user", f"My Email Address is: {email}")
-            self.ai_service.add_system_message(stream_sid, "system", f"Don't forget. This is the email address of the user you will use in this conversation : {email}.")
-        if phone is not None and phone != "":
-            self.ai_service.add_message(stream_sid, "user", f"My Phone Number is: {phone}")
-            self.ai_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Phone Number of the user you will use in this conversation: {phone}")
-        else:
-            self.ai_service.add_system_message(stream_sid, "system", f"This is the Phone Number of the user you will use in this conversation and you can ask the user if he/she wants to change the phone number: {self.format_us_phone(self.agents[call_id]['leadbound'])}")
-        if description is not None and description != "":
-            self.ai_service.add_system_message(stream_sid, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
-       
-            if not isAllowMeetingConflict and existing_appointment is not None and existing_appointment != "":
-             print("Existing appointment found: ", existing_appointment)
-            # user_timezone = self.agents[call_sid].get('timezone', 'UTC')
-            self.ai_service.add_system_message(
-            stream_sid,
-            "system",
-            f"""Task: Help user schedule a 30-minute appointment/meeting.
-
-            IMPORTANT SCHEDULING RULES:
-            1. All meetings are exactly 30 minutes long
-            2. Meetings can start at any 30-minute interval (e.g., 10:00am, 10:30am, 11:00am, 11:30am, etc.)
-            3. A slot is available if there's no overlap with existing appointments
-
-            BOOKED TIME SLOTS: {existing_appointment}
-
-            INSTRUCTIONS:
-            - If user requests a time that does NOT conflict with booked slots, proceed with scheduling
-            - ONLY when user requests a time that CONFLICTS with booked slots:
-              * Inform them the requested time is unavailable
-              * Suggest 2-3 nearby available 30-minute slots on the same date
-              * Look for gaps between appointments (e.g., if 11:00am-11:30am is booked but 11:30am-12:00pm is free, suggest 11:30am-12:00pm)
-              * If no slots available on requested date, suggest alternative dates
-
-            Do not proactively list available times unless there's a scheduling conflict.
-            """
-        )
         
     async def handle_call(self, call_id: str, data):
         print("Handling call...", data)
@@ -1748,7 +1673,12 @@ class CallHandler:
         # await self.sessions[stream_sid]['synthesis_service'].flush_sp_ws()
         # greetings = self.agents[call_sid]['greetings']
         # result = await self.gather_contact_info(call_sid, greetings)
+        fullname =self.agents[call_sid]['fullname']
         greetings = self.agents[call_sid]['greetings']
+        email = self.agents[call_sid]['email']
+        phone = self.agents[call_sid]['phone']
+        description =self.agents[call_sid]['description']
+        existing_appointment =self.agents[call_sid]['existing_appointment']
 
         await self.synthesize_response(greetings , stream_sid)
         # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
@@ -1762,7 +1692,75 @@ class CallHandler:
         # description = result['description']
         # existing_appointment = result['existing_appointment']
         # Debug: Print current datetime for reference
-  
+        current_time = datetime.utcnow()
+        print(f"Current UTC time: {current_time.isoformat()}")
+        
+        # Get user's timezone and show current time in user's timezone
+        user_timezone = self.agents[call_sid].get('timezone', 'UTC')
+        print(f"User timezone: {user_timezone}")
+        
+        # Clean up the existing appointment string - remove duplicates and format nicely
+        if existing_appointment:
+            
+            # Split by comma, strip whitespace, and remove duplicates while preserving order
+            existing_appointment = sort_and_group_appointments(existing_appointment)
+            if existing_appointment:
+                appointments = []
+                seen = set()
+                for apt in existing_appointment.split(','):
+                    apt = apt.strip()
+                    if apt and apt not in seen:
+                        appointments.append(apt)
+                        seen.add(apt)
+
+            existing_appointment = ', '.join(appointments) if appointments else None
+        isAllowMeetingConflict = self.agents[call_sid]['allowMeetingConflict']
+        print("isAllowMeetingConflict: ", isAllowMeetingConflict)
+
+        await self.ai_service.process_initial_message(stream_sid, self.get_agent_knowledge)
+        self.ai_service.add_message(stream_sid, "assistant", greetings)
+        self.ai_service.add_system_message(stream_sid, "assistant", greetings)
+        
+        if fullname is not None and fullname != "":
+            self.ai_service.add_message(stream_sid, "user", f"My Name is: {fullname}")
+            self.ai_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Name of the user you will use in this conversation: {fullname}")
+        if email is not None and email != "":
+            self.ai_service.add_message(stream_sid, "user", f"My Email Address is: {email}")
+            self.ai_service.add_system_message(stream_sid, "system", f"Don't forget. This is the email address of the user you will use in this conversation : {email}.")
+        if phone is not None and phone != "":
+            self.ai_service.add_message(stream_sid, "user", f"My Phone Number is: {phone}")
+            self.ai_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Phone Number of the user you will use in this conversation: {phone}")
+        else:
+            self.ai_service.add_system_message(stream_sid, "system", f"This is the Phone Number of the user you will use in this conversation and you can ask the user if he/she wants to change the phone number: {self.format_us_phone(self.agents[call_sid]['leadbound'])}")
+        if description is not None and description != "":
+            self.ai_service.add_system_message(stream_sid, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
+       
+            if not isAllowMeetingConflict and existing_appointment is not None and existing_appointment != "":
+             print("Existing appointment found: ", existing_appointment)
+            # user_timezone = self.agents[call_sid].get('timezone', 'UTC')
+            self.ai_service.add_system_message(
+            stream_sid,
+            "system",
+            f"""Task: Help user schedule a 30-minute appointment/meeting.
+
+            IMPORTANT SCHEDULING RULES:
+            1. All meetings are exactly 30 minutes long
+            2. Meetings can start at any 30-minute interval (e.g., 10:00am, 10:30am, 11:00am, 11:30am, etc.)
+            3. A slot is available if there's no overlap with existing appointments
+
+            BOOKED TIME SLOTS: {existing_appointment}
+
+            INSTRUCTIONS:
+            - If user requests a time that does NOT conflict with booked slots, proceed with scheduling
+            - ONLY when user requests a time that CONFLICTS with booked slots:
+              * Inform them the requested time is unavailable
+              * Suggest 2-3 nearby available 30-minute slots on the same date
+              * Look for gaps between appointments (e.g., if 11:00am-11:30am is booked but 11:30am-12:00pm is free, suggest 11:30am-12:00pm)
+              * If no slots available on requested date, suggest alternative dates
+
+            Do not proactively list available times unless there's a scheduling conflict.
+            """
+        )
         # updaedata= {
         #     "stream_sid" : stream_sid,
         #     "call_sid" : call_sid
