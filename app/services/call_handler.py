@@ -109,7 +109,7 @@ class CallHandler:
             "direction" : 'outbound-api',
             "isBoom": False,
         }
-        await self.update_agent_data(call_id, data)
+        return await self.update_agent_data(call_id, data)
 
 
     def get_business_agent(self, call_id: str):
@@ -266,8 +266,8 @@ class CallHandler:
             print("WebSocket connection closed.")
             if self.agents[call_id]['STT']['name'] == 'Deepgram' and self.agents[call_id]['transcribe_service']:
                 self.agents[call_id]['transcribe_service'].cancel_transmit()
-            if session['stream_sid'] in self.ai_service.conversations:
-                conversations = self.ai_service.conversations[session['stream_sid']]
+            if call_id in self.ai_service.conversations:
+                conversations = self.ai_service.conversations[call_id]
 
                 outputFile= f"recordings/{call_id}.wav"
                 await convert_mulaw_to_wav(f"recordings/{call_id}.mulaw", outputFile)
@@ -313,7 +313,7 @@ class CallHandler:
                     print(traceback.format_exc())
 
 
-                self.ai_service.close_conversation(session['stream_sid'])
+                self.ai_service.close_conversation(call_id)
                 self.twilio_service.remove_stream_from_queue(session['stream_sid'])
                 self.agents[call_id]['websocket_closed'] = True
                 # self.flush_agent(call_id)
@@ -1230,7 +1230,7 @@ class CallHandler:
     async def stop_stream(self,call_id):
         # await asyncio.sleep(1)  # Wait for 1 second
         self.sessions[call_id]['ai_interrupt'] =  True
-        self.ai_service.update_interrupt_status(call_id, True)
+        self.ai_service.update_interrupt_status(self.agents[self.sessions[call_id]['call_sid']], True)
         # self.sessions[call_id]['ai_speaking'] =  True
         # message = self.get_interrupt_message()
         await self.twilio_service.stop_audio_stream(self.sessions[call_id]['websocket'], call_id)
@@ -1260,7 +1260,7 @@ class CallHandler:
         if call_id not in self.sessions or 'call_sid' not in self.sessions[call_id]:
             return
         self.sessions[call_id]['ai_interrupt'] =  False
-        self.ai_service.update_interrupt_status(call_id, False)
+        self.ai_service.update_interrupt_status(self.agents[self.sessions[call_id]['call_sid']], False)
 
         # filler_audio = self.filler_mgr.next()
         # await self.synthesize_response(filler_audio, call_id)
@@ -1269,7 +1269,7 @@ class CallHandler:
         streamingResponse = True
         if self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Elevenlabs':
             streamingResponse = False
-        response = await self.ai_service.generate_response(call_id, transcript, self.synthesize_response, self.agents[self.sessions[call_id]['call_sid']]['aiClient'], self.agents[self.sessions[call_id]['call_sid']]['synthesis_service'].flush_sp_ws, streamingResponse)
+        response = await self.ai_service.generate_response(self.agents[self.sessions[call_id]['call_sid']], transcript, self.synthesize_response, self.agents[self.sessions[call_id]['call_sid']]['aiClient'], self.agents[self.sessions[call_id]['call_sid']]['synthesis_service'].flush_sp_ws, streamingResponse)
         if 'End Call Message' in response  or  self.contains_any_word(response):
             self.agents[self.sessions[call_id]['call_sid']]['end_call'] = True
             response = response.replace('End Call Message', '')
@@ -1314,15 +1314,15 @@ class CallHandler:
 
     async def get_agent_knowledge(self, call_id):
         data =  {        
-            "knowledge" : self.agents[self.sessions[call_id]['call_sid']]['knowledge'],
-            "aiInstructions" : self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'],
-            "agentName" : self.agents[self.sessions[call_id]['call_sid']]['name'],
-            "gender" : self.agents[self.sessions[call_id]['call_sid']]['TTS']['voice']['gender'],
-            "integrations" : self.agents[self.sessions[call_id]['call_sid']]['integrations'],
-            "new_knowledge" : self.agents[self.sessions[call_id]['call_sid']]['new_knowledge'],
+            "knowledge" : self.agents[call_id]['knowledge'],
+            "aiInstructions" : self.agents[call_id]['aiInstructions'],
+            "agentName" : self.agents[call_id]['name'],
+            "gender" : self.agents[call_id]['TTS']['voice']['gender'],
+            "integrations" : self.agents[call_id]['integrations'],
+            "new_knowledge" : self.agents[call_id]['new_knowledge'],
         }
-        self.agents[self.sessions[call_id]['call_sid']]['knowledge'] = None
-        self.agents[self.sessions[call_id]['call_sid']]['aiInstructions'] = None
+        self.agents[call_id]['knowledge'] = None
+        self.agents[call_id]['aiInstructions'] = None
         return data
 
     def chunk_text(self, text, chunk_size):
@@ -1340,18 +1340,18 @@ class CallHandler:
         return chunks
     
     async def synthesize_response(self, text: str, call_id):
-        session = self.sessions.get(call_id)
+        session = self.agents.get(call_id)
         if not session or not text or text == '':
             return
         # start_time = datetime.now()
-        model = self.agents[self.sessions[call_id]['call_sid']]['TTS']['voice']['model']
+        model = self.agents[call_id]['TTS']['voice']['model']
         # Select TTS provider based on environment variable
-        if self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Deepgram':
-            audio_stream = await self.agents[self.sessions[call_id]['call_sid']]['synthesis_service'].stream_text_to_speech(text)
+        if self.agents[call_id]['TTS']['name'] == 'Deepgram':
+            audio_stream = await self.agents[call_id]['synthesis_service'].stream_text_to_speech(text)
         # elif tts_provider == "playht":
         #     audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
-        elif self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Elevenlabs':
-            audio_stream = await self.agents[self.sessions[call_id]['call_sid']]["synthesis_service"].stream_text_to_speech(text, model, self.agents[self.sessions[call_id]['call_sid']]['TTS']['model'])
+        elif self.agents[call_id]['TTS']['name'] == 'Elevenlabs':
+            audio_stream = await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text, model, self.agents[call_id]['TTS']['model'])
             # audio_stream = await self.sessions[call_id]["synthesis_service"].stream_text_to_speech(text, call_id, self.queue_audio)
             
             # await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
@@ -1359,11 +1359,11 @@ class CallHandler:
             # result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
             # session['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
             # session['wait_duration'] = result['duration']
-        elif self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'Microsoft Azure':
-            audio_stream = await self.agents[self.sessions[call_id]['call_sid']]["synthesis_service"].stream_text_to_speech(text)
+        elif self.agents[call_id]['TTS']['name'] == 'Microsoft Azure':
+            audio_stream = await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text)
 
-        elif self.agents[self.sessions[call_id]['call_sid']]['TTS']['name'] == 'PlayHT':
-            audio_stream = await self.agents[self.sessions[call_id]['call_sid']]['synthesis_service'].stream_text_to_speech(text)
+        elif self.agents[call_id]['TTS']['name'] == 'PlayHT':
+            audio_stream = await self.agents[call_id]['synthesis_service'].stream_text_to_speech(text)
         else:
             raise ValueError(f"Unsupported TTS provider: {settings.tts_provider}")
 
@@ -1611,7 +1611,84 @@ class CallHandler:
             self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(call_id, DeepgramService)
             await self.agents[call_id]['synthesis_service'].establish_sp_connection(self.agents[call_id]['TTS']['voice']['model'])
 
+        
+        fullname =self.agents[call_id]['fullname']
+        greetings = self.agents[call_id]['greetings']
+        email = self.agents[call_id]['email']
+        phone = self.agents[call_id]['phone']
+        description =self.agents[call_id]['description']
+        existing_appointment =self.agents[call_id]['existing_appointment']
+        current_time = datetime.utcnow()
+        print(f"Current UTC time: {current_time.isoformat()}")
+        
+        # Get user's timezone and show current time in user's timezone
+        user_timezone = self.agents[call_id].get('timezone', 'UTC')
+        print(f"User timezone: {user_timezone}")
+        
+        # Clean up the existing appointment string - remove duplicates and format nicely
+        if existing_appointment:
+            
+            # Split by comma, strip whitespace, and remove duplicates while preserving order
+            existing_appointment = sort_and_group_appointments(existing_appointment)
+            if existing_appointment:
+                appointments = []
+                seen = set()
+                for apt in existing_appointment.split(','):
+                    apt = apt.strip()
+                    if apt and apt not in seen:
+                        appointments.append(apt)
+                        seen.add(apt)
 
+            existing_appointment = ', '.join(appointments) if appointments else None
+        isAllowMeetingConflict = self.agents[call_id]['allowMeetingConflict']
+        print("isAllowMeetingConflict: ", isAllowMeetingConflict)
+
+        await self.ai_service.process_initial_message(call_id, self.get_agent_knowledge)
+        self.ai_service.add_message(call_id, "assistant", greetings)
+        self.ai_service.add_system_message(call_id, "assistant", greetings)
+        
+        if fullname is not None and fullname != "":
+            self.ai_service.add_message(call_id, "user", f"My Name is: {fullname}")
+            self.ai_service.add_system_message(call_id, "system", f"Don't forget. This is the Name of the user you will use in this conversation: {fullname}")
+        if email is not None and email != "":
+            self.ai_service.add_message(call_id, "user", f"My Email Address is: {email}")
+            self.ai_service.add_system_message(call_id, "system", f"Don't forget. This is the email address of the user you will use in this conversation : {email}.")
+        if phone is not None and phone != "":
+            self.ai_service.add_message(call_id, "user", f"My Phone Number is: {phone}")
+            self.ai_service.add_system_message(call_id, "system", f"Don't forget. This is the Phone Number of the user you will use in this conversation: {phone}")
+        else:
+            self.ai_service.add_system_message(call_id, "system", f"This is the Phone Number of the user you will use in this conversation and you can ask the user if he/she wants to change the phone number: {self.format_us_phone(self.agents[call_id]['leadbound'])}")
+        if description is not None and description != "":
+            self.ai_service.add_system_message(call_id, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
+       
+            if not isAllowMeetingConflict and existing_appointment is not None and existing_appointment != "":
+             print("Existing appointment found: ", existing_appointment)
+            # user_timezone = self.agents[call_id].get('timezone', 'UTC')
+            self.ai_service.add_system_message(
+            call_id,
+            "system",
+            f"""Task: Help user schedule a 30-minute appointment/meeting.
+
+            IMPORTANT SCHEDULING RULES:
+            1. All meetings are exactly 30 minutes long
+            2. Meetings can start at any 30-minute interval (e.g., 10:00am, 10:30am, 11:00am, 11:30am, etc.)
+            3. A slot is available if there's no overlap with existing appointments
+
+            BOOKED TIME SLOTS: {existing_appointment}
+
+            INSTRUCTIONS:
+            - If user requests a time that does NOT conflict with booked slots, proceed with scheduling
+            - ONLY when user requests a time that CONFLICTS with booked slots:
+              * Inform them the requested time is unavailable
+              * Suggest 2-3 nearby available 30-minute slots on the same date
+              * Look for gaps between appointments (e.g., if 11:00am-11:30am is booked but 11:30am-12:00pm is free, suggest 11:30am-12:00pm)
+              * If no slots available on requested date, suggest alternative dates
+
+            Do not proactively list available times unless there's a scheduling conflict.
+            """
+        )
+
+        return True
         
     async def handle_call(self, call_id: str, data):
         print("Handling call...", data)
@@ -1673,14 +1750,11 @@ class CallHandler:
         # await self.sessions[stream_sid]['synthesis_service'].flush_sp_ws()
         # greetings = self.agents[call_sid]['greetings']
         # result = await self.gather_contact_info(call_sid, greetings)
-        fullname =self.agents[call_sid]['fullname']
-        greetings = self.agents[call_sid]['greetings']
-        email = self.agents[call_sid]['email']
-        phone = self.agents[call_sid]['phone']
-        description =self.agents[call_sid]['description']
-        existing_appointment =self.agents[call_sid]['existing_appointment']
 
-        await self.synthesize_response(greetings , stream_sid)
+        greetings = self.agents[call_sid]['greetings']
+
+
+        await self.synthesize_response(greetings , call_id)
         # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
         await self.agents[call_sid]['synthesis_service'].flush_sp_ws()
         
@@ -1692,75 +1766,7 @@ class CallHandler:
         # description = result['description']
         # existing_appointment = result['existing_appointment']
         # Debug: Print current datetime for reference
-        current_time = datetime.utcnow()
-        print(f"Current UTC time: {current_time.isoformat()}")
-        
-        # Get user's timezone and show current time in user's timezone
-        user_timezone = self.agents[call_sid].get('timezone', 'UTC')
-        print(f"User timezone: {user_timezone}")
-        
-        # Clean up the existing appointment string - remove duplicates and format nicely
-        if existing_appointment:
-            
-            # Split by comma, strip whitespace, and remove duplicates while preserving order
-            existing_appointment = sort_and_group_appointments(existing_appointment)
-            if existing_appointment:
-                appointments = []
-                seen = set()
-                for apt in existing_appointment.split(','):
-                    apt = apt.strip()
-                    if apt and apt not in seen:
-                        appointments.append(apt)
-                        seen.add(apt)
 
-            existing_appointment = ', '.join(appointments) if appointments else None
-        isAllowMeetingConflict = self.agents[call_sid]['allowMeetingConflict']
-        print("isAllowMeetingConflict: ", isAllowMeetingConflict)
-
-        await self.ai_service.process_initial_message(stream_sid, self.get_agent_knowledge)
-        self.ai_service.add_message(stream_sid, "assistant", greetings)
-        self.ai_service.add_system_message(stream_sid, "assistant", greetings)
-        
-        if fullname is not None and fullname != "":
-            self.ai_service.add_message(stream_sid, "user", f"My Name is: {fullname}")
-            self.ai_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Name of the user you will use in this conversation: {fullname}")
-        if email is not None and email != "":
-            self.ai_service.add_message(stream_sid, "user", f"My Email Address is: {email}")
-            self.ai_service.add_system_message(stream_sid, "system", f"Don't forget. This is the email address of the user you will use in this conversation : {email}.")
-        if phone is not None and phone != "":
-            self.ai_service.add_message(stream_sid, "user", f"My Phone Number is: {phone}")
-            self.ai_service.add_system_message(stream_sid, "system", f"Don't forget. This is the Phone Number of the user you will use in this conversation: {phone}")
-        else:
-            self.ai_service.add_system_message(stream_sid, "system", f"This is the Phone Number of the user you will use in this conversation and you can ask the user if he/she wants to change the phone number: {self.format_us_phone(self.agents[call_sid]['leadbound'])}")
-        if description is not None and description != "":
-            self.ai_service.add_system_message(stream_sid, "system", f"In Previous conversations with you this was the summary and you can use this info in this phone call: {description}")
-       
-            if not isAllowMeetingConflict and existing_appointment is not None and existing_appointment != "":
-             print("Existing appointment found: ", existing_appointment)
-            # user_timezone = self.agents[call_sid].get('timezone', 'UTC')
-            self.ai_service.add_system_message(
-            stream_sid,
-            "system",
-            f"""Task: Help user schedule a 30-minute appointment/meeting.
-
-            IMPORTANT SCHEDULING RULES:
-            1. All meetings are exactly 30 minutes long
-            2. Meetings can start at any 30-minute interval (e.g., 10:00am, 10:30am, 11:00am, 11:30am, etc.)
-            3. A slot is available if there's no overlap with existing appointments
-
-            BOOKED TIME SLOTS: {existing_appointment}
-
-            INSTRUCTIONS:
-            - If user requests a time that does NOT conflict with booked slots, proceed with scheduling
-            - ONLY when user requests a time that CONFLICTS with booked slots:
-              * Inform them the requested time is unavailable
-              * Suggest 2-3 nearby available 30-minute slots on the same date
-              * Look for gaps between appointments (e.g., if 11:00am-11:30am is booked but 11:30am-12:00pm is free, suggest 11:30am-12:00pm)
-              * If no slots available on requested date, suggest alternative dates
-
-            Do not proactively list available times unless there's a scheduling conflict.
-            """
-        )
         # updaedata= {
         #     "stream_sid" : stream_sid,
         #     "call_sid" : call_sid
