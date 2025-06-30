@@ -116,8 +116,10 @@ class PlayHT:
         self.websocket = await websockets.connect(self.websocket_url)
         self.is_connected = True
         print("Connected to PlayHT WebSocket")
-        
+        await self.start_synthesiser()
         # Start listening for audio data
+
+    async def start_synthesiser(self):
         asyncio.create_task(self._listen_for_audio())
 
     async def stream_text_to_speech(self, text: str):

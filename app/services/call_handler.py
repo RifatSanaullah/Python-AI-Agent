@@ -73,7 +73,7 @@ class CallHandler:
         self.agents = {}
         self.completed_sessions = {}
         self.timer = None
-        self.loop= None
+        self.loop= asyncio.get_running_loop()
         self.prefetched_details = {}
         self.calls = {}
 
@@ -1581,26 +1581,6 @@ class CallHandler:
         
 
 
-        if self.agents[call_id]['TTS']['name'] == 'Deepgram':
-            if self.agents[call_id]['STT']['name'] == 'Deepgram':
-                self.agents[call_id]["synthesis_service"] = self.agents[call_id]["transcribe_service"]
-            else :
-                self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(call_id, DeepgramService)
-
-            await self.agents[call_id]['synthesis_service'].establish_sp_connection(self.agents[call_id]['TTS']['voice']['model'])
-
-        elif self.agents[call_id]['TTS']['name'] == 'Elevenlabs':
-            self.agents[call_id]["synthesis_service"] = self.elevenlabs_service
-            await self.agents[call_id]['synthesis_service'].establish_connection( self.agents[call_id]['TTS']['voice']['model'], self.agents[call_id]['TTS']['model'])
-        elif self.agents[call_id]['TTS']['name'] == 'Microsoft Azure':
-            self.agents[call_id]["synthesis_service"] = AzureService(self.loop)
-            await self.agents[call_id]['synthesis_service'].establish_connection(self.agents[call_id]['TTS']['voice']['model'])
-        elif self.agents[call_id]['TTS']['name'] == 'PlayHT':
-            self.agents[call_id]["synthesis_service"] = PlayHT(self.loop)
-            await self.agents[call_id]['synthesis_service'].establish_connection( self.agents[call_id]['TTS']['voice']['model'], self.agents[call_id]['TTS']['model'])
-        else:
-            self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(call_id, DeepgramService)
-            await self.agents[call_id]['synthesis_service'].establish_sp_connection(self.agents[call_id]['TTS']['voice']['model'])
 
 
         
@@ -1646,6 +1626,27 @@ class CallHandler:
         # elif self.agents[call_sid]['TTS']['name'] == 'PlayHT':
         #     await self.sessions[stream_sid]['synthesis_service'].establish_connection( self.agents[call_sid]['TTS']['voice']['model'], self.agents[call_sid]['TTS']['model'], stream_sid, self.queue_audio)
         
+        if self.agents[call_sid]['TTS']['name'] == 'Deepgram':
+            if self.agents[call_sid]['STT']['name'] == 'Deepgram':
+                self.agents[call_sid]["synthesis_service"] = self.agents[call_sid]["transcribe_service"]
+            else :
+                self.agents[call_sid]["synthesis_service"] = self.initialize_transcriber(call_sid, DeepgramService)
+
+            await self.agents[call_sid]['synthesis_service'].establish_sp_connection(self.agents[call_sid]['TTS']['voice']['model'])
+
+        elif self.agents[call_sid]['TTS']['name'] == 'Elevenlabs':
+            self.agents[call_sid]["synthesis_service"] = self.elevenlabs_service
+            await self.agents[call_sid]['synthesis_service'].establish_connection( self.agents[call_sid]['TTS']['voice']['model'], self.agents[call_sid]['TTS']['model'])
+        elif self.agents[call_sid]['TTS']['name'] == 'Microsoft Azure':
+            self.agents[call_sid]["synthesis_service"] = AzureService(self.loop)
+            await self.agents[call_sid]['synthesis_service'].establish_connection(self.agents[call_sid]['TTS']['voice']['model'])
+        elif self.agents[call_sid]['TTS']['name'] == 'PlayHT':
+            self.agents[call_sid]["synthesis_service"] = PlayHT(self.loop)
+            await self.agents[call_sid]['synthesis_service'].establish_connection( self.agents[call_sid]['TTS']['voice']['model'], self.agents[call_sid]['TTS']['model'])
+        else:
+            self.agents[call_sid]["synthesis_service"] = self.initialize_transcriber(call_sid, DeepgramService)
+            await self.agents[call_sid]['synthesis_service'].establish_sp_connection(self.agents[call_sid]['TTS']['voice']['model'])
+
         await self.agents[call_sid]['transcribe_service'].update_call_id(stream_sid, self.queue_audio)
         await self.agents[call_sid]['synthesis_service'].update_call_id(stream_sid, self.queue_audio)
 
