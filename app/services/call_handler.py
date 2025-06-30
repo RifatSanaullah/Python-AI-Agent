@@ -1616,17 +1616,17 @@ class CallHandler:
         # elif self.agents[call_sid]['TTS']['name'] == 'PlayHT':
         #     await self.sessions[stream_sid]['synthesis_service'].establish_connection( self.agents[call_sid]['TTS']['voice']['model'], self.agents[call_sid]['TTS']['model'], stream_sid, self.queue_audio)
         
-        if self.agents[call_id]['STT']['name'] == 'Deepgram':
-            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, DeepgramService)
-            await self.agents[call_id]['transcribe_service'].establish_dg_connection(self.agents[call_id]['STT']['model'])
+        if self.agents[call_sid]['STT']['name'] == 'Deepgram':
+            self.agents[call_sid]["transcribe_service"] = self.initialize_transcriber(call_sid, DeepgramService)
+            await self.agents[call_sid]['transcribe_service'].establish_dg_connection(self.agents[call_sid]['STT']['model'])
             # self.agents[call_id]["synthesis_service"] = self.agents[call_id]["transcribe_service"]
-        elif self.agents[call_id]['STT']['name'] == 'AssemblyAI':
-            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, TranscribeService)
-            self.agents[call_id]['transcribe_service'].connect()
+        elif self.agents[call_sid]['STT']['name'] == 'AssemblyAI':
+            self.agents[call_sid]["transcribe_service"] = self.initialize_transcriber(call_id, TranscribeService)
+            self.agents[call_sid]['transcribe_service'].connect()
             # self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
         else :
-            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, DeepgramService)
-            await self.agents[call_id]['transcribe_service'].establish_dg_connection(self.agents[call_id]['STT']['model'])
+            self.agents[call_sid]["transcribe_service"] = self.initialize_transcriber(call_sid, DeepgramService)
+            await self.agents[call_sid]['transcribe_service'].establish_dg_connection(self.agents[call_sid]['STT']['model'])
 
         if self.agents[call_sid]['TTS']['name'] == 'Deepgram':
             if self.agents[call_sid]['STT']['name'] == 'Deepgram':
