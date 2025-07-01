@@ -1815,7 +1815,7 @@ class CallHandler:
         crmUserId = None
         isBoom = self.agents[call_sid]['isBoom']
 
-        if isBoom is not None or isBoom == True or isBoom == 'true' or isBoom is not False:
+        if isBoom is not None or isBoom == True or isBoom == 'true':
             result = await self.backend_service.get_lead_info_boom({"phone" : self.agents[call_sid]['leadbound'] })
             if result and 'data' in result and result['data'] is not None:
                 details = result['data']
