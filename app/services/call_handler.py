@@ -44,6 +44,7 @@ from typing import Dict, Any # Ensure Dict and Any are imported for type hinting
 
 from app.adapters.filler_manager import FillerManager
 from app.helpers.utils import estimate_speech_duration
+from app.services.cinc_service import get_lead_notes_with_content
 
 # Configure logging
 logging.basicConfig(
@@ -1878,12 +1879,29 @@ class CallHandler:
                 # Get account_id from agent info
                 account_id = self.agents[call_sid].get('account_id')
                 if account_id:
+                    if account_id in self.prefetched_details:
+                        print("Prefetched Data" , self.prefetched_details)
+                        lead = self.prefetched_details
+                        lead_id = lead.get('id')
+                        if lead_id:
+                            try:
+                                # Fetch notes for this lead
+                                notes = await get_lead_notes_with_content(account_id, lead_id, connection_id=self.agents[call_sid]['integrations']['cinc_connection_id'])
+                                lead['notes'] = notes
+                            except Exception as e:
+                                print(f"Failed to fetch notes for lead {lead_id}: {e}")
+                                lead['notes'] = []
+                        else:
+                            lead['notes'] = []
 
-                    result = await self.cinc_service.get_leads_by_phone(
-                            account_id=account_id, 
-                            phone=self.agents[call_sid]['leadbound'],
-                            connection_id=self.agents[call_sid]['integrations']['cinc_connection_id']
-                        )
+                        result = [lead]
+                        del self.prefetched_details[account_id]
+                    else:
+                        result = await self.cinc_service.get_leads_by_phone(
+                                account_id=account_id, 
+                                phone=self.agents[call_sid]['leadbound'],
+                                connection_id=self.agents[call_sid]['integrations']['cinc_connection_id']
+                            )
                     print(f"DEBUG - CINC lead search result: {result}")
                     if result and len(result) > 0:
                         # Use the first matching lead
