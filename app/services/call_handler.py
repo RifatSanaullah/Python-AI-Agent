@@ -107,7 +107,7 @@ class CallHandler:
             "to" : formattedPhone,
             "application_sid" : None,
             "direction" : 'outbound-api',
-            "isBoom": False,
+            "isBoom": None,
         }
         return await self.update_agent_data(call_id, data)
 
@@ -1693,8 +1693,8 @@ class CallHandler:
         else:
             print(self.calls)
             u_call_id = self.calls[data['to']]
-            self.agents[u_call_id]['call_sid'] = call_id
             del self.calls[data['to']]
+            self.agents[u_call_id]['call_sid'] = call_id
             response = self.twilio_service.initialize_call(u_call_id)
         # self.transcribe_service.connect()  # Connect the transcriber service
         # await self.initialize_session_info(call_id)
@@ -1815,7 +1815,7 @@ class CallHandler:
         crmUserId = None
         isBoom = self.agents[call_sid]['isBoom']
 
-        if isBoom is not None or isBoom == True or isBoom == 'true':
+        if isBoom is not None or isBoom == True or isBoom == 'true' or isBoom is not False:
             result = await self.backend_service.get_lead_info_boom({"phone" : self.agents[call_sid]['leadbound'] })
             if result and 'data' in result and result['data'] is not None:
                 details = result['data']
