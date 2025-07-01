@@ -171,9 +171,9 @@ class CallHandler:
                 if data['streamSid'] and data['streamSid'] not in self.sessions:
                     self.initialize_session_info(data['streamSid'], call_id)
                     session = self.sessions[data['streamSid']]
-                if data['streamSid'] and self.sessions[data['streamSid']]['websocket'] is None:
+                if data['streamSid'] and self.agents[call_id]['websocket'] is None:
 
-                    self.sessions[data['streamSid']]['websocket'] = websocket
+                    self.agents[call_id]['websocket'] = websocket
                     self.sessions[data['streamSid']]['agent'] = self.get_business_agent(call_id)
                     self.agents[call_id]['stream_sid'] = data['streamSid']
 
@@ -229,6 +229,7 @@ class CallHandler:
 
                     with open(output_file, "ab") as f:
                         f.write(chunk_bytes)
+
                     if (('route_call' not in self.agents[call_id] 
                         or self.agents[call_id]['route_call'] == False ) and
                         ( 'end_call' not in self.agents[call_id]
@@ -239,8 +240,8 @@ class CallHandler:
                 if data['streamSid'] and not self.twilio_service.is_empty(call_id, 'response_buffer'):
                     # print("Processing response buffers...")
                     response_audio = await self.twilio_service.get_or_dequeue_audio(call_id, 'response_buffer')
-                    # self.agents[call_id]['ai_speaking'] = True
-                    await self.twilio_service.send_audio_stream(session['websocket'], data['streamSid'], response_audio)
+                    self.agents[call_id]['ai_speaking'] = True
+                    await self.twilio_service.send_audio_stream(self.agents[call_id]['websocket'], data['streamSid'], response_audio)
                     # await self.twilio_service.send_control_command(session['websocket'], 'stop')
                     if self.sessions[data['streamSid']]['background_sound'] is True:
                         await self.stop_stream(call_id)
@@ -248,7 +249,7 @@ class CallHandler:
                     with open(output_file, "ab") as f:
                         f.write(response_audio)
 
-                if call_id and not self.twilio_service.is_empty(call_id, 'audio_buffer'):
+                if data['streamSid'] and call_id and not self.twilio_service.is_empty(call_id, 'audio_buffer'):
                     audio_data = await self.twilio_service.get_or_dequeue_audio(call_id, 'audio_buffer')
                     # await self.transcribe_service.transcribe(audio_data)
                     # await session['synthesis_service'].transcribe(audio_data)
@@ -1212,45 +1213,37 @@ class CallHandler:
     def initialize_transcriber(self, call_sid, Service : TranscribeService | DeepgramService):
         """Initialize transcriber with bound methods for handling transcripts and user speech."""
         return Service(
-            on_transcript=self.create_on_transcript_handler(),
-            on_start=self.create_on_user_speech_handler(),
+            on_transcript=self.create_on_transcript_handler(call_sid),
+            on_start=self.create_on_user_speech_handler(call_sid),
             loop= self.loop,
             speak_model = self.agents[call_sid]['TTS']['voice']['model']
         )
 
-    def create_on_transcript_handler(self):
+    def create_on_transcript_handler(self, call_id):
         """Return a callback method for handling transcripts."""
-        async def handler(transcript: str, call_id: str):
+        async def handler(transcript: str):
             await self.handle_transcript(transcript, call_id)
         return handler
 
-    def create_on_user_speech_handler(self):
+    def create_on_user_speech_handler(self, call_id):
         """Return a callback method for handling user speech start."""
-        async def handler(call_id: str):
+        async def handler():
             await self.on_user_speech(call_id)
         return handler 
                
     async def stop_stream(self,call_id):
         # await asyncio.sleep(1)  # Wait for 1 second
-        # self.sessions[call_id]['ai_interrupt'] =  True
+        self.agents[call_id]['ai_interrupt'] =  True
         self.ai_service.update_interrupt_status(call_id, True)
-        await self.twilio_service.stop_audio_stream(self.sessions[self.agents[call_id]['stream_sid']]['websocket'], self.agents[call_id]['stream_sid'])
-        # self.sessions[call_id]['ai_speaking'] =  True
-        # message = self.get_interrupt_message()
-        # await self.synthesize_response(message, call_id)
-        # if(self.timer):
-        #     self.timer.cancel()
-        #     self.timer = None
-        # self.timer = Timer(self.sessions[call_id]['wait_duration'] - 1, self.disable_ai_speaking, args=[call_id])
-        # self.timer.start()
-
-        # await self.twilio_service.dequeue_all_except_next(call_id, 'response_buffer')
-        self.sessions[call_id]['background_sound'] = False
+        await self.twilio_service.stop_audio_stream(self.agents[call_id]['websocket'], self.agents[call_id]['stream_sid'])
+        self.agents[call_id]['background_sound'] = False
+        return
 
     async def on_user_speech(self, call_id):
         if call_id in self.agents and self.agents[call_id]['ai_speaking'] == True:
             await self.stop_stream(call_id)
             self.agents[call_id]['ai_speaking'] = False
+        return
 
     def contains_any_word(self, text:str):
         # Check if any word in the array exists in the text
@@ -1262,7 +1255,7 @@ class CallHandler:
         # await self.enable_background_sound(call_id, True)
         if call_id not in self.agents or 'stream_sid' not in self.agents[call_id]:
             return
-        # self.sessions[call_id]['ai_interrupt'] =  False
+        self.agents[call_id]['ai_interrupt'] =  False
         self.ai_service.update_interrupt_status(call_id, False)
 
         # filler_audio = self.filler_mgr.next()
@@ -1385,9 +1378,9 @@ class CallHandler:
         session = self.agents.get(call_id)
         if not session :
             return
-        ai_interupted = self.ai_service.get_interrupt_status(call_id)
+        ai_interupted = session.get('ai_interrupt', False)
         if not ai_interupted:
-            self.agents[call_id]['ai_speaking'] = True
+            # self.agents[call_id]['ai_speaking'] = True
             # await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
             await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
             # result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
@@ -1693,6 +1686,9 @@ class CallHandler:
         await self.agents[call_id]['transcribe_service'].update_call_id(call_id, self.queue_audio)
         await self.agents[call_id]['synthesis_service'].update_call_id(call_id, self.queue_audio)
 
+        self.agents[call_id]['ai_speaking'] = False
+        self.agents[call_id]['websocket'] = None
+        self.agents[call_id]['stream_sid'] = None
         
         greetings = self.agents[call_id]['greetings']
 
@@ -1704,7 +1700,7 @@ class CallHandler:
         
     async def handle_call(self, call_id: str, data):
         print("Handling call...", data)
-        if data['direction'] is not 'outbound-api':
+        if data['direction'] != 'outbound-api':
             await self.update_agent_data(call_id, data)
             self.agents[call_id]['call_sid'] = call_id
             response = self.twilio_service.initialize_call(call_id)

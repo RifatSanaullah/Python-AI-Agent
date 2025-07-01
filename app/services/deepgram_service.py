@@ -77,7 +77,7 @@ class DeepgramService:
             raise
 
     async def update_call_id(self, call_id, queue_audio=None):
-        self.call_id = call_id
+
         self.queue_audio = {
                 'call_id': call_id,
                 "queue_audio": queue_audio
@@ -154,7 +154,7 @@ class DeepgramService:
             if self.on_transcript and self.complete_sentence.strip():
                 sentence = self.complete_sentence
                 self.complete_sentence = ''
-                await self.on_transcript(sentence.strip(), self.call_id)
+                await self.on_transcript(sentence.strip())
             self.transmit_task = None
         except asyncio.CancelledError:
             # Canceled because more speech came in
@@ -166,9 +166,9 @@ class DeepgramService:
         is_final = result.is_final
         sentence = result.channel.alternatives[0].transcript
         if sentence:
-            self.cancel_transmit()
-            await self.on_start(self.call_id)
             print("Transcript: ", sentence, "is_final: ", is_final)
+            self.cancel_transmit()
+            await self.on_start()
             if is_final and sentence.strip():
                 print("sentence: ", sentence)
                 self.complete_sentence += ' ' + sentence.strip()
