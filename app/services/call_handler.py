@@ -1798,11 +1798,14 @@ class CallHandler:
         greetings_from_ai = await self.ai_service.run_chat_without_tools([
             {
                 "role" :"system",
-                "content" : greetings
+                "content" : f"""You are an extraction engine.  
+                    When I give you text that contains <inbound_message> … </inbound_message>  
+                    and <outbound_message> … </outbound_message>,  
+                    return **exactly** the text inside the <inbound_message> tag—nothing else, no quotes, no extra lines."""
             },
             {
                 "role" : "user",
-                "content" : f"I want greeting message based on my call direction either is inbound or outbound from the knowledge I give above. Return the text inside of the call direction wrapper given in knowledgebase. My Call direction is: ***{call_direction}***"
+                "content" : greetings
             }
         ])
         if greetings_from_ai:
