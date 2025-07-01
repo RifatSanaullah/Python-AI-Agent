@@ -1881,7 +1881,7 @@ class CallHandler:
                 if account_id:
                     if account_id in self.prefetched_details:
                         print("Prefetched Data" , self.prefetched_details)
-                        lead = self.prefetched_details
+                        lead = self.prefetched_details[account_id]
                         lead_id = lead.get('id')
                         if lead_id:
                             try:
