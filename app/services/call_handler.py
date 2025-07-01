@@ -239,7 +239,7 @@ class CallHandler:
                 if data['streamSid'] and not self.twilio_service.is_empty(call_id, 'response_buffer'):
                     # print("Processing response buffers...")
                     response_audio = await self.twilio_service.get_or_dequeue_audio(call_id, 'response_buffer')
-                    self.agents[call_id]['ai_speaking'] = True
+                    # self.agents[call_id]['ai_speaking'] = True
                     await self.twilio_service.send_audio_stream(session['websocket'], data['streamSid'], response_audio)
                     # await self.twilio_service.send_control_command(session['websocket'], 'stop')
                     if self.sessions[data['streamSid']]['background_sound'] is True:
@@ -1248,9 +1248,9 @@ class CallHandler:
         self.sessions[call_id]['background_sound'] = False
 
     async def on_user_speech(self, call_id):
-        if call_id in self.agents and self.sessions[self.agents[call_id]['stream_sid']]['ai_speaking'] == True:
+        if call_id in self.agents and self.agents[call_id]['ai_speaking'] == True:
             await self.stop_stream(call_id)
-            self.sessions[self.agents[call_id]['stream_sid']]['ai_speaking'] = False
+            self.agents[call_id]['ai_speaking'] = False
 
     def contains_any_word(self, text:str):
         # Check if any word in the array exists in the text
@@ -1387,7 +1387,7 @@ class CallHandler:
             return
         ai_interupted = self.ai_service.get_interrupt_status(call_id)
         if not ai_interupted:
-            # self.sessions[call_id]['ai_speaking'] = True
+            self.agents[call_id]['ai_speaking'] = True
             # await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
             await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
             # result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
