@@ -1571,23 +1571,10 @@ class CallHandler:
         self.agents[call_id]['description'] = result['description']
         self.agents[call_id]['existing_appointment'] = result['existing_appointment']
 
-        if self.agents[call_id]['STT']['name'] == 'Deepgram':
-            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, DeepgramService)
-            await self.agents[call_id]['transcribe_service'].establish_dg_connection(self.agents[call_id]['STT']['model'])
-            # self.agents[call_id]["synthesis_service"] = self.agents[call_id]["transcribe_service"]
-        elif self.agents[call_id]['STT']['name'] == 'AssemblyAI':
-            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, TranscribeService)
-            self.agents[call_id]['transcribe_service'].connect()
-            # self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
-        else :
-            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, DeepgramService)
-            await self.agents[call_id]['transcribe_service'].establish_dg_connection(self.agents[call_id]['STT']['model'])
-            # self.agents[call_id]["synthesis_service"] = self.agents[call_id]["transcribe_service"]
-        
 
 
         if self.agents[call_id]['TTS']['name'] == 'Deepgram':
-            if self.agents[call_id]['STT']['name'] == 'Deepgram':
+            if self.agents[call_id]['STT']['name'] == 'Deepgram' and self.agents[call_id]["transcribe_service"]:
                 self.agents[call_id]["synthesis_service"] = self.agents[call_id]["transcribe_service"]
             else :
                 self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(call_id, DeepgramService)
@@ -1683,7 +1670,6 @@ class CallHandler:
             Do not proactively list available times unless there's a scheduling conflict.
             """
         )
-        await self.agents[call_id]['transcribe_service'].update_call_id(call_id, self.queue_audio)
         await self.agents[call_id]['synthesis_service'].update_call_id(call_id, self.queue_audio)
 
         self.agents[call_id]['ai_speaking'] = False
@@ -1723,9 +1709,9 @@ class CallHandler:
         call_sid = self.twilio_service.make_call(phone_number)
         return call_sid
 
-    async def process_all_info(self, stream_sid, call_sid):
-        print(f"Stream SID: {stream_sid}, Call SID: {call_sid}")
-        print("stt: ",self.agents[call_sid]['STT']['name'])
+    async def process_all_info(self, stream_sid, call_id):
+        print(f"Stream SID: {stream_sid}, Call SID: {call_id}")
+        print("stt: ",self.agents[call_id]['STT']['name'])
         # if self.agents[call_sid]['STT']['name'] == 'Deepgram':
         #     await self.sessions[stream_sid]['transcribe_service'].establish_dg_connection(self.agents[call_sid]['STT']['model'])
         # else: self.sessions[stream_sid]['transcribe_service'].connect()
@@ -1743,13 +1729,28 @@ class CallHandler:
         #     await self.sessions[stream_sid]['synthesis_service'].establish_connection( self.agents[call_sid]['TTS']['voice']['model'], self.agents[call_sid]['TTS']['model'], stream_sid, self.queue_audio)
         
 
+        if self.agents[call_id]['STT']['name'] == 'Deepgram':
+            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, DeepgramService)
+            await self.agents[call_id]['transcribe_service'].establish_dg_connection(self.agents[call_id]['STT']['model'])
+            # self.agents[call_id]["synthesis_service"] = self.agents[call_id]["transcribe_service"]
+        elif self.agents[call_id]['STT']['name'] == 'AssemblyAI':
+            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, TranscribeService)
+            self.agents[call_id]['transcribe_service'].connect()
+            # self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
+        else :
+            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, DeepgramService)
+            await self.agents[call_id]['transcribe_service'].establish_dg_connection(self.agents[call_id]['STT']['model'])
+            
+            # self.agents[call_id]["synthesis_service"] = self.agents[call_id]["transcribe_service"]
+        await self.agents[call_id]['transcribe_service'].update_call_id(call_id, self.queue_audio)
+        
         print("Done initializing session info")
 
-        if (self.agents[call_sid]['isAvailable'] == False):
+        if (self.agents[call_id]['isAvailable'] == False):
             await self.synthesize_response('Currenty we are not available, Please contact us in our available time', stream_sid)
             # Schedule the call to end after 2 seconds
             self.clear_timer()
-            self.timer = Timer(5, self.twilio_service.hangup_call, args=[self.agents[call_sid]['call_sid']])
+            self.timer = Timer(5, self.twilio_service.hangup_call, args=[self.agents[call_id]['call_sid']])
             self.timer.start()
             return
 
