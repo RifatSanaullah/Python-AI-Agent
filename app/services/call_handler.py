@@ -1802,7 +1802,7 @@ class CallHandler:
             },
             {
                 "role" : "user",
-                "content" : f"I want greeting message based on my call direction either is inbound or outbound from the knowledge I give above. Return the data inside of the call direction wrapper My Call direction is: ***{call_direction}***"
+                "content" : f"I want greeting message based on my call direction either is inbound or outbound from the knowledge I give above. Return the text inside of the call direction wrapper given in knowledgebase. My Call direction is: ***{call_direction}***"
             }
         ])
         greetings = greetings_from_ai.replace('Hello', '')
