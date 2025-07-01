@@ -346,12 +346,13 @@ class AIService:
             tool_choice="auto"
         )
         return response
+        
     async def run_chat_without_tools(self, messages) -> Dict[str, Any]:
         response = openai.chat.completions.create(
-            model="gpt-4-turbo",
+            model="gpt-4.1",
             messages=messages,
         )
-        return response
+        return response.choices[0].message.content
 
     async def process_conversation(self, user_message: str) -> str:
             """Process a conversation with the user, handling any tool calls dynamically"""

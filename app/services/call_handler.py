@@ -1563,7 +1563,7 @@ class CallHandler:
             
         greetings = self.agents[call_id]['greetings']
 
-        result = await self.gather_contact_info(call_id, greetings)
+        result = await self.gather_contact_info(call_id, greetings, self.agents[call_id]['direction'])
 
         self.agents[call_id]['fullname'] = result['fullname']
         self.agents[call_id]['greetings'] = result['greetings']
@@ -1794,8 +1794,18 @@ class CallHandler:
         call_sid = data.get("CallSid")
         return "OK", 200
     
-    def modify_greeting(self, name, greetings, call_sid):
-        greetings = greetings.replace('Hello', '')
+    def modify_greeting(self, name, greetings, call_sid, call_direction):
+        greetings_from_ai = self.ai_service.run_chat_without_tools([
+            {
+                "role" :"system",
+                "content" : greetings
+            },
+            {
+                "role" : "user",
+                "content" : f"I want greeting message based on my call type either is inbound or outbound from the knowledge I give above. My Call type is: ***{call_direction}***"
+            }
+        ])
+        greetings = greetings_from_ai.replace('Hello', '')
         if call_sid in self.agents and "id" in self.agents[call_sid]:
             agent_id = self.agents[call_sid]['id']
             if agent_id == '17' or agent_id == 17:
@@ -1807,7 +1817,7 @@ class CallHandler:
         greetings= 'Hello ' + name + ', ' + greetings
         return greetings
     
-    async def gather_contact_info(self, call_sid, greetings):
+    async def gather_contact_info(self, call_sid, greetings, call_direction):
         fullname = None
         email = None
         phoneNumber = None
@@ -1825,7 +1835,6 @@ class CallHandler:
                 phoneNumber = details['phone']
                 description = details['notes']
                 crmUserId = details['id']
-                greetings = self.modify_greeting(fullname, greetings,call_sid)
                 self.agents[call_sid]['new_knowledge'] = True
         elif self.agents[call_sid]['integrations']['salesforce_connection_id']:
 
@@ -1841,7 +1850,7 @@ class CallHandler:
                 email = details['Email']
                 phoneNumber = details['Phone']
                 description = details['Description']
-                greetings = self.modify_greeting(fullname, greetings, call_sid)
+                
                 self.agents[call_sid]['new_knowledge'] = True
 
         elif self.agents[call_sid]['integrations']['hubspot_connection_id']:
@@ -1855,7 +1864,7 @@ class CallHandler:
                 phoneNumber = details['phone']
                 description = details['notes']
                 crmUserId = result['results'][0]['id']
-                greetings = self.modify_greeting(fullname, greetings, call_sid)
+                
                 self.agents[call_sid]['new_knowledge'] = True
 
         elif self.agents[call_sid]['integrations']['zoho_connection_id']:
@@ -1871,7 +1880,7 @@ class CallHandler:
                 email = details['Email']
                 phoneNumber = details['Phone']
                 description = details['Description']
-                greetings = self.modify_greeting(fullname, greetings, call_sid)
+                
                 self.agents[call_sid]['new_knowledge'] = True
 
         elif self.agents[call_sid]['integrations']['cinc_connection_id']:
@@ -1939,7 +1948,7 @@ class CallHandler:
                         if crmUserId:
                             self.agents[call_sid]['cinc_lead_id'] = crmUserId
                         
-                        greetings = self.modify_greeting(fullname, greetings, call_sid)
+                        
                         self.agents[call_sid]['new_knowledge'] = True
 
                         print(f"DEBUG - Found CINC lead: {fullname}, Email: {email}, Phone: {phoneNumber}, Notes: {description}")
@@ -2231,6 +2240,8 @@ class CallHandler:
         if crmUserId is not None:
             self.agents[call_sid]['lead_id'] = crmUserId
             self.agents[call_sid]['previous_convo_summary'] = description
+        
+        greetings = self.modify_greeting(fullname, greetings, call_sid, call_direction)
 
         return {"greetings" : greetings , "email": email ,"phone": phoneNumber ,"description" : description, "fullname" : fullname, "existing_appointment": existing_appointment}
     
