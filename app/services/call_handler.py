@@ -1795,17 +1795,20 @@ class CallHandler:
         return "OK", 200
     
     async def modify_greeting(self, name, greetings, call_sid, call_direction):
+        direction = call_direction
+        if direction == "outbound-api":
+            direction = "outbound"
         greetings_from_ai = await self.ai_service.run_chat_without_tools([
             {
                 "role" :"system",
-                "content" : f"""You are an extraction engine.  
-                    When I give you text that contains <inbound_message> … </inbound_message>  
-                    and <outbound_message> … </outbound_message>,  
-                    return **exactly** the text inside the <inbound_message> tag—nothing else, no quotes, no extra lines."""
+                "content" : f"""You are an extraction engine.\nYou will receive:\n  • a line that says DIRECTION: <inbound|outbound>\n  • XML that contains both <inbound_message> … </inbound_message> and <outbound_message> … </outbound_message>\n\nTask:\n
+1. If the requested tag exists, return **exactly** the text inside it—no quotes, no extra lines.\n
+2. If that tag does NOT exist anywhere in the input, return the entire USER text *after* the DIRECTION line, unchanged.\n
+"""
             },
             {
                 "role" : "user",
-                "content" : greetings
+                "content" : f"""DIRECTION: {direction}\n\n{greetings}"""
             }
         ])
         if greetings_from_ai:
