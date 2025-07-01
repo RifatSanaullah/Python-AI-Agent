@@ -1805,11 +1805,6 @@ class CallHandler:
                 "content" : f"I want greeting message based on my call direction either is inbound or outbound from the knowledge I give above. Return the data inside of the call direction wrapper My Call direction is: ***{call_direction}***"
             }
         ])
-        if call_direction == 'outbound-api':
-            greetings_from_ai = re.sub(r'<outbound_message>[\s\S]*?</outbound_message>', '', greetings_from_ai, flags=re.IGNORECASE)
-        else:
-            greetings_from_ai = re.sub(r'<inbound_message>[\s\S]*?</inbound_message>', '', greetings_from_ai, flags=re.IGNORECASE)
-
         greetings = greetings_from_ai.replace('Hello', '')
         if call_sid in self.agents and "id" in self.agents[call_sid]:
             agent_id = self.agents[call_sid]['id']
