@@ -1580,7 +1580,7 @@ class CallHandler:
         else :
             self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, DeepgramService)
             
-            
+
         if self.agents[call_id]['TTS']['name'] == 'Deepgram':
             if self.agents[call_id]['STT']['name'] == 'Deepgram' and self.agents[call_id]["transcribe_service"]:
                 self.agents[call_id]["synthesis_service"] = self.agents[call_id]["transcribe_service"]
@@ -1589,7 +1589,7 @@ class CallHandler:
 
         elif self.agents[call_id]['TTS']['name'] == 'Elevenlabs':
             self.agents[call_id]["synthesis_service"] = self.elevenlabs_service
-         elif self.agents[call_id]['TTS']['name'] == 'Microsoft Azure':
+        elif self.agents[call_id]['TTS']['name'] == 'Microsoft Azure':
             self.agents[call_id]["synthesis_service"] = AzureService(self.loop)
         elif self.agents[call_id]['TTS']['name'] == 'PlayHT':
             self.agents[call_id]["synthesis_service"] = PlayHT(self.loop)
