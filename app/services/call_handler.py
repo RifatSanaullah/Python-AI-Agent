@@ -1794,8 +1794,8 @@ class CallHandler:
         call_sid = data.get("CallSid")
         return "OK", 200
     
-    def modify_greeting(self, name, greetings, call_sid, call_direction):
-        greetings_from_ai = self.ai_service.run_chat_without_tools([
+    async def modify_greeting(self, name, greetings, call_sid, call_direction):
+        greetings_from_ai = await self.ai_service.run_chat_without_tools([
             {
                 "role" :"system",
                 "content" : greetings
@@ -1807,6 +1807,8 @@ class CallHandler:
         ])
         if greetings_from_ai:
             greetings = greetings_from_ai.replace('Hello', '')
+        else:
+            greetings = greetings.replace('Hello', '')
 
         if call_sid in self.agents and "id" in self.agents[call_sid]:
             agent_id = self.agents[call_sid]['id']
@@ -2243,7 +2245,7 @@ class CallHandler:
             self.agents[call_sid]['lead_id'] = crmUserId
             self.agents[call_sid]['previous_convo_summary'] = description
         
-        greetings = self.modify_greeting(fullname, greetings, call_sid, call_direction)
+        greetings = await self.modify_greeting(fullname, greetings, call_sid, call_direction)
 
         return {"greetings" : greetings , "email": email ,"phone": phoneNumber ,"description" : description, "fullname" : fullname, "existing_appointment": existing_appointment}
     
