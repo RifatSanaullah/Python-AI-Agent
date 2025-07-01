@@ -1887,7 +1887,7 @@ class CallHandler:
                         last_name = contact_info.get('last_name', '')
                         
                         if first_name and last_name:
-                            fullname = f"{first_name} {last_name}"
+                            fullname = f"{first_name}"
                         elif first_name:
                             fullname = first_name
                         elif last_name:
