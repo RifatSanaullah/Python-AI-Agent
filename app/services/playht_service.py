@@ -75,7 +75,12 @@ class PlayHT:
         except Exception as e:
             print(f"Error getting WebSocket URL: {e}")
             return False
-    async def establish_connection(self,  voice:str, model, call_id, queue_audio):
+
+    async def update_call_id(self, call_id, queue_audio):
+        self.queue_audio = queue_audio
+        self.call_id = call_id
+
+    async def establish_connection(self,  voice:str, model):
         self.voice_engine = model
         """Establish connection to PlayHT API"""
         if not await self._get_websocket_url():
@@ -98,23 +103,24 @@ class PlayHT:
                     "voice": voice,
                     "sample_rate": 8000,  
                     "output_format": "mulaw",
-                    "speed": 1.0,
-                    "temperature": 0.7,
-                    "top_p": 0.8,
-                    "repetition_penalty": 3.0,
+                    "speed": 0.9,
+                    "temperature": 1,
+                    "top_p": 0.87,
+                    "repetition_penalty": 7.7,
+                    "length_penalty": 1.1,
                     "voice_guidance": 0,
-                    "style_guidance": 0.5,
-                    "text_guidance": 0.75,
+                    "style_guidance": 10,
+                    "text_guidance": 1,
                 }
         print(f"PlayHT connection established with voice: {voice}, model: {model}")
-        self.queue_audio = queue_audio
-        self.call_id = call_id
             
         self.websocket = await websockets.connect(self.websocket_url)
         self.is_connected = True
         print("Connected to PlayHT WebSocket")
-        
+        await self.start_synthesiser()
         # Start listening for audio data
+
+    async def start_synthesiser(self):
         asyncio.create_task(self._listen_for_audio())
 
     async def stream_text_to_speech(self, text: str):
@@ -144,7 +150,7 @@ class PlayHT:
         # If we found any complete sentences, process them
         for sentence_to_speak in sentences_to_process:
             self.options['text'] = sentence_to_speak
-            message = self.options       
+            message = self.options    
             await self.websocket.send(json.dumps(message))
         # await self._synthesize_text_chunk(text_to_synthesize, self.current_synth_id)
             # self.full_text_buffer = ''

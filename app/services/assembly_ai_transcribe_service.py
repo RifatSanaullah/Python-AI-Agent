@@ -2,14 +2,20 @@ import assemblyai as aai
 import asyncio
 
 class TranscribeService:
-    def __init__(self, on_transcript=None,on_start=None,loop=None, speak_model=None):
+    def __init__(self,loop=None, speak_model=None):
         self.api_key = "9576f4ea99e14b90a1c6ee4100b4536f"
         aai.settings.api_key = self.api_key
-        self.on_transcript = on_transcript  # Store the callback function
+        self.on_transcript = None  # Store the callback function
         self.transcriber = None
-        self.on_start = on_start
-              
-    def connect(self):
+        self.on_start = None
+        self.call_id = None
+
+    async def update_call_id(self, call_id, queue_audio=None):
+        self.call_id = call_id
+
+    def connect(self, on_transcript=None, on_start=None):
+        self.on_transcript = on_transcript  # Assign the callback function
+        self.on_start = on_start  # Assign the callback function
         self.transcriber = aai.RealtimeTranscriber(
             sample_rate=8000, 
             encoding=aai.AudioEncoding.pcm_mulaw,
@@ -38,11 +44,11 @@ class TranscribeService:
         "Called when a new transcript has been received."
         if not transcript.text:
             return
-        asyncio.run(self.on_start())
+        asyncio.run(self.on_start(self.call_id))  # Call the on_start callback if provided
         if isinstance(transcript, aai.RealtimeFinalTranscript):
             print(transcript.text, end="\r\n")
             if self.on_transcript:
-                asyncio.run(self.on_transcript(transcript.text))
+                asyncio.run(self.on_transcript(transcript.text, self.call_id))
         else:
             print(transcript.text, end="\r")
 

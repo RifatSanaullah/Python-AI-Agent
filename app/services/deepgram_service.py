@@ -52,13 +52,14 @@ class DeepgramService:
         self.dg_connection = None
         self.sp_dg_connection = None
         self.queue_audio = {}
+        self.call_id = None
         # self.lock_exit = threading.Lock()
         # self.exit = False
         
     def is_sentence_complete(self, sentence):
         return bool(re.search(r'[.!?]$', sentence.strip()))
 
-    async def stream_text_to_speech(self, text: str, call_id, queue_audio):
+    async def stream_text_to_speech(self, text: str):
         try:
             # options = SpeakOptions(
             #     model= model,
@@ -68,18 +69,21 @@ class DeepgramService:
             # )
             # response = self.speaker.stream({"text": text}, options)
             # return response.stream.getbuffer()
-            self.queue_audio = {
-                'call_id': call_id,
-                "queue_audio": queue_audio
-            }
+
             await self.sp_dg_connection.send_text(text)
             # self._socket.send(json.dumps({"type": "Speak", "text": text}))
         except Exception as e:
             print(f"An error occurred: {e}")
             raise
 
+    async def update_call_id(self, call_id, queue_audio=None):
 
-    async def establish_dg_connection(self , model = "nova-3"):
+        self.queue_audio = {
+                'call_id': call_id,
+                "queue_audio": queue_audio
+            }
+
+    async def establish_dg_connection(self , model = "nova-3",):
         print("Establishing Deepgram Connection....")
         if self.dg_connection:
             await self.dg_connection.finish()
@@ -143,9 +147,9 @@ class DeepgramService:
     async def transmit_after_delay(self):
         try:
             if self.is_sentence_complete(self.complete_sentence):
-                await asyncio.sleep(0.4)  # Wait for more speech
+                await asyncio.sleep(0.6)  # Wait for more speech
             else:
-                await asyncio.sleep(0.7)  # Wait for more speech
+                await asyncio.sleep(1)  # Wait for more speech
             # with self.lock:
             if self.on_transcript and self.complete_sentence.strip():
                 sentence = self.complete_sentence
@@ -162,21 +166,24 @@ class DeepgramService:
         is_final = result.is_final
         sentence = result.channel.alternatives[0].transcript
         if sentence:
+            print("Transcript: ", sentence, "is_final: ", is_final)
             self.cancel_transmit()
             await self.on_start()
-            print("Transcript: ", sentence, "is_final: ", is_final)
             if is_final and sentence.strip():
                 print("sentence: ", sentence)
                 self.complete_sentence += ' ' + sentence.strip()
                 # with self.lock:
 
                 # Schedule new task: wait 2 seconds, then emit final transcript
-                self.transmit_task = asyncio.create_task(self.transmit_after_delay())
+                self.transmit_task = asyncio.run_coroutine_threadsafe(
+                    self.transmit_after_delay(),
+                    self.loop
+                )
                 print('Final' , self.complete_sentence)
 
 
     def cancel_transmit(self):
-         if self.transmit_task and not self.transmit_task.done():
+         if self.transmit_task:
             self.transmit_task.cancel()
 
     async def on_started(self, message, **kwargs):
