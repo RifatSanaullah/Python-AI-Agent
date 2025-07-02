@@ -1801,20 +1801,32 @@ class CallHandler:
         greetings_from_ai = await self.ai_service.run_chat_without_tools([
             {
                 "role" :"system",
-                "content" : f"""You are an extraction engine.\nYou will receive:\n  • a line that says DIRECTION: <inbound|outbound>\n  • XML that contains both <inbound_message> … </inbound_message> and <outbound_message> … </outbound_message>\n\nTask:\n
-1. If the requested tag exists, return **exactly** the text inside it—no quotes, no extra lines.\n
-2. If that tag does NOT exist anywhere in the input, return the entire USER text *after* the DIRECTION line, unchanged.\n
-"""
+                "content" : f"""You are an extraction engine.\n\n
+                                You will always receive, in this order:\n
+                                • DIRECTION: <inbound|outbound>\n
+                                • FIRST_NAME: <name>                ← may be blank or missing\n
+                                • Then a text block that may or may not contain\n
+                                <inbound_message> … </inbound_message> and\n
+                                <outbound_message> … </outbound_message> tags.\n\n
+
+                                Task:\n
+                                1. Identify which message to return:\n
+                                • If the requested tag exists, return exactly the text inside that tag.\n
+                                • Otherwise, return every line after the headers (DIRECTION/FIRST_NAME) unchanged.\n
+                                2. If the extracted text contains the literal token <first_name>,\n
+                                replace **all** occurrences with the value given in FIRST_NAME\n
+                                (case‑sensitive).\n
+                                3. Output only the final text—no quotes, no extra whitespace,
+                                no commentary.
+                                """
             },
             {
                 "role" : "user",
-                "content" : f"""DIRECTION: {direction}\n\n{greetings}"""
+                "content" : f"""DIRECTION: {direction}\n FIRST_NAME: {name}\n\n{greetings}"""
             }
         ])
         if greetings_from_ai:
-            greetings = greetings_from_ai.replace('Hello', '')
-        else:
-            greetings = greetings.replace('Hello', '')
+            greetings = greetings_from_ai
 
         if call_sid in self.agents and "id" in self.agents[call_sid]:
             agent_id = self.agents[call_sid]['id']
@@ -1824,7 +1836,6 @@ class CallHandler:
             elif agent_id == '16' or agent_id == 16:
                 greetings = f'Hi {name}, welcome back! This is Sam — happy to assist you again with your real estate needs. How can I help you today?'
                 return greetings
-        greetings= 'Hello ' + name + ', ' + greetings
         return greetings
     
     async def gather_contact_info(self, call_sid, greetings, call_direction):
