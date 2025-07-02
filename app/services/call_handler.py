@@ -1844,12 +1844,12 @@ class CallHandler:
         return greetings
     
     async def gather_contact_info(self, call_sid, greetings, call_direction):
-        fullname = None
-        email = None
-        phoneNumber = None
-        description = None
-        existing_appointment = None
-        crmUserId = None
+        fullname = ""
+        email = ""
+        phoneNumber = ""
+        description = ""
+        existing_appointment = ""
+        crmUserId = ""
         isBoom = self.agents[call_sid]['isBoom']
 
         if isBoom is not None or isBoom == True or isBoom == 'true':
