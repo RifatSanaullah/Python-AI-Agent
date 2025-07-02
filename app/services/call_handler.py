@@ -1804,19 +1804,24 @@ class CallHandler:
                 "content" : f"""You are an extraction engine.\n\n
                                 You will always receive, in this order:\n
                                 • DIRECTION: <inbound|outbound>\n
-                                • FIRST_NAME: <name>                ← may be blank or missing\n
+                                • (optional) FIRST_NAME: <name>      ← line may be missing or value may be blank
                                 • Then a text block that may or may not contain\n
                                 <inbound_message> … </inbound_message> and\n
                                 <outbound_message> … </outbound_message> tags.\n\n
 
                                 Task:\n
                                 1. Identify which message to return:\n
-                                • If the requested tag exists, return exactly the text inside that tag.\n
-                                • Otherwise, return every line after the headers (DIRECTION/FIRST_NAME) unchanged.\n
-                                2. If the extracted text contains the literal token <first_name>,\n
-                                replace **all** occurrences with the value given in FIRST_NAME\n
-                                (case‑sensitive).\n
-                                3. Output only the final text—no quotes, no extra whitespace,
+                                    • If the requested tag exists, return exactly the text inside that tag.\n
+                                    • Otherwise, return every line after the headers (DIRECTION/FIRST_NAME) unchanged.\n
+                                2. Handle the <first_name> token
+                                    • If a non‑empty FIRST_NAME was provided, replace every occurrence of
+                                        <first_name> (case‑sensitive) with that name.
+                                    • If FIRST_NAME is missing or empty, delete every occurrence of
+                                        <first_name> and then:
+                                        – collapse any resulting double spaces,
+                                        – remove a space that appears immediately before a comma or period,
+                                        – trim leading/trailing spaces.
+                                4. Output only the final text—no quotes, no extra whitespace,
                                 no commentary.
                                 """
             },
