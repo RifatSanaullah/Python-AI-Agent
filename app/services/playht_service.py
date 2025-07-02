@@ -150,7 +150,7 @@ class PlayHT:
         # If we found any complete sentences, process them
         for sentence_to_speak in sentences_to_process:
             self.options['text'] = sentence_to_speak
-            message = self.options       
+            message = self.options    
             await self.websocket.send(json.dumps(message))
         # await self._synthesize_text_chunk(text_to_synthesize, self.current_synth_id)
             # self.full_text_buffer = ''
