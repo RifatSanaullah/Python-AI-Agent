@@ -1130,6 +1130,14 @@ class CallHandler:
         if call_id in self.agents:
             return
         api_response = await self.backend_service.create_call_info(data)
+        
+        # Debug logging for greeting selection
+        print(f"=== PYTHON HANDLER DEBUG - Agent Data ===")
+        print(f"Call ID: {call_id}")
+        print(f"Call Direction: {data['direction']}")
+        print(f"Backend Response Keys: {list(api_response.get('data', {}).keys())}")
+        print(f"Agent Keys: {list(api_response.get('data', {}).get('agent', {}).keys())}")
+        
         self.agents[call_id] = api_response['data']['agent']
         self.agents[call_id]['isBoom'] = data['isBoom']
         self.agents[call_id]['complete_call'] = False
@@ -1149,6 +1157,15 @@ class CallHandler:
         self.agents[call_id]['aiClient'] = api_response['data']['aiClient']
         self.agents[call_id]['STT'] = api_response['data']['STT']
         self.agents[call_id]['TTS'] = api_response['data']['TTS']
+        
+        # Store new fields for BIDIRECTIONAL agent support
+        self.agents[call_id]['handleCallType'] = api_response['data'].get('handleCallType', self.agents[call_id].get('type', 'INBOUND'))
+        self.agents[call_id]['callDirection'] = api_response['data'].get('callDirection', 'inbound')
+
+        print(f"Handle Call Type: {self.agents[call_id]['handleCallType']}")
+        print(f"Call Direction: {self.agents[call_id]['callDirection']}")
+        print(f"Agent Greetings: {self.agents[call_id].get('greetings', 'NOT FOUND')}")
+        print(f"=== END PYTHON DEBUG ===")
 
         # Add timezone from backend response
         if 'agent' in api_response['data'] and 'timezone' in api_response['data']['agent']:
@@ -1449,6 +1466,22 @@ class CallHandler:
         direction = call_direction
         if direction == "outbound-api":
             direction = "outbound"
+            
+        # Use the new fields from the backend if available
+        handle_call_type = self.agents[call_sid].get('handleCallType', 'INBOUND')
+        actual_call_direction = self.agents[call_sid].get('callDirection', direction)
+        
+        print(f"=== MODIFY_GREETING DEBUG ===")
+        print(f"Call SID: {call_sid}")
+        print(f"Original direction: {call_direction}")
+        print(f"Normalized direction: {direction}")
+        print(f"Handle call type: {handle_call_type}")
+        print(f"Actual call direction: {actual_call_direction}")
+        print(f"Greeting length before processing: {len(greetings) if greetings else 0}")
+        
+        # Use the actual call direction from backend for better accuracy
+        final_direction = actual_call_direction if actual_call_direction else direction
+        
         greetings_from_ai = await self.ai_service.run_chat_without_tools([
             {
                 "role" :"system",
@@ -1478,20 +1511,27 @@ class CallHandler:
             },
             {
                 "role" : "user",
-                "content" : f"""DIRECTION: {direction}\n FIRST_NAME: {name}\n\n{greetings}"""
+                "content" : f"""DIRECTION: {final_direction}\n FIRST_NAME: {name}\n\n{greetings}"""
             }
         ])
         if greetings_from_ai:
             greetings = greetings_from_ai
 
+        print(f"Greeting after AI processing: {len(greetings) if greetings else 0} chars")
+
         if call_sid in self.agents and "id" in self.agents[call_sid]:
             agent_id = self.agents[call_sid]['id']
             if agent_id == '17' or agent_id == 17:
                 greetings = f'Hi {name}, welcome back! This is Cindy — happy to assist you again with your senior living needs. How can I help you today?'
+                print("Using hardcoded greeting for agent 17")
                 return greetings
             elif agent_id == '16' or agent_id == 16:
                 greetings = f'Hi {name}, welcome back! This is Sam — happy to assist you again with your real estate needs. How can I help you today?'
+                print("Using hardcoded greeting for agent 16")
                 return greetings
+                
+        print(f"Final greeting length: {len(greetings) if greetings else 0}")
+        print(f"=== END MODIFY_GREETING DEBUG ===")
         return greetings
     
     async def gather_contact_info(self, call_sid, greetings, call_direction):
