@@ -39,12 +39,11 @@ import traceback
 from app.utils.responseformat import hubspot_patch_format
 from app.utils.datetime_formatter import format_datetime_human_readable, format_datetime_range_human_readable, is_future_datetime, sort_and_group_appointments
 import json, asyncio
-from app.services import cinc_service as cinc_service_module # Added CINC service module
+from app.services.cinc_service import CincService # Import the new unified CincService class
 from typing import Dict, Any # Ensure Dict and Any are imported for type hinting
 
 from app.adapters.filler_manager import FillerManager
 from app.helpers.utils import estimate_speech_duration
-from app.services.cinc_service import get_lead_notes_with_content
 
 # Configure logging
 logging.basicConfig(
@@ -68,7 +67,7 @@ class CallHandler:
         self.google_calendar_service = GoogleCalendarService()
         self.outlook_calendar_service = OutlookCalendarService()
         self.filler_mgr = FillerManager()
-        self.cinc_service = cinc_service_module # Initialize CINC Service
+        self.cinc_service = CincService() # Initialize CINC Service instance
         # self.transcribe_service = TranscribeService(on_transcript=self.handle_transcript)
         self.sessions = {}
         self.agents = {}
@@ -424,26 +423,15 @@ class CallHandler:
                                 existing_leads = await self.cinc_service.get_leads(
                                     account_id=account_id,
                                     connection_id=cinc_connection_id,
-                                    # Use CINC API search by phone
-                                    params={"info.contact.phone_numbers.cell_phone": phone}
+                                    phone=phone
                                 )
-                                if existing_leads and existing_leads.get('body', {}).get('leads'):
-                                    existing_lead_id = existing_leads['body']['leads'][0]['id']
+                                if existing_leads and isinstance(existing_leads, dict) and existing_leads.get('leads'):
+                                    existing_lead_id = existing_leads['leads'][0]['id']
                                     should_create_new = False
                                     logging.info(f"Found existing CINC lead by phone: {existing_lead_id}")
                                     
-                            # If not found by phone, try by email
-                            if should_create_new and email:
-                                existing_leads = await self.cinc_service.get_leads(
-                                    account_id=account_id,
-                                    connection_id=cinc_connection_id,
-                                    # Use CINC API search by email
-                                    params={"info.contact.email": email}
-                                )
-                                if existing_leads and existing_leads.get('body', {}).get('leads'):
-                                    existing_lead_id = existing_leads['body']['leads'][0]['id']
-                                    should_create_new = False
-                                    logging.info(f"Found existing CINC lead by email: {existing_lead_id}")
+                            # If not found by phone, try by email (CINC API may not support email search directly)
+                            # For now, we'll proceed with create if not found by phone
                                     
                         except Exception as search_error:
                             logging.warning(f"Error searching for existing CINC lead: {search_error}")
@@ -479,343 +467,6 @@ class CallHandler:
             except Exception as e:
                 logging.error(f"Error in CINC integration for account {account_id}: {str(e)}")
                 # Continue with other integrations even if CINC fails
-            try:
-                # Prepare lead data for CINC update/create
-                
-                cinc_lead_data = {
-                    "registered_date": datetime.now(timezone.utc).isoformat(),
-                    "created_by": "AI_AGENT",
-                    "info": {
-                        "contact": {},
-                        "source": "AI Call Assistant",
-                        "status": "contacted" if lead_id else "unworked"
-                    }
-                }
-
-                # Check if summary is already in CINC format (from Node.js backend)
-                if summary.get("info") and summary["info"].get("contact"):
-                    # Summary is already in CINC format, use it directly but merge with our defaults
-                    cinc_lead_data.update(summary)
-                    # Ensure required fields have defaults
-                    if not cinc_lead_data.get("registered_date"):
-                        cinc_lead_data["registered_date"] = datetime.now(timezone.utc).isoformat()
-                    if not cinc_lead_data.get("created_by"):
-                        cinc_lead_data["created_by"] = "AI_AGENT"
-                    if not cinc_lead_data["info"].get("source"):
-                        cinc_lead_data["info"]["source"] = "AI Call Assistant"
-                    if not cinc_lead_data["info"].get("status"):
-                        cinc_lead_data["info"]["status"] = "contacted" if lead_id else "unworked"
-                    
-                    # Fix phone number format for CINC (remove +1 prefix, keep just 10 digits)
-                    contact = cinc_lead_data["info"]["contact"]
-                    if contact.get("phone_numbers"):
-                        phone_numbers = contact["phone_numbers"]
-                        for phone_type in ["cell_phone", "home_phone"]:
-                            if phone_numbers.get(phone_type):
-                                phone = phone_numbers[phone_type]
-                                # Convert +11433435421 to 1433435421 (10 digits)
-                                digits = ''.join(filter(str.isdigit, phone))
-                                if len(digits) == 11 and digits.startswith('1'):
-                                    phone_numbers[phone_type] = digits[1:]  # Remove leading '1'
-                                elif len(digits) == 10:
-                                    phone_numbers[phone_type] = digits
-                                # Remove empty phone numbers
-                                if not phone_numbers[phone_type]:
-                                    del phone_numbers[phone_type]
-                else:
-                    # Summary is in flat format, map to CINC format
-                    contact = cinc_lead_data["info"]["contact"]
-                    if summary.get("email"): 
-                        contact["email"] = summary["email"]
-                    if summary.get("first_name"): 
-                        contact["first_name"] = summary["first_name"]
-                    if summary.get("last_name"): 
-                        contact["last_name"] = summary["last_name"]
-                    
-                    # Phone numbers - format for CINC (just 10 digits, no +1)
-                    phone_numbers = {}
-                    if summary.get("phone"): 
-                        phone = summary["phone"]
-                        digits = ''.join(filter(str.isdigit, phone))
-                        if len(digits) == 11 and digits.startswith('1'):
-                            phone_numbers["cell_phone"] = digits[1:]  # Remove leading '1'
-                        elif len(digits) == 10:
-                            phone_numbers["cell_phone"] = digits
-                    if summary.get("home_phone"): 
-                        phone = summary["home_phone"]
-                        digits = ''.join(filter(str.isdigit, phone))
-                        if len(digits) == 11 and digits.startswith('1'):
-                            phone_numbers["home_phone"] = digits[1:]  # Remove leading '1'
-                        elif len(digits) == 10:
-                            phone_numbers["home_phone"] = digits
-                    if phone_numbers: 
-                        contact["phone_numbers"] = phone_numbers
-
-                    # Map other CINC-specific fields from flat format
-                    if summary.get("is_buyer") is not None: 
-                        cinc_lead_data["info"]["is_buyer"] = summary["is_buyer"]
-                    if summary.get("is_seller") is not None: 
-                        cinc_lead_data["info"]["is_seller"] = summary["is_seller"]
-
-                    # Buyer details - Always include buyer object with all expected fields
-                    buyer = {}
-                    buyer["average_price"] = summary.get("average_price", 0)
-                    buyer["favorite_city"] = summary.get("favorite_city", "")
-                    buyer["timeline"] = summary.get("timeline", "")
-                    buyer["is_pre_qualified"] = summary.get("is_pre_qualified", False)
-                    # Always add buyer object for CINC
-                    cinc_lead_data["info"]["buyer"] = buyer
-
-                    # Pipeline stage - Always include pipeline object
-                    cinc_lead_data["pipeline"] = {
-                        "stage": summary.get("pipeline_stage", "")
-                    }
-
-                # Handle notes - Combine all notes into a single comprehensive note for CINC
-                note_parts = []
-                
-                # Add conversation summary if available
-                if summary.get("description") and summary["description"].strip():
-                    note_parts.append(f"Call Summary: {summary['description']}")
-                
-                # Add individual notes from the conversation if they exist in the summary
-                if summary.get("notes") and isinstance(summary["notes"], list):
-                    for note_item in summary["notes"]:
-                        if isinstance(note_item, dict) and note_item.get("content", "").strip():
-                            # Add category prefix if it exists
-                            category = note_item.get("category", "")
-                            content = note_item["content"]
-                            if category and category != "info":
-                                note_parts.append(f"{category.title()}: {content}")
-                            else:
-                                note_parts.append(content)
-                
-                # Add appointment information if exists
-                if appointment and appointment.get("start_time") and appointment.get("end_time"):
-                    appointment_time_str = format_datetime_range_human_readable(
-                        appointment["start_time"], appointment["end_time"]
-                    )
-                    if appointment_time_str.strip():
-                        note_parts.append(f"Appointment: {appointment_time_str}. Details: {appointment.get('summary', 'N/A')}")
-                
-                # Add basic contact info if no other notes exist
-                if not note_parts and (summary.get("first_name") or summary.get("email")):
-                    contact_info = []
-                    if summary.get("first_name"):
-                        contact_info.append(f"Name: {summary.get('first_name', '')} {summary.get('last_name', '')}")
-                    if summary.get("email"):
-                        contact_info.append(f"Email: {summary['email']}")
-                    if summary.get("phone"):
-                        contact_info.append(f"Phone: {summary['phone']}")
-                    
-                    if contact_info:
-                        note_parts.append(f"Contact captured via AI assistant: {', '.join(contact_info)}")
-                
-                # Combine all note parts into a single comprehensive note
-                if note_parts:
-                    combined_content = " | ".join(note_parts)  # Use " | " as separator
-                    cinc_lead_data["notes"] = [{
-                        "content": combined_content,
-                        "category": "call",
-                        "is_pinned": True,
-                        "created_by": "AI_AGENT"
-                    }]
-                
-                # Remove empty/null fields that might cause issues with CINC API
-                # For CINC, we need to be more careful about what we send
-                def clean_for_cinc_update(obj):
-                    """Clean data for CINC API - only include fields with actual values for updates"""
-                    if isinstance(obj, dict):
-                        cleaned = {}
-                        for k, v in obj.items():
-                            if v is None:
-                                continue
-                            elif isinstance(v, str) and v.strip() == "":
-                                # For CINC updates, skip empty strings entirely
-                                continue
-                            elif isinstance(v, dict):
-                                nested_cleaned = clean_for_cinc_update(v)
-                                if nested_cleaned:  # Only add if the dict has content
-                                    cleaned[k] = nested_cleaned
-                            elif isinstance(v, list):
-                                cleaned_list = [clean_for_cinc_update(item) for item in v if item is not None]
-                                if cleaned_list:  # Only add if the list has content
-                                    cleaned[k] = cleaned_list
-                            else:
-                                cleaned[k] = v
-                        return cleaned
-                    elif isinstance(obj, list):
-                        return [clean_for_cinc_update(item) for item in obj if item is not None]
-                    else:
-                        return obj
-                
-                cinc_lead_data = clean_for_cinc_update(cinc_lead_data)
-
-                # Debug: Print the final CINC lead data structure
-                print(f"DEBUG - CINC lead data to be sent: {cinc_lead_data}")
-
-                # Convert account_id to int as required by cinc_service
-                int_account_id = int(account_id)
-
-                if lead_id:
-                    # For CINC updates, we should only send fields that actually changed
-                    # This is more efficient and follows CINC best practices
-                    update_data = {}
-                    
-                    # Only include fields that have meaningful values to update
-                    if cinc_lead_data.get("info"):
-                        info_updates = {}
-                        info = cinc_lead_data["info"]
-                        
-                        # Contact updates (email, name, phone)
-                        if info.get("contact"):
-                            contact_updates = {}
-                            contact = info["contact"]
-                            if contact.get("email"):
-                                contact_updates["email"] = contact["email"]
-                            if contact.get("first_name"):
-                                contact_updates["first_name"] = contact["first_name"]
-                            if contact.get("last_name"):
-                                contact_updates["last_name"] = contact["last_name"]
-                            if contact.get("phone_numbers"):
-                                contact_updates["phone_numbers"] = contact["phone_numbers"]
-                            
-                            if contact_updates:
-                                info_updates["contact"] = contact_updates
-                        
-                        # Buyer updates (only if there are actual values)
-                        if info.get("buyer"):
-                            buyer_updates = {}
-                            buyer = info["buyer"]
-                            if buyer.get("average_price") and buyer["average_price"] > 0:
-                                buyer_updates["average_price"] = buyer["average_price"]
-                            if buyer.get("favorite_city") and buyer["favorite_city"].strip():
-                                buyer_updates["favorite_city"] = buyer["favorite_city"]
-                            if buyer.get("timeline") and buyer["timeline"].strip():
-                                buyer_updates["timeline"] = buyer["timeline"]
-                            if buyer.get("is_pre_qualified") is not None:
-                                buyer_updates["is_pre_qualified"] = buyer["is_pre_qualified"]
-                            
-                            if buyer_updates:
-                                info_updates["buyer"] = buyer_updates
-                        
-                        # Other info updates
-                        if info.get("is_buyer") is not None:
-                            info_updates["is_buyer"] = info["is_buyer"]
-                        if info.get("is_seller") is not None:
-                            info_updates["is_seller"] = info["is_seller"]
-                        if info.get("status"):
-                            info_updates["status"] = info["status"]
-                        
-                        if info_updates:
-                            update_data["info"] = info_updates
-                    
-                    # Pipeline updates
-                    if cinc_lead_data.get("pipeline") and cinc_lead_data["pipeline"].get("stage"):
-                        update_data["pipeline"] = {"stage": cinc_lead_data["pipeline"]["stage"]}
-                    
-                    # Notes updates
-                    if cinc_lead_data.get("notes") and len(cinc_lead_data["notes"]) > 0:
-                        # Filter out empty notes and ensure proper CINC format
-                        valid_notes = []
-                        for note in cinc_lead_data["notes"]:
-                            if note.get("content") and note["content"].strip():
-                                # Ensure each note has the required CINC format
-                                formatted_note = {
-                                    "content": note["content"],
-                                    "category": note.get("category", "info"),
-                                    "created_by": note.get("created_by", "AI_AGENT")
-                                }
-                                # Add optional fields if they exist
-                                if note.get("is_pinned") is not None:
-                                    formatted_note["is_pinned"] = note["is_pinned"]
-                                
-                                valid_notes.append(formatted_note)
-                        
-                        if valid_notes:
-                            update_data["notes"] = valid_notes
-                    
-                    # Only proceed with update if we have data to update
-                    if update_data:
-                        # CINC API requires email or ID to identify the lead for updates
-                        # Fetch existing lead to get email for identification
-                        try:
-                            existing_lead = await cinc_service_module.get_lead_details(
-                                account_id=int_account_id, 
-                                lead_id=lead_id,
-                                connection_id=cinc_connection_id
-                            )
-                            original_email = existing_lead.get("info", {}).get("contact", {}).get("email")
-                            if original_email and "info" in update_data:
-                                if "contact" not in update_data["info"]:
-                                    update_data["info"]["contact"] = {}
-                                # Always include the email to ensure CINC can identify the lead
-                                update_data["info"]["contact"]["email"] = original_email
-                        except Exception as e:
-                            print(f"DEBUG - Could not fetch existing lead for email: {e}")
-                            # Continue with update attempt anyway
-                        
-                        print(f"DEBUG - CINC update data (filtered): {update_data}")
-                        
-                        try:
-                            await cinc_service_module.update_lead(
-                                account_id=int_account_id, 
-                                lead_id=lead_id, 
-                                lead_data=update_data,
-                                connection_id=cinc_connection_id
-                            )
-                            logging.info(f"CINC lead {lead_id} updated for account {account_id} via connection {cinc_connection_id}")
-                        except Exception as e:
-                            # If the standard update fails, try the upsert method
-                            print(f"DEBUG - Standard CINC update failed, trying upsert method: {e}")
-                            logging.warning(f"CINC standard update failed for lead {lead_id}, attempting upsert: {e}")
-                            
-                            try:
-                                await cinc_service_module.update_lead_via_upsert(
-                                    account_id=int_account_id, 
-                                    lead_id=lead_id, 
-                                    lead_data=update_data,
-                                    connection_id=cinc_connection_id
-                                )
-                                logging.info(f"CINC lead {lead_id} updated via upsert for account {account_id} via connection {cinc_connection_id}")
-                            except Exception as upsert_error:
-                                print(f"DEBUG - Both CINC update methods failed: {upsert_error}")
-                                logging.error(f"All CINC update methods failed for lead {lead_id}: {upsert_error}")
-                                
-                    else:
-                        print(f"DEBUG - No meaningful updates to send to CINC for lead {lead_id}")
-                        logging.info(f"CINC lead {lead_id} - no updates needed for account {account_id}")
-                else:
-                    # Create new lead - check for email in nested structure
-                    contact_info = cinc_lead_data.get("info", {}).get("contact", {})
-                    has_email = contact_info.get("email")
-                    
-                    # If no email but have phone, create placeholder email
-                    if not has_email:
-                        phone_numbers = contact_info.get("phone_numbers", {})
-                        cell_phone = phone_numbers.get("cell_phone")
-                        if cell_phone:
-                            # Create placeholder email from phone number
-                            clean_phone = ''.join(filter(str.isdigit, cell_phone))
-                            placeholder_email = f"lead_{clean_phone}@placeholder.com"
-                            contact_info["email"] = placeholder_email
-                            has_email = True
-                            logging.info(f"Generated placeholder email for CINC lead: {placeholder_email}")
-                    
-                    if has_email:
-                        created_lead = await cinc_service_module.create_lead(
-                            account_id=int_account_id, 
-                            lead_data=cinc_lead_data,
-                            connection_id=cinc_connection_id
-                        )
-                    else:
-                        logging.warning(f"Cannot create CINC lead for account {account_id} - missing email")
-
-            except Exception as e:
-                logging.error(f"CINC lead create/update failed for account {account_id} (conn: {cinc_connection_id}): {e}")
-                import traceback
-                logging.error(traceback.format_exc())
-
 
         if integrations and integrations["hubspot_connection_id"] is not None and integrations["hubspot_connection_id"] != '':
             summary["email"] = summary['email'].replace(" ", "")
@@ -1479,6 +1130,14 @@ class CallHandler:
         if call_id in self.agents:
             return
         api_response = await self.backend_service.create_call_info(data)
+        
+        # Debug logging for greeting selection
+        print(f"=== PYTHON HANDLER DEBUG - Agent Data ===")
+        print(f"Call ID: {call_id}")
+        print(f"Call Direction: {data['direction']}")
+        print(f"Backend Response Keys: {list(api_response.get('data', {}).keys())}")
+        print(f"Agent Keys: {list(api_response.get('data', {}).get('agent', {}).keys())}")
+        
         self.agents[call_id] = api_response['data']['agent']
         self.agents[call_id]['isBoom'] = data['isBoom']
         self.agents[call_id]['complete_call'] = False
@@ -1498,6 +1157,15 @@ class CallHandler:
         self.agents[call_id]['aiClient'] = api_response['data']['aiClient']
         self.agents[call_id]['STT'] = api_response['data']['STT']
         self.agents[call_id]['TTS'] = api_response['data']['TTS']
+        
+        # Store new fields for BIDIRECTIONAL agent support
+        self.agents[call_id]['handleCallType'] = api_response['data'].get('handleCallType', self.agents[call_id].get('type', 'INBOUND'))
+        self.agents[call_id]['callDirection'] = api_response['data'].get('callDirection', 'inbound')
+
+        print(f"Handle Call Type: {self.agents[call_id]['handleCallType']}")
+        print(f"Call Direction: {self.agents[call_id]['callDirection']}")
+        print(f"Agent Greetings: {self.agents[call_id].get('greetings', 'NOT FOUND')}")
+        print(f"=== END PYTHON DEBUG ===")
 
         # Add timezone from backend response
         if 'agent' in api_response['data'] and 'timezone' in api_response['data']['agent']:
@@ -1798,6 +1466,22 @@ class CallHandler:
         direction = call_direction
         if direction == "outbound-api":
             direction = "outbound"
+            
+        # Use the new fields from the backend if available
+        handle_call_type = self.agents[call_sid].get('handleCallType', 'INBOUND')
+        actual_call_direction = self.agents[call_sid].get('callDirection', direction)
+        
+        print(f"=== MODIFY_GREETING DEBUG ===")
+        print(f"Call SID: {call_sid}")
+        print(f"Original direction: {call_direction}")
+        print(f"Normalized direction: {direction}")
+        print(f"Handle call type: {handle_call_type}")
+        print(f"Actual call direction: {actual_call_direction}")
+        print(f"Greeting length before processing: {len(greetings) if greetings else 0}")
+        
+        # Use the actual call direction from backend for better accuracy
+        final_direction = actual_call_direction if actual_call_direction else direction
+        
         greetings_from_ai = await self.ai_service.run_chat_without_tools([
             {
                 "role" :"system",
@@ -1827,20 +1511,27 @@ class CallHandler:
             },
             {
                 "role" : "user",
-                "content" : f"""DIRECTION: {direction}\n FIRST_NAME: {name}\n\n{greetings}"""
+                "content" : f"""DIRECTION: {final_direction}\n FIRST_NAME: {name}\n\n{greetings}"""
             }
         ])
         if greetings_from_ai:
             greetings = greetings_from_ai
 
+        print(f"Greeting after AI processing: {len(greetings) if greetings else 0} chars")
+
         if call_sid in self.agents and "id" in self.agents[call_sid]:
             agent_id = self.agents[call_sid]['id']
             if agent_id == '17' or agent_id == 17:
                 greetings = f'Hi {name}, welcome back! This is Cindy — happy to assist you again with your senior living needs. How can I help you today?'
+                print("Using hardcoded greeting for agent 17")
                 return greetings
             elif agent_id == '16' or agent_id == 16:
                 greetings = f'Hi {name}, welcome back! This is Sam — happy to assist you again with your real estate needs. How can I help you today?'
+                print("Using hardcoded greeting for agent 16")
                 return greetings
+                
+        print(f"Final greeting length: {len(greetings) if greetings else 0}")
+        print(f"=== END MODIFY_GREETING DEBUG ===")
         return greetings
     
     async def gather_contact_info(self, call_sid, greetings, call_direction):
@@ -1920,9 +1611,14 @@ class CallHandler:
                         lead_id = lead.get('id')
                         if lead_id:
                             try:
-                                # Fetch notes for this lead
-                                notes = await get_lead_notes_with_content(account_id, lead_id, connection_id=self.agents[call_sid]['integrations']['cinc_connection_id'])
-                                lead['notes'] = notes
+                                # Fetch lead details with notes for this lead
+                                lead_details = await self.cinc_service.get_lead_details(
+                                    account_id=account_id, 
+                                    lead_id=lead_id, 
+                                    connection_id=self.agents[call_sid]['integrations']['cinc_connection_id']
+                                )
+                                # Extract notes from lead details if available
+                                lead['notes'] = lead_details.get('notes', [])
                             except Exception as e:
                                 print(f"Failed to fetch notes for lead {lead_id}: {e}")
                                 lead['notes'] = []

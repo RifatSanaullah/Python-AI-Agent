@@ -14,9 +14,9 @@ from app.config import settings # Ensure settings is imported to access frontend
 from app.services.backend_service import BackendHandler
 from fastapi.middleware.cors import CORSMiddleware
 from app.services.nango_service import NangoService # Added NangoService import back
-from app.services import cinc_service
+from app.services.cinc_service import CincService # Import the new unified CincService
+from app.services import cinc_webhook_service # Import the webhook service
 from typing import Optional, Dict, Any # Added Dict and Any for type hinting
-from app.services.cinc_webhook_service import fetch_and_trigger_outbound
 
 load_dotenv()
 
@@ -36,11 +36,13 @@ app.add_middleware(
 )
 # Create global service instance
 call_handler_instance = None
+cinc_service_instance = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global call_handler_instance
+    global call_handler_instance, cinc_service_instance
     call_handler_instance = CallHandler()
+    cinc_service_instance = CincService()
     yield
     # Cleanup code if needed
 
@@ -49,12 +51,16 @@ app.router.lifespan_context = lifespan
 
 def get_call_handler():
     return call_handler_instance
+
+def get_cinc_service():
+    return cinc_service_instance
     
 @app.post("/new-cinc-lead")
 async def receive_webhook(
     request: Request,
     x_webhook_secret: Optional[str] = Header(None),
-    call_handler: CallHandler = Depends(get_call_handler)
+    call_handler: CallHandler = Depends(get_call_handler),
+    cinc_service: CincService = Depends(get_cinc_service)
 ):
     try:
         if not x_webhook_secret:
@@ -81,7 +87,9 @@ async def receive_webhook(
             lead_info = data.get("lead", {})
             lead_id = lead_info.get("id")
             if lead_id:
-                await fetch_and_trigger_outbound(account_id, lead_id, connection_id, call_handler.update_details)
+                await cinc_webhook_service.fetch_and_trigger_outbound(
+                    account_id, lead_id, connection_id, call_handler.update_details
+                )
         else:
             logger.info(f"ℹ️ Received event of type: {event_type}")
 
@@ -301,9 +309,9 @@ async def remove_session(request: Request, call_handler: CallHandler = Depends(g
 
 # CINC OAuth Endpoints
 @app.get("/cinc/login")
-async def cinc_login(request: Request, state: Optional[str] = None, account_id: Optional[str] = None):
+async def cinc_login(request: Request, state: Optional[str] = None, account_id: Optional[str] = None, cinc_service: CincService = Depends(get_cinc_service)):
     if not account_id:
-        raise HTTPException(status_code=400, detail="account_id is required for CINC login flow initiation")
+        raise HTTPException(status_code=400, detail="account_id is required")
     auth_url = cinc_service.get_authorization_url(state=state, account_id=account_id) 
     return RedirectResponse(url=auth_url)
 
@@ -313,7 +321,8 @@ async def cinc_callback(
     code: Optional[str] = None, 
     error: Optional[str] = None, 
     error_description: Optional[str] = None, 
-    state: Optional[str] = None 
+    state: Optional[str] = None,
+    cinc_service: CincService = Depends(get_cinc_service)
 ):
     base_redirect_url = settings.frontend_url.rstrip('/') + settings.frontend_cinc_callback_path 
     
@@ -335,66 +344,41 @@ async def cinc_callback(
         redirect_params['account_id'] = account_id_from_state
 
     if error:
-        if error == "access_denied":
-            redirect_params['cinc_status'] = 'cancelled'
-            redirect_params['detail'] = 'User denied access in CINC.'
-        else:
-            redirect_params['cinc_status'] = 'error'
-            redirect_params['detail'] = error_description or error
-        
-        query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
-        return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
-
-    if not code:
-        redirect_params['cinc_status'] = 'error'
-        redirect_params['detail'] = 'Authorization code not found in CINC callback.'
-        query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
-        return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
-
-    try:
-       
-        token_response = await cinc_service.exchange_code_for_token(auth_code=code, composite_state=state)
-        
-        
-        stored_account_id = token_response.get("account_id_for_storage") 
-
-        redirect_params['cinc_status'] = 'success'
-        if stored_account_id:
-             redirect_params['account_id'] = stored_account_id 
-        elif account_id_from_state: 
+        redirect_params['error'] = error
+        redirect_params['error_description'] = error_description
+    elif code:
+        try:
+            # Exchange code for token
+            token_data = await cinc_service.exchange_code_for_token(code, state)
+            
+            # Extract connection_id and account_id for the redirect
+            redirect_params['connection_id'] = token_data.get('connection_id')
             redirect_params['account_id'] = account_id_from_state
-        
-        query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
-        return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
-    
-    except HTTPException as e:
-        redirect_params['cinc_status'] = 'error'
-        redirect_params['detail'] = str(e.detail)
-        if account_id_from_state: 
-             redirect_params['account_id'] = account_id_from_state
+            redirect_params['success'] = 'true'
 
-        query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
-        return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
-        
-    except Exception as e:
-        print(f"Unexpected error in CINC callback processing: {str(e)}") 
-        redirect_params['cinc_status'] = 'error'
-        redirect_params['detail'] = "An unexpected error occurred while finalizing CINC authorization."
-        if account_id_from_state:
-             redirect_params['account_id'] = account_id_from_state
-        
-        query_string = "&".join([f"{k}={v}" for k, v in redirect_params.items()])
-        return RedirectResponse(url=f"{base_redirect_url}?{query_string}")
+        except HTTPException as e:
+            redirect_params['error'] = 'token_exchange_failed'
+            redirect_params['error_description'] = str(e.detail)
+        except Exception as e:
+            redirect_params['error'] = 'unknown_error'
+            redirect_params['error_description'] = str(e)
+    
+    # Construct final redirect URL
+    redirect_url = f"{base_redirect_url}?{'&'.join([f'{k}={v}' for k, v in redirect_params.items()])}"
+    return RedirectResponse(url=redirect_url)
+
 
 @app.post("/cinc/account/{account_id}/disconnect")
-async def disconnect_cinc_integration(account_id: str):
+async def disconnect_cinc_integration(account_id: str, cinc_service: CincService = Depends(get_cinc_service)):
     try:
-        await cinc_service.delete_cinc_tokens(account_id=int(account_id))
-        return JSONResponse(status_code=200, content={"message": "CINC connection deleted successfully"})
+        # Delete CINC tokens using the correct method name
+        await cinc_service.delete_tokens(int(account_id))
+        return {"status": "success", "message": f"Integration for account {account_id} disconnected."}
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete CINC connection: {str(e)}")
+        logger.error(f"Error disconnecting CINC integration for account {account_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to disconnect integration.")
      
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
