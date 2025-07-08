@@ -29,6 +29,9 @@ class DeepgramService:
         self.complete_sentence = ''
         self.transmit_task = None
         self.loop = loop or asyncio.get_event_loop()
+        self.same_sentence = 0
+        self.prev_sentence = ""
+        self.skip_final = False
         # self.lock = threading.Lock()
         # connect to websocket
         self.transcribeOptions = LiveOptions(
@@ -52,7 +55,6 @@ class DeepgramService:
         self.dg_connection = None
         self.sp_dg_connection = None
         self.queue_audio = {}
-        self.call_id = None
         # self.lock_exit = threading.Lock()
         # self.exit = False
         
@@ -75,7 +77,7 @@ class DeepgramService:
         except Exception as e:
             print(f"An error occurred: {e}")
             raise
-
+    
     async def update_call_id(self, call_id, queue_audio=None):
 
         self.queue_audio = {
@@ -83,7 +85,8 @@ class DeepgramService:
                 "queue_audio": queue_audio
             }
 
-    async def establish_dg_connection(self , model = "nova-3",):
+
+    async def establish_dg_connection(self, model = "nova-3"):
         print("Establishing Deepgram Connection....")
         if self.dg_connection:
             await self.dg_connection.finish()
@@ -106,6 +109,7 @@ class DeepgramService:
             return
 
     async def transcribe(self, audio_chunk: bytes):
+        self.same_sentence = 0
         await self.dg_connection.send(audio_chunk)
 
     async def on_sp_open(self, open, val):
@@ -149,7 +153,7 @@ class DeepgramService:
             if self.is_sentence_complete(self.complete_sentence):
                 await asyncio.sleep(0.6)  # Wait for more speech
             else:
-                await asyncio.sleep(1)  # Wait for more speech
+                await asyncio.sleep(0.8)  # Wait for more speech
             # with self.lock:
             if self.on_transcript and self.complete_sentence.strip():
                 sentence = self.complete_sentence
@@ -159,6 +163,18 @@ class DeepgramService:
         except asyncio.CancelledError:
             # Canceled because more speech came in
             pass
+            
+    async def check_complete_sentence(self, sentence):
+        if sentence.strip() == self.prev_sentence.strip():
+            self.same_sentence += 1
+            self.skip_final = False
+            if self.same_sentence > 2:
+                self.skip_final = True
+        else:
+            self.prev_sentence = sentence.strip()
+            self.skip_final = False
+        return self.skip_final
+
 
     async def on_data(self,res,**kwargs):
         "Called when a new transcript has been received."
@@ -169,7 +185,12 @@ class DeepgramService:
             print("Transcript: ", sentence, "is_final: ", is_final)
             self.cancel_transmit()
             await self.on_start()
-            if is_final and sentence.strip():
+            is_same = False
+            if is_final is False:
+                is_same = await self.check_complete_sentence(sentence)
+                print("is_same: ", is_same, "skip_final: ", self.skip_final)
+            if ((is_final and not self.skip_final) or self.skip_final) and sentence.strip():
+                self.same_sentence = 0
                 print("sentence: ", sentence)
                 self.complete_sentence += ' ' + sentence.strip()
                 # with self.lock:
@@ -185,10 +206,11 @@ class DeepgramService:
     def cancel_transmit(self):
          if self.transmit_task:
             self.transmit_task.cancel()
+            self.transmit_task = None
 
     async def on_started(self, message, **kwargs):
         # asyncio.run(self.on_update(True))
-        print(message)
+        print("speech detected", message)
         
         
     async def on_error(self, message, **kwargs):
