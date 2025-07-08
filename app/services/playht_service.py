@@ -25,7 +25,7 @@ class PlayHT:
         self.queue_audio = None
         self.call_id = None
         self.loop = loop or asyncio.get_event_loop()
-        self.voice_engine = "PlayDialog-http"
+        self.voice_engine = "PlayDialog"
         self.full_text_buffer = ''
         self.last_split_index = 0
         self.headers = {
@@ -87,31 +87,28 @@ class PlayHT:
             print("Failed to get WebSocket URL")
             return False
             
-        # self.options = {TTSOptions(
-        #     voice=voice,
-        #     format=Format.FORMAT_MULAW,
-        #     sample_rate=8000,
-        #     speed=1,
-        #     temperature=0.7,
-        #     top_p=0.35,
-        #     repetition_penalty=3,
-        #     voice_guidance=0,
-        #     style_guidance=0.5,
-        #     text_guidance=0.75,
-        # )}
         self.options=  {
-                    "voice": voice,
-                    "sample_rate": 8000,  
-                    "output_format": "mulaw",
-                    "speed": 0.9,
-                    "temperature": 1,
-                    "top_p": 0.87,
-                    "repetition_penalty": 7.7,
-                    "length_penalty": 1.1,
-                    "voice_guidance": 0,
-                    "style_guidance": 10,
-                    "text_guidance": 1,
-                }
+                        "voice": voice,
+                        "sample_rate": 8000,  
+                        "output_format": "mulaw",
+                        "speed": 0.9,
+                        "temperature": 1,
+                        "top_p": 0.87,
+                        "repetition_penalty": 7.7,
+                        "length_penalty": 1.1,
+                        "voice_guidance": 0,
+                        "style_guidance": 10,
+                        "text_guidance": 1,
+                    }
+        if self.voice_engine == 'PlayDialog' or self.voice_engine == 'PlayDialogMultilingual':
+            self.options=  {
+                        "voice": voice,
+                        "sample_rate": 8000,  
+                        "output_format": "mulaw",
+                        "speed": 1,
+                        "temperature": 0.7,
+                    }
+                    
         print(f"PlayHT connection established with voice: {voice}, model: {model}")
             
         self.websocket = await websockets.connect(self.websocket_url)
