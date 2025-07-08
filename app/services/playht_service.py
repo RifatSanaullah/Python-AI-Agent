@@ -91,14 +91,14 @@ class PlayHT:
                         "voice": voice,
                         "sample_rate": 8000,  
                         "output_format": "mulaw",
-                        "speed": 0.9,
-                        "temperature": 1,
-                        "top_p": 0.87,
-                        "repetition_penalty": 7.7,
-                        "length_penalty": 1.1,
-                        "voice_guidance": 0,
-                        "style_guidance": 10,
-                        "text_guidance": 1,
+                        "speed": 1.0,
+                        "temperature": 0.5,
+                        "top_p": 1.0,
+                        "repetition_penalty": 1.1,
+                        "length_penalty": 1.0,
+                        "voice_guidance": 0.6,
+                        "style_guidance": 3,
+                        "text_guidance": 0.8
                     }
         if self.voice_engine == 'PlayDialog' or self.voice_engine == 'PlayDialogMultilingual':
             self.options=  {
