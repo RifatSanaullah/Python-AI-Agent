@@ -24,6 +24,23 @@ cinc_service = CincService()
 
 async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_id: str, update_details):
     try:
+        # Get dynamic wait time from connection data first
+        backend = BackendHandler()
+        payload = {
+            "phone_number": "temp",  # We just need this to get the wait time
+            "account_id": account_id,
+        }
+        try:
+            connection_data = await backend.get_connection_details(payload)
+            print(f"[CRON] Full connection_data response: {connection_data}")
+            wait_time_minutes = connection_data.get('outbound_cadence_interval', 5)
+            print(f"[CRON] Extracted wait_time_minutes: {wait_time_minutes}")
+            print(f"[CRON] Using dynamic wait time: {wait_time_minutes} minutes")
+        except Exception as e:
+            print(f"[CRON] Failed to get dynamic wait time, using default: 5 minutes")
+            print(f"[CRON] Exception: {e}")
+            wait_time_minutes = 5  # Default to 5 minutes if API call fails
+
         async def make_outbound_call():
             try:
                 # Check lead status after wait time - only call if still "New Lead"
@@ -60,6 +77,7 @@ async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_i
                 }
                 connection_data = await backend.get_connection_details(payload)
                 print(connection_data, cell_phone)
+                
                 await update_details(account_id, lead_data, cell_phone, connection_data['agent_phone']['phone'])
                 
                 if current_stage != "New Lead":
@@ -98,8 +116,8 @@ async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_i
         def sync_make_outbound_call():
             asyncio.run(make_outbound_call())
 
-        # Schedule the outbound call after the configured wait time
-        run_date = datetime.now() + timedelta(seconds=settings.cinc_wait_seconds)
+        # Schedule the outbound call after the dynamic wait time
+        run_date = datetime.now() + timedelta(minutes=wait_time_minutes)
         scheduler.add_job(sync_make_outbound_call, 'date', run_date=run_date)
 
         return True
