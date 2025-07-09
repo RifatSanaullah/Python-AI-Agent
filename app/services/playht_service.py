@@ -91,7 +91,7 @@ class PlayHT:
                         "voice": voice,
                         "sample_rate": 48000,
                         "output_format": "mulaw",
-                        "speed": 1.,
+                        "speed": 1.1,
                         "temperature": 1.02,
                         "top_p": 0.9,
                         "repetition_penalty": 5,
