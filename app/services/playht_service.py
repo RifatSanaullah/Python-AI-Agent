@@ -97,7 +97,7 @@ class PlayHT:
                         "repetition_penalty": 8,
                         "length_penalty": 1.5,
                         "voice_guidance": 0,
-                        "style_guidance": 7,
+                        "style_guidance": 20,
                         "text_guidance": 0.5
                     }
         if self.voice_engine == 'PlayDialog' or self.voice_engine == 'PlayDialogMultilingual':
