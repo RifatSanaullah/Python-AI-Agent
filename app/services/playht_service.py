@@ -95,10 +95,10 @@ class PlayHT:
                         "temperature": 0.7,
                         "top_p": 0.9,
                         "repetition_penalty": 8,
-                        "length_penalty": 1.5,
+                        "length_penalty": 1.3,
                         "voice_guidance": 0,
                         "style_guidance": 20,
-                        "text_guidance": 0.5
+                        "text_guidance": 0.3
                     }
         if self.voice_engine == 'PlayDialog' or self.voice_engine == 'PlayDialogMultilingual':
             self.options=  {
@@ -128,7 +128,7 @@ class PlayHT:
 
 
         except Exception as e:
-            print(f"An error occurred: {e}")
+            print(f"An error occurred on playht: {e}")
             raise
     async def send_to_tts(self, text_chunk):
         
