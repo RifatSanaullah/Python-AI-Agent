@@ -89,11 +89,10 @@ class PlayHT:
             
         self.options=  {
                         "voice": voice,
-                        "sample_rate": 8000,
-                        # "emotion": "female_happy",
+                        "sample_rate": 48000,
                         "output_format": "mulaw",
-                        "speed": 1.0,
-                        "temperature": 0.9,
+                        "speed": 1.,
+                        "temperature": 1.02,
                         "top_p": 0.9,
                         "repetition_penalty": 5,
                         "length_penalty": 1.0,
@@ -104,10 +103,11 @@ class PlayHT:
         if self.voice_engine == 'PlayDialog' or self.voice_engine == 'PlayDialogMultilingual':
             self.options=  {
                         "voice": voice,
-                        "sample_rate": 8000,  
+                        "sample_rate": 48000,  
                         "output_format": "mulaw",
                         "speed": 1,
-                        "temperature": 0.7,
+                        "temperature": 1.02,
+                        "voice_conditioning_seconds" : 20,
                     }
                     
         print(f"PlayHT connection established with voice: {voice}, model: {model}")

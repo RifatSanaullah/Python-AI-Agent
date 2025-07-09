@@ -2,7 +2,7 @@ import base64
 import audioop
 import asyncio
 import logging
-import time
+import time, io
 import numpy as np
 from sqlalchemy.orm import Session
 from app.services.playht_service import PlayHT
@@ -43,7 +43,8 @@ from app.services.cinc_service import CincService # Import the new unified CincS
 from typing import Dict, Any # Ensure Dict and Any are imported for type hinting
 
 from app.adapters.filler_manager import FillerManager
-from app.helpers.utils import estimate_speech_duration
+from app.helpers.utils import estimate_speech_duration, fast_downsample_mulaw
+from scipy.signal import resample as scipy_resample # Import to avoid name conflict
 
 # Configure logging
 logging.basicConfig(
@@ -240,8 +241,9 @@ class CallHandler:
                 if data['streamSid'] and not self.twilio_service.is_empty(call_id, 'response_buffer'):
                     # print("Processing response buffers...")
                     response_audio = await self.twilio_service.get_or_dequeue_audio(call_id, 'response_buffer')
+                    mulaw_audio = fast_downsample_mulaw(response_audio)
                     self.agents[call_id]['ai_speaking'] = True
-                    await self.twilio_service.send_audio_stream(self.agents[call_id]['websocket'], data['streamSid'], response_audio)
+                    await self.twilio_service.send_audio_stream(self.agents[call_id]['websocket'], data['streamSid'], mulaw_audio)
                     # await self.twilio_service.send_control_command(session['websocket'], 'stop')
                     if self.sessions[data['streamSid']]['background_sound'] is True:
                         await self.stop_stream(call_id)
@@ -1533,6 +1535,23 @@ class CallHandler:
         print(f"Final greeting length: {len(greetings) if greetings else 0}")
         print(f"=== END MODIFY_GREETING DEBUG ===")
         return greetings
+    
+    def process_audio_for_twilio(self, playht_audio_chunk_pcm):
+   # 1. Load the WAV audio segment
+        audio_segment = AudioSegment.from_wav(io.BytesIO(playht_audio_chunk_pcm)) # Use io.BytesIO for in-memory bytes
+
+        # 2. Convert to 8kHz, mono, and then to mulaw (pydub handles intermediate PCM)
+        # Ensure it's mono if not already, as mulaw is typically mono for telephony
+        audio_segment = audio_segment.set_frame_rate(8000).set_channels(1)
+
+        # 3. Export to raw mulaw bytes
+        # pydub's 'raw' export assumes PCM unless you specify 'codec' for mulaw
+        # For mulaw, you might need to export to a temporary file or use raw PCM and audioop.lin2ulaw
+        # Simpler with pydub:
+        mulaw_audio_bytes = audioop.lin2ulaw(audio_segment, 2)
+
+
+        return mulaw_audio_bytes
     
     async def gather_contact_info(self, call_sid, greetings, call_direction):
         fullname = ""

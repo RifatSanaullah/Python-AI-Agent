@@ -8,7 +8,9 @@ import audioop
 import os
 import asyncio
 import random
+import numpy as np
 from datetime import date, datetime
+from scipy import signal
 def get_interrupt_message(type = 'check_availability'):
         arrayObj = {
             'interrupt': [
@@ -174,4 +176,54 @@ async def estimate_speech_duration(text, wpm=150, include_pauses=True):
         'word_count': words,
         'estimated_wpm': wpm
     }
+
+def mulaw_to_linear(mulaw_data):
+    """Convert μ-law to 16-bit linear PCM using audioop (fastest method)"""
+    return audioop.ulaw2lin(mulaw_data, 2)
+
+def linear_to_mulaw(linear_data):
+    """Convert 16-bit linear PCM to μ-law using audioop (fastest method)"""
+    return audioop.lin2ulaw(linear_data, 2)
+
+def fast_downsample_mulaw(mulaw_48k, target_rate=8000, source_rate=48000):
+    """
+    Ultra-fast μ-law downsampling using optimized approach
+    
+    Args:
+        mulaw_48k: bytes object containing μ-law audio at 48kHz
+        target_rate: target sample rate (default 8000Hz)
+        source_rate: source sample rate (default 48000Hz)
+    
+    Returns:
+        bytes: μ-law audio at target sample rate
+    """
+    # Step 1: Convert μ-law to linear (very fast with audioop)
+    linear_data = mulaw_to_linear(mulaw_48k)
+    
+    # Step 2: Convert bytes to numpy array for processing
+    audio_array = np.frombuffer(linear_data, dtype=np.int16)
+    
+    # Step 3: Fast integer decimation for exact 6:1 ratio (48k->8k)
+    decimation_factor = source_rate // target_rate
+    
+    if decimation_factor == 6:  # Common case: 48k->8k
+        # Use simple decimation with anti-aliasing filter
+        # Design a low-pass filter to prevent aliasing
+        nyquist = 0.5 * source_rate
+        cutoff = target_rate / 2
+        b, a = signal.butter(4, cutoff / nyquist, btype='low')
+        
+        # Apply filter and decimate
+        filtered = signal.filtfilt(b, a, audio_array.astype(np.float32))
+        downsampled = filtered[::decimation_factor].astype(np.int16)
+    else:
+        # Use scipy's resample for non-integer ratios
+        num_samples = int(len(audio_array) * target_rate / source_rate)
+        downsampled = signal.resample(audio_array, num_samples).astype(np.int16)
+    
+    # Step 4: Convert back to bytes and then to μ-law
+    linear_bytes = downsampled.tobytes()
+    mulaw_8k = linear_to_mulaw(linear_bytes)
+    
+    return mulaw_8k
     

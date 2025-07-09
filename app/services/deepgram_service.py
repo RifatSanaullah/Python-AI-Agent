@@ -109,7 +109,6 @@ class DeepgramService:
             return
 
     async def transcribe(self, audio_chunk: bytes):
-        self.same_sentence = 0
         await self.dg_connection.send(audio_chunk)
 
     async def on_sp_open(self, open, val):
@@ -153,7 +152,7 @@ class DeepgramService:
             if self.is_sentence_complete(self.complete_sentence):
                 await asyncio.sleep(0.6)  # Wait for more speech
             else:
-                await asyncio.sleep(0.8)  # Wait for more speech
+                await asyncio.sleep(1)  # Wait for more speech
             # with self.lock:
             if self.on_transcript and self.complete_sentence.strip():
                 sentence = self.complete_sentence
@@ -164,11 +163,11 @@ class DeepgramService:
             # Canceled because more speech came in
             pass
             
-    async def check_complete_sentence(self, sentence):
+    async def check_complete_sentence(self, sentence: str):
         if sentence.strip() == self.prev_sentence.strip():
             self.same_sentence += 1
             self.skip_final = False
-            if self.same_sentence > 2:
+            if self.same_sentence > 3:
                 self.skip_final = True
         else:
             self.prev_sentence = sentence.strip()
