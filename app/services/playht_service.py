@@ -92,7 +92,7 @@ class PlayHT:
                         "sample_rate": 48000,
                         "output_format": "mulaw",
                         "speed": 1.1,
-                        "temperature": 1.02,
+                        "temperature": 0.9,
                         "top_p": 0.9,
                         "repetition_penalty": 5,
                         "length_penalty": 1.0,
