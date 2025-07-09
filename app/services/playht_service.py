@@ -89,21 +89,21 @@ class PlayHT:
             
         self.options=  {
                         "voice": voice,
-                        "sample_rate": 48000,
+                        "sample_rate": 8000,
                         "output_format": "mulaw",
                         "speed": 1.1,
-                        "temperature": 0.9,
+                        "temperature": 0.7,
                         "top_p": 0.9,
-                        "repetition_penalty": 5,
-                        "length_penalty": 1.0,
+                        "repetition_penalty": 8,
+                        "length_penalty": 1.5,
                         "voice_guidance": 0,
-                        "style_guidance": 5,
-                        "text_guidance": 0.2
+                        "style_guidance": 7,
+                        "text_guidance": 0.5
                     }
         if self.voice_engine == 'PlayDialog' or self.voice_engine == 'PlayDialogMultilingual':
             self.options=  {
                         "voice": voice,
-                        "sample_rate": 48000,  
+                        "sample_rate": 8000,
                         "output_format": "mulaw",
                         "speed": 1,
                         "temperature": 1.02,

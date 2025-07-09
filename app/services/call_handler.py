@@ -241,9 +241,9 @@ class CallHandler:
                 if data['streamSid'] and not self.twilio_service.is_empty(call_id, 'response_buffer'):
                     # print("Processing response buffers...")
                     response_audio = await self.twilio_service.get_or_dequeue_audio(call_id, 'response_buffer')
-                    mulaw_audio = fast_downsample_mulaw(response_audio)
+                    # mulaw_audio = fast_downsample_mulaw(response_audio)
                     self.agents[call_id]['ai_speaking'] = True
-                    await self.twilio_service.send_audio_stream(self.agents[call_id]['websocket'], data['streamSid'], mulaw_audio)
+                    await self.twilio_service.send_audio_stream(self.agents[call_id]['websocket'], data['streamSid'], response_audio)
                     # await self.twilio_service.send_control_command(session['websocket'], 'stop')
                     if self.sessions[data['streamSid']]['background_sound'] is True:
                         await self.stop_stream(call_id)
