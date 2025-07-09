@@ -185,10 +185,10 @@ class DeepgramService:
             self.cancel_transmit()
             await self.on_start()
             is_same = False
-            if is_final is False:
-                is_same = await self.check_complete_sentence(sentence)
-                print("is_same: ", is_same, "skip_final: ", self.skip_final)
-            if ((is_final and not self.skip_final) or self.skip_final) and sentence.strip():
+            # if is_final is False:
+            #     is_same = await self.check_complete_sentence(sentence)
+            #     print("is_same: ", is_same, "skip_final: ", self.skip_final)
+            if is_final and sentence.strip():
                 self.same_sentence = 0
                 print("sentence: ", sentence)
                 self.complete_sentence += ' ' + sentence.strip()

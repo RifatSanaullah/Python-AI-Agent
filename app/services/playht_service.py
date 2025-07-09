@@ -91,13 +91,13 @@ class PlayHT:
                         "voice": voice,
                         "sample_rate": 8000,
                         "output_format": "mulaw",
-                        "speed": 1.1,
+                        "speed": 1,
                         "temperature": 0.7,
                         "top_p": 0.9,
-                        "repetition_penalty": 8,
+                        "repetition_penalty": 7,
                         "length_penalty": 1.3,
                         "voice_guidance": 0,
-                        "style_guidance": 20,
+                        "style_guidance": 7,
                         "text_guidance": 0.3
                     }
         if self.voice_engine == 'PlayDialog' or self.voice_engine == 'PlayDialogMultilingual':
