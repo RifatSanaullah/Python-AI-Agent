@@ -6,6 +6,7 @@ import time, io
 import numpy as np
 from sqlalchemy.orm import Session
 from app.services.playht_service import PlayHT
+from app.services.murf_service import MurfAI
 from app.services.twilio_service import TwilioService
 from app.services.ai_service import AIService
 # from app.services.ai_service_v2 import AIService
@@ -242,8 +243,8 @@ class CallHandler:
                     # print("Processing response buffers...")
                     response_audio = await self.twilio_service.get_or_dequeue_audio(call_id, 'response_buffer')
                     # mulaw_audio = fast_downsample_mulaw(response_audio)
-                    self.agents[call_id]['ai_speaking'] = True
-                    await self.twilio_service.send_audio_stream(self.agents[call_id]['websocket'], data['streamSid'], response_audio)
+                    # self.agents[call_id]['ai_speaking'] = True
+                    # await self.twilio_service.send_audio_stream(self.agents[call_id]['websocket'], data['streamSid'], response_audio)
                     # await self.twilio_service.send_control_command(session['websocket'], 'stop')
                     if self.sessions[data['streamSid']]['background_sound'] is True:
                         await self.stop_stream(call_id)
@@ -1014,6 +1015,8 @@ class CallHandler:
 
         elif self.agents[call_id]['TTS']['name'] == 'PlayHT':
             audio_stream = await self.agents[call_id]['synthesis_service'].stream_text_to_speech(text)
+        elif self.agents[call_id]['TTS']['name'] == 'Claude':
+            audio_stream = await self.agents[call_id]['synthesis_service'].stream_text_to_speech(text)
         else:
             raise ValueError(f"Unsupported TTS provider: {settings.tts_provider}")
 
@@ -1034,8 +1037,8 @@ class CallHandler:
             return
         ai_interupted = session.get('ai_interrupt', False)
         if not ai_interupted:
-            # self.agents[call_id]['ai_speaking'] = True
-            # await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
+            self.agents[call_id]['ai_speaking'] = True
+            await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
             await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
             # result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
             # self.sessions[call_id]['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
@@ -1264,6 +1267,8 @@ class CallHandler:
             self.agents[call_id]["synthesis_service"] = AzureService(self.loop)
         elif self.agents[call_id]['TTS']['name'] == 'PlayHT':
             self.agents[call_id]["synthesis_service"] = PlayHT(self.loop)
+        elif self.agents[call_id]['TTS']['name'] == 'Claude':
+            self.agents[call_id]["synthesis_service"] = MurfAI(self.loop)
         else:
             self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(call_id, DeepgramService)
 
@@ -1405,6 +1410,8 @@ class CallHandler:
             await self.agents[call_id]['synthesis_service'].establish_connection(self.agents[call_id]['TTS']['voice']['model'])
         elif self.agents[call_id]['TTS']['name'] == 'PlayHT':
             await self.agents[call_id]['synthesis_service'].establish_connection( self.agents[call_id]['TTS']['voice']['model'], self.agents[call_id]['TTS']['model'])
+        elif self.agents[call_id]['TTS']['name'] == 'Claude':
+            await self.agents[call_id]['synthesis_service'].establish_connection(self.agents[call_id]['TTS']['voice']['model'], self.agents[call_id]['TTS']['model'])
         else:
             await self.agents[call_id]['synthesis_service'].establish_sp_connection(self.agents[call_id]['TTS']['voice']['model'])
 
