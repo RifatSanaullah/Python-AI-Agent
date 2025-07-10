@@ -994,7 +994,7 @@ class CallHandler:
             chunks.append(current_chunk.strip())
         return chunks
     
-    async def synthesize_response(self, text: str, call_id):
+    async def synthesize_response(self, text: str, call_id, is_greeting=False):
         session = self.agents.get(call_id)
         if not session or not text or text == '':
             return
@@ -1018,7 +1018,10 @@ class CallHandler:
             audio_stream = await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text)
 
         elif self.agents[call_id]['TTS']['name'] == 'PlayHT':
-            audio_stream = await self.agents[call_id]['synthesis_service'].stream_text_to_speech(text)
+            if is_greeting is True:
+                audio_stream = await self.agents[call_id]['synthesis_service'].send_stream_to_tts(text)
+            else: 
+                audio_stream = await self.agents[call_id]['synthesis_service'].stream_text_to_speech(text)
         elif self.agents[call_id]['TTS']['name'] == 'Claude':
             audio_stream = await self.agents[call_id]['synthesis_service'].stream_text_to_speech(text)
         else:
@@ -1424,7 +1427,7 @@ class CallHandler:
 
         greetings = self.agents[call_id]['greetings']
 
-        await self.synthesize_response(greetings , call_id)
+        await self.synthesize_response(greetings , call_id, True)
         # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
         await self.agents[call_id]['synthesis_service'].flush_sp_ws()
 

@@ -130,6 +130,13 @@ class PlayHT:
         except Exception as e:
             print(f"An error occurred on playht: {e}")
             raise
+
+    async def send_stream_to_tts(self, text):
+            
+            self.options['text'] = text
+            message = self.options    
+            await self.websocket.send(json.dumps(message))
+
     async def send_to_tts(self, text_chunk):
         
         self.full_text_buffer += text_chunk
@@ -147,9 +154,7 @@ class PlayHT:
 
         # If we found any complete sentences, process them
         for sentence_to_speak in sentences_to_process:
-            self.options['text'] = sentence_to_speak
-            message = self.options    
-            await self.websocket.send(json.dumps(message))
+            await self.send_stream_to_tts(sentence_to_speak)
         # await self._synthesize_text_chunk(text_to_synthesize, self.current_synth_id)
             # self.full_text_buffer = ''
             
