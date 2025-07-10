@@ -80,7 +80,6 @@ class CallHandler:
         self.prefetched_details = {}
         self.calls = {}
         self.lock = {}
-        self.vad = VoiceActivityDetector()
 
     async def _get_or_create_lock(self, call_sid):
         if call_sid not in self.locks:
@@ -237,9 +236,10 @@ class CallHandler:
                         or self.agents[call_id]['route_call'] == False ) and
                         ( 'end_call' not in self.agents[call_id]
                         or self.agents[call_id]['end_call'] == False) ):
-                        # voice_detected =  self.vad.process_audio_chunk(chunk_bytes)
+                        # voice_detected =  await self.agents[call_id]["VAD"].process_audio_chunk(chunk_bytes)
                         # if voice_detected:
-                        #     print("voice_detected: ", voice_detected)
+                        #     print("voice_detected")
+                        #     await self.on_user_speech(call_id)
                         await self.twilio_service.enqueue_audio(call_id, chunk_bytes ,'audio_buffer')
 
 
@@ -247,8 +247,8 @@ class CallHandler:
                     # print("Processing response buffers...")
                     response_audio = await self.twilio_service.get_or_dequeue_audio(call_id, 'response_buffer')
                     # mulaw_audio = fast_downsample_mulaw(response_audio)
-                    self.agents[call_id]['ai_speaking'] = True
-                    await self.twilio_service.send_audio_stream(self.agents[call_id]['websocket'], data['streamSid'], response_audio)
+                    # self.agents[call_id]['ai_speaking'] = True
+                    # await self.twilio_service.send_audio_stream(self.agents[call_id]['websocket'], data['streamSid'], response_audio)
                     # await self.twilio_service.send_control_command(session['websocket'], 'stop')
                     if self.sessions[data['streamSid']]['background_sound'] is True:
                         await self.stop_stream(call_id)
@@ -1041,8 +1041,8 @@ class CallHandler:
             return
         ai_interupted = session.get('ai_interrupt', False)
         if not ai_interupted:
-            # self.agents[call_id]['ai_speaking'] = True
-            # await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
+            self.agents[call_id]['ai_speaking'] = True
+            await self.twilio_service.send_audio_stream(session['websocket'], self.agents[call_id]['stream_sid'], audio_stream)
             await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
             # result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
             # self.sessions[call_id]['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
@@ -1275,6 +1275,9 @@ class CallHandler:
             self.agents[call_id]["synthesis_service"] = MurfAI(self.loop)
         else:
             self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(call_id, DeepgramService)
+
+
+        # self.agents[call_id]["VAD"] =  VoiceActivityDetector(on_start=self.create_on_user_speech_handler(call_id))
 
 
         fullname =self.agents[call_id]['fullname']
