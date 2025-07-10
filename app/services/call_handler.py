@@ -1697,6 +1697,7 @@ class CallHandler:
                         
                         email = contact_info.get('email')
                         address = contact_info.get('mailing_address', {})
+                        self.agents[call_sid]['address'] = address
                         # Get phone number from the lead
                         phone_numbers = contact_info.get('phone_numbers', {})
                         if phone_numbers.get('cell_phone'):
