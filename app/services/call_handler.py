@@ -1487,7 +1487,8 @@ class CallHandler:
         city = ''
         if address is not None and 'city' in address and address['city'] != '':
             city = address['city']
-        
+        print("====ADDRESS===",address)
+        print("====city===",city)
         print(f"=== MODIFY_GREETING DEBUG ===")
         print(f"Call SID: {call_sid}")
         print(f"Original direction: {call_direction}")
