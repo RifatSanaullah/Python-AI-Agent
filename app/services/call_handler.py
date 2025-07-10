@@ -9,6 +9,7 @@ from app.services.playht_service import PlayHT
 from app.services.murf_service import MurfAI
 from app.services.twilio_service import TwilioService
 from app.services.ai_service import AIService
+from app.services.voice_detector import VoiceActivityDetector
 # from app.services.ai_service_v2 import AIService
 from app.services.s3_service import S3Service
 from app.services.backend_service import BackendHandler
@@ -79,7 +80,7 @@ class CallHandler:
         self.prefetched_details = {}
         self.calls = {}
         self.lock = {}
-
+        self.vad = VoiceActivityDetector()
 
     async def _get_or_create_lock(self, call_sid):
         if call_sid not in self.locks:
@@ -236,6 +237,9 @@ class CallHandler:
                         or self.agents[call_id]['route_call'] == False ) and
                         ( 'end_call' not in self.agents[call_id]
                         or self.agents[call_id]['end_call'] == False) ):
+                        # voice_detected =  self.vad.process_audio_chunk(chunk_bytes)
+                        # if voice_detected:
+                        #     print("voice_detected: ", voice_detected)
                         await self.twilio_service.enqueue_audio(call_id, chunk_bytes ,'audio_buffer')
 
 
@@ -1177,7 +1181,6 @@ class CallHandler:
             self.agents[call_id]['timezone'] = api_response['data']['agent']['timezone']
         else:
             self.agents[call_id]['timezone'] = 'UTC'  # Default to UTC if not provided
-        
         print(f"DEBUG - Agent timezone: {self.agents[call_id]['timezone']}")
 
         self.agents[call_id]['appointment'] = api_response['data']['appointment']
@@ -1244,6 +1247,7 @@ class CallHandler:
         self.agents[call_id]['phone'] = result['phone']
         self.agents[call_id]['description'] = result['description']
         self.agents[call_id]['existing_appointment'] = result['existing_appointment']
+        self.agents[call_id]['address'] = result['address']
 
         if self.agents[call_id]['STT']['name'] == 'Deepgram':
             self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, DeepgramService)
@@ -1479,6 +1483,10 @@ class CallHandler:
         # Use the new fields from the backend if available
         handle_call_type = self.agents[call_sid].get('handleCallType', 'INBOUND')
         actual_call_direction = self.agents[call_sid].get('callDirection', direction)
+        address = self.agents[call_sid].get('address', None)
+        city = ''
+        if address is not None and 'city' in address and address['city'] != '':
+            city = address['city']
         
         print(f"=== MODIFY_GREETING DEBUG ===")
         print(f"Call SID: {call_sid}")
@@ -1498,6 +1506,7 @@ class CallHandler:
                                 You will always receive, in this order:\n
                                 • DIRECTION: <inbound|outbound>\n
                                 • (optional) FIRST_NAME: <name>      ← line may be missing or value may be blank
+                                • (optional) CITY: <city>      ← line may be missing or value may be blank
                                 • Then a text block that may or may not contain\n
                                 <inbound_message> … </inbound_message> and\n
                                 <outbound_message> … </outbound_message> tags.\n\n
@@ -1505,12 +1514,20 @@ class CallHandler:
                                 Task:\n
                                 1. Identify which message to return:\n
                                     • If the requested tag exists, return exactly the text inside that tag.\n
-                                    • Otherwise, return every line after the headers (DIRECTION/FIRST_NAME) unchanged.\n
+                                    • Otherwise, return every line after the headers (DIRECTION/FIRST_NAME/CITY) unchanged.\n
                                 2. Handle the <first_name> token
                                     • If a non‑empty FIRST_NAME was provided, replace every occurrence of
                                         <first_name> (case‑sensitive) with that name.
                                     • If FIRST_NAME is missing or empty, delete every occurrence of
                                         <first_name> and then:
+                                        – collapse any resulting double spaces,
+                                        – remove a space that appears immediately before a comma or period,
+                                        – trim leading/trailing spaces.
+                                3. Handle the <city> token
+                                    • If a non‑empty CITY was provided, replace every occurrence of
+                                        <city> (case‑sensitive) with that name.
+                                    • If CITY is missing or empty, delete every occurrence of
+                                        <city> and then:
                                         – collapse any resulting double spaces,
                                         – remove a space that appears immediately before a comma or period,
                                         – trim leading/trailing spaces.
@@ -1520,7 +1537,7 @@ class CallHandler:
             },
             {
                 "role" : "user",
-                "content" : f"""DIRECTION: {final_direction}\n FIRST_NAME: {name}\n\n{greetings}"""
+                "content" : f"""DIRECTION: {final_direction}\n FIRST_NAME: {name} \n CITY: {city}\n\n{greetings}"""
             }
         ])
         if greetings_from_ai:
@@ -1565,6 +1582,7 @@ class CallHandler:
         email = None
         phoneNumber = None
         description = None
+        address= None
         existing_appointment = None
         crmUserId = None
         isBoom = self.agents[call_sid]['isBoom']
@@ -1677,7 +1695,7 @@ class CallHandler:
                             fullname = last_name
                         
                         email = contact_info.get('email')
-                        
+                        address = contact_info.get('mailing_address', {})
                         # Get phone number from the lead
                         phone_numbers = contact_info.get('phone_numbers', {})
                         if phone_numbers.get('cell_phone'):
@@ -1991,7 +2009,13 @@ class CallHandler:
         
         greetings = await self.modify_greeting(fullname, greetings, call_sid, call_direction)
 
-        return {"greetings" : greetings , "email": email ,"phone": phoneNumber ,"description" : description, "fullname" : fullname, "existing_appointment": existing_appointment}
+        return {"greetings" : greetings ,
+                "address":address,
+                "email": email ,
+                "phone": phoneNumber ,
+                "description" : description,
+                "fullname" : fullname,
+                "existing_appointment": existing_appointment}
     
     async def enable_background_sound(self ,call_id, status = False):
         self.sessions[call_id]['background_sound'] = status
