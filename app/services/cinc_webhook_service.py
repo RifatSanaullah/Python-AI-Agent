@@ -40,7 +40,7 @@ async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_i
             connection_data = await backend.get_connection_details(payload)
             wait_time_minutes = connection_data.get('outbound_cadence_interval', 5)
             is_cadence_enabled = connection_data.get('is_cadence_enabled', False)
-            print(f"[CRON] Cadence enabled: {is_cadence_enabled}, Wait time: {wait_time_minutes} minutes and agent cell phone: {agent_cell_phone}")
+            print(f"[CRON] Cadence enabled: {is_cadence_enabled}, Wait time: {wait_time_minutes} minutes")
         except Exception as e:
             print(f"[CRON] Failed to get connection data: {e}")
         
