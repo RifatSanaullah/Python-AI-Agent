@@ -892,14 +892,16 @@ class CallHandler:
                
     async def stop_stream(self,call_id):
         # await asyncio.sleep(1)  # Wait for 1 second
+        await self.twilio_service.stop_audio_stream(self.agents[call_id]['websocket'], self.agents[call_id]['stream_sid'])
         self.agents[call_id]['ai_interrupt'] =  True
         self.ai_service.update_interrupt_status(call_id, True)
-        await self.twilio_service.stop_audio_stream(self.agents[call_id]['websocket'], self.agents[call_id]['stream_sid'])
+        self.agents[call_id]["synthesis_service"].update_tts_interrupt(True)
         self.agents[call_id]['background_sound'] = False
         return
 
     async def on_user_speech(self, call_id):
-        if call_id in self.agents and self.agents[call_id]['ai_speaking'] == True:
+        if call_id in self.agents and self.agents[call_id]['user_speaking'] is not True:
+            self.agents[call_id]['user_speaking'] = True
             await self.stop_stream(call_id)
             self.agents[call_id]['ai_speaking'] = False
         return
@@ -915,7 +917,8 @@ class CallHandler:
         if call_id not in self.agents or 'stream_sid' not in self.agents[call_id]:
             return
         self.agents[call_id]['ai_interrupt'] =  False
-        self.ai_service.update_interrupt_status(call_id, False)
+        self.agents[call_id]['user_speaking'] = False
+        # self.ai_service.update_interrupt_status(call_id, False)
 
         # filler_audio = self.filler_mgr.next()
         # await self.synthesize_response(filler_audio, call_id)
@@ -1043,7 +1046,7 @@ class CallHandler:
         if not session :
             return
         ai_interupted = session.get('ai_interrupt', False)
-        if not ai_interupted:
+        if not ai_interupted and self.agents[call_id]['user_speaking'] is not True:
             self.agents[call_id]['ai_speaking'] = True
             await self.twilio_service.send_audio_stream(session['websocket'], self.agents[call_id]['stream_sid'], audio_stream)
             await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
@@ -1360,6 +1363,7 @@ class CallHandler:
         )
         await self.agents[call_id]['synthesis_service'].update_call_id(call_id, self.queue_audio)
 
+        self.agents[call_id]['user_speaking'] = False
         self.agents[call_id]['ai_speaking'] = False
         self.agents[call_id]['websocket'] = None
         self.agents[call_id]['stream_sid'] = None

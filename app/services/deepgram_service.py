@@ -150,7 +150,7 @@ class DeepgramService:
     async def transmit_after_delay(self):
         try:
             if self.is_sentence_complete(self.complete_sentence):
-                await asyncio.sleep(0.6)  # Wait for more speech
+                await asyncio.sleep(0.7)  # Wait for more speech
             else:
                 await asyncio.sleep(1)  # Wait for more speech
             # with self.lock:
@@ -184,13 +184,8 @@ class DeepgramService:
             print("Transcript: ", sentence, "is_final: ", is_final)
             self.cancel_transmit()
             await self.on_start()
-            is_same = False
-            # if is_final is False:
-            #     is_same = await self.check_complete_sentence(sentence)
-            #     print("is_same: ", is_same, "skip_final: ", self.skip_final)
             if is_final and sentence.strip():
                 self.same_sentence = 0
-                print("sentence: ", sentence)
                 self.complete_sentence += ' ' + sentence.strip()
                 # with self.lock:
 
@@ -226,4 +221,8 @@ class DeepgramService:
         if self.dg_connection:
             await self.dg_connection.finish()
         if self.sp_dg_connection:
-            await self.sp_dg_connection.finish()
+            await self.sp_dg_connection.finish()   
+            
+    def update_tts_interrupt(self):
+        return
+    

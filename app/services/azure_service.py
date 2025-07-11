@@ -58,7 +58,9 @@ class AzureService:
     # async def flush_sp_ws(self):
     #     return
 
-
+    def update_tts_interrupt(self):
+        return
+    
     async def start_synthesiser(self):
         self.tts_request = speechsdk.SpeechSynthesisRequest(input_type=speechsdk.SpeechSynthesisRequestInputType.TextStream)
         self.tts_task = self.speech_synthesizer.speak_async(self.tts_request)

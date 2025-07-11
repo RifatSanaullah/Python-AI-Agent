@@ -41,6 +41,7 @@ class AIService:
         self.method_mappings = {}
         self.summary_queue = queue.Queue()
         self.ai_interrupt = {}
+        self.current_chunk = {}
         # Initialize service-specific components based on integration type
         
     # Function to add messages to a conversation
@@ -277,7 +278,7 @@ class AIService:
             # self.initial_message(self.conversations, conversation_id, knowledge)
             self.initial_message(self.system_convo, conversation_id, knowledge)
             self.conversations[conversation_id] = []
-            self.ai_interrupt[conversation_id] = False
+            self.ai_interrupt[conversation_id] = {}
             self.convo_index = len(self.system_convo[conversation_id])
             self.integrations[conversation_id] = {
                 "hubspot_connection_id": None,
@@ -406,12 +407,25 @@ class AIService:
     
     def update_interrupt_status(self, conversation_id, status: bool):
         """Update the AI interrupt status for a conversation"""
+        if conversation_id not in self.current_chunk:
+            self.current_chunk[conversation_id] = ""
+        else:
+            if conversation_id not in self.ai_interrupt:
+                self.ai_interrupt[conversation_id][self.current_chunk[conversation_id]] = {}
+            if self.ai_interrupt[conversation_id][self.current_chunk[conversation_id]] is not True:
+                self.ai_interrupt[conversation_id][self.current_chunk[conversation_id]] = status
+
+    def update_interrupt_details(self, conversation_id, chunk_id):
+        """Update the AI interrupt status for a conversation"""
+        self.current_chunk[conversation_id]= chunk_id
         if conversation_id not in self.ai_interrupt:
-            self.ai_interrupt[conversation_id] = False
-        self.ai_interrupt[conversation_id] = status
+            self.ai_interrupt[conversation_id]= {}
+        if chunk_id not in self.ai_interrupt:
+            self.ai_interrupt[conversation_id][chunk_id]= False
+        return
         
     def get_interrupt_status(self, conversation_id):
-        return self.ai_interrupt[conversation_id]
+        return self.ai_interrupt[conversation_id][self.current_chunk[conversation_id]]
 
     async def generate_response(self, conversation_id, message: str, synthesize_response,ai_client, flush_ws, streamingResponse):
 
@@ -453,7 +467,7 @@ class AIService:
                 max_tokens=150,
             )
 
-            print("Assistant: ", end="", flush=True)  # Print the assistant's response incrementally
+            # print("Assistant: ", end="", flush=True)  # Print the assistant's response incrementally
             # assistant_reply = response.choices[0].message.content
         
             # Process the response for speech synthesis
@@ -466,19 +480,17 @@ class AIService:
             post_prefix_mode = False
             post_prefix_text = ""
             for chunk in response:
-                if self.ai_interrupt[conversation_id]:
+                self.update_interrupt_details(conversation_id, chunk.id)
+                if self.ai_interrupt[conversation_id][chunk.id] is True:
                     print("AI interrupted, stopping response generation.")
                     break
                 if chunk.choices and chunk.choices[0].delta:
-                    if self.ai_interrupt[conversation_id]:
-                        print("AI interrupted, stopping response generation.")
-                        break
                     delta = chunk.choices[0].delta
                     if delta.content:
                         val = delta.content
                         chunk_reply += val  # Save the full assistant response
 
-                        print(val, end="", flush=True)  # Display the streamed text
+                        # print(val, end="", flush=True)  # Display the streamed text
                         assistant_reply += val  # Save the full assistant response
                         if streamingResponse:
                             if not post_prefix_mode:
@@ -489,14 +501,14 @@ class AIService:
                                     post_prefix_mode = True
                                     # Split at prefix
                                     post_prefix_text = prefix_buffer.split(end_call_prefix, 1)[1]
-                                    if post_prefix_text.strip() and not self.ai_interrupt[conversation_id]:
+                                    if post_prefix_text.strip() and self.ai_interrupt[conversation_id][chunk.id] is not True:
                                         await synthesize_response(post_prefix_text, conversation_id)
-                                elif not end_call_prefix.startswith(prefix_buffer) and not self.ai_interrupt[conversation_id]:
+                                elif not end_call_prefix.startswith(prefix_buffer) and self.ai_interrupt[conversation_id][chunk.id] is not True:
                                     # Prefix was never part of stream, flush buffer to TTS
                                     await synthesize_response(prefix_buffer, conversation_id)
 
                                     prefix_buffer = ""
-                            elif not self.ai_interrupt[conversation_id]:
+                            elif self.ai_interrupt[conversation_id][chunk.id] is not True:
                                     await synthesize_response(val, conversation_id)                 
 
                         # await chunker.add_stream_data(val)

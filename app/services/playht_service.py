@@ -6,7 +6,7 @@ from pyht import AsyncClient
 from pyht.client import TTSOptions , Format
 import os, re, time
 import aiohttp, websockets
-
+from app.helpers.utils import generate_conservative_random_tts_settings
 class AudioChunk:
     """Represents an audio chunk with metadata"""
     data: bytes
@@ -40,6 +40,8 @@ class PlayHT:
         self.is_connected = False
         self.audio_chunks=[]
         self.current_request_id=None
+        self.interrupt={}
+        self.ws_task=None
         # self.lock_exit = threading.Lock()
         # self.exit = False
     async def _get_websocket_url(self):
@@ -119,7 +121,7 @@ class PlayHT:
         # Start listening for audio data
 
     async def start_synthesiser(self):
-        asyncio.create_task(self._listen_for_audio())
+        self.ws_task = asyncio.create_task(self._listen_for_audio())
 
     async def stream_text_to_speech(self, text: str):
         try:
@@ -132,10 +134,15 @@ class PlayHT:
             raise
 
     async def send_stream_to_tts(self, text):
-            
-            self.options['text'] = text
-            message = self.options    
-            await self.websocket.send(json.dumps(message))
+                        
+            # self.options['text'] = text
+            # message = self.options    
+            # await self.websocket.send(json.dumps(message))
+
+            voice = self.options['voice']
+            self.options = generate_conservative_random_tts_settings(voice, text)
+            print("Text To speak: ",text)
+            await self.websocket.send(json.dumps(self.options))
 
     async def send_to_tts(self, text_chunk):
         
@@ -161,6 +168,9 @@ class PlayHT:
         # Keep any remaining text in the buffer for the next chunk
         self.full_text_buffer = self.full_text_buffer[self.last_split_index:].strip()
 
+    def update_tts_interrupt(self, status):
+        self.interrupt[self.current_request_id] = True
+
     async def _listen_for_audio(self):
             """Listen for incoming audio data from PlayHT"""
             try:
@@ -170,6 +180,8 @@ class PlayHT:
                         if isinstance(message, bytes):
                             # This is binary audio data
                             self.audio_chunks.append(message)
+                            if self.interrupt[self.current_request_id] is not True:
+                                await self.queue_audio(self.call_id, message)
 
                         else:
                             # This should be a text/JSON message
@@ -185,15 +197,14 @@ class PlayHT:
                                 if data.get("type") == "start":
                                     self.current_request_id = data.get("request_id")
                                     self.audio_chunks = []  # Reset for new request
-                                    print(f"Started processing request: {self.current_request_id}")
+                                    self.interrupt[self.current_request_id] = False
                                     
                                 elif data.get("type") == "end":
                                     # Final chunk with all audio combined
                                     if self.audio_chunks:
                                         combined_audio = b''.join(self.audio_chunks)
-                                        await self.queue_audio(self.call_id, combined_audio)
+                                        # await self.queue_audio(self.call_id, combined_audio)
                                     
-                                    print(f"Finished processing request: {self.current_request_id}")
                                     self.current_request_id = None
                                     
                                 elif data.get("status") and data.get("status") != 200:
@@ -223,6 +234,7 @@ class PlayHT:
         if self.websocket:
             await self.websocket.close()
             self.is_connected = False
+        self.ws_task = None
 
 
 # 'PlayDialog-http'

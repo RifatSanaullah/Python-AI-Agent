@@ -226,4 +226,21 @@ def fast_downsample_mulaw(mulaw_48k, target_rate=8000, source_rate=48000):
     mulaw_8k = linear_to_mulaw(linear_bytes)
     
     return mulaw_8k
+
+def generate_conservative_random_tts_settings(voice, text):
+    """Generate more conservative randomized settings for stable quality"""
+    return {
+        "voice": voice,
+        "text": text,
+        "output_format": "mulaw",
+        "sample_rate": 8000,
+        "speed": 1,
+        "temperature": round(random.uniform(0.65, 1.1), 2),  # 0.65 to 0.85
+        "top_p": round(random.uniform(0.90, 0.94), 2),  # 0.90 to 0.94
+        "repetition_penalty": round(random.uniform(4.00, 8.00), 2),  # 1.15 to 1.35
+        "length_penalty": round(random.uniform(1.1, 1.5), 2),  # 0.95 to 1.05
+        "voice_guidance": 0,
+        "style_guidance": random.randint(4, 8),  # 4 to 6
+        "text_guidance": round(random.uniform(0, 0.5), 2)
+    }
     
