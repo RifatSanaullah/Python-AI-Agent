@@ -365,23 +365,44 @@ class CallHandler:
                     if 'info' in summary and 'contact' in summary['info']:
                         cinc_data = summary.copy()
                         
-                        # Handle Description field by converting it to notes array
+                        # Handle Description and CallLogs fields by converting them to notes array
                         description = cinc_data.get('Description', '') or cinc_data.get('description', '')
+                        call_logs = cinc_data.get('CallLogs', '') or cinc_data.get('call_logs', '')
+                        
+                        # Remove these fields as they will be converted to notes
+                        cinc_data.pop('Description', None)
+                        cinc_data.pop('description', None)
+                        cinc_data.pop('CallLogs', None)
+                        cinc_data.pop('call_logs', None)
+                        
+                        # Create notes array with both description and call logs
+                        notes_array = []
+                        
+                        # Add description note if it exists
                         if description and description.strip():
-                            # Remove Description field as it will be converted to notes
-                            cinc_data.pop('Description', None)
-                            cinc_data.pop('description', None)
-                            
-                            # Add notes array with proper structure according to CINC API
-                            cinc_data["notes"] = [{
+                            notes_array.append({
                                 "content": description,
-                                "category": "general",  # Use "general" category for AI call summaries
+                                "category": "call",
                                 "is_pinned": True,
-                                "created_by": session_info.get("agent_id"),  # Optional: add agent ID if available
-                            }]
+                                "created_by": "Verbacall",
+                            })
+                        
+                        # Add call logs note if it exists
+                        if call_logs and call_logs.strip():
+                            notes_array.append({
+                                "content": call_logs,
+                                "category": "call",
+                                "is_pinned": True,
+                                "created_by": "Verbacall",
+                            })
+                        
+                        # Add notes array to CINC data if we have any notes
+                        if notes_array:
+                            cinc_data["notes"] = notes_array
                     else:
                         # If summary doesn't have CINC format, create basic structure
                         description = summary.get('Description', '') or summary.get('description', '')
+                        call_logs = summary.get('CallLogs', '') or summary.get('call_logs', '')
                         cinc_data = {
                             "info": {
                                 "contact": {
@@ -402,14 +423,30 @@ class CallHandler:
                             "timezone": summary.get('timezone', 'America/New_York'),
                         }
                         
-                        # Add notes array if description exists
+                        # Create notes array with both description and call logs
+                        notes_array = []
+                        
+                        # Add description note if it exists
                         if description and description.strip():
-                            cinc_data["notes"] = [{
+                            notes_array.append({
                                 "content": description,
-                                "category": "general",  # Use "general" category for AI call summaries
+                                "category": "call",
                                 "is_pinned": True,
-                                "created_by": session_info.get("agent_id"),  # Optional: add agent ID if available
-                            }]
+                                "created_by":"Verbacall",
+                            })
+                        
+                        # Add call logs note if it exists
+                        if call_logs and call_logs.strip():
+                            notes_array.append({
+                                "content": call_logs,
+                                "category": "call",
+                                "is_pinned": True,
+                                "created_by": "Verbacall",
+                            })
+                        
+                        # Add notes array to CINC data if we have any notes
+                        if notes_array:
+                            cinc_data["notes"] = notes_array
                 
                 # Ensure required email field is present
                 if not cinc_data or not cinc_data.get('info', {}).get('contact', {}).get('email'):
