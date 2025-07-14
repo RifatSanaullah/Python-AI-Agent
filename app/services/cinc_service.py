@@ -535,6 +535,35 @@ class CincService:
         
         return merged
 
+    # ==================== AGENT MANAGEMENT ====================
+
+    async def get_agent(
+        self, 
+        account_id: int, 
+        agent_id: str, 
+        connection_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Get agent information by agent ID."""
+        endpoint = f"/site/agents/{agent_id}"
+        
+        try:
+            response = await self._make_api_request(
+                "GET", endpoint, account_id, connection_id=connection_id
+            )
+            
+            # Extract agent from response body if wrapped
+            if isinstance(response, dict) and "body" in response:
+                return response["body"]
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Failed to get agent {agent_id}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to retrieve agent information: {str(e)}"
+            )
+
     # ==================== WEBHOOK MANAGEMENT ====================
 
     async def register_webhook(self, access_token: str, connection_id: str) -> Dict[str, Any]:
