@@ -108,7 +108,7 @@ class NangoService:
                     error_msg += f" - Response text: {e.response.text}"
                     logger.error(f"Nango API error text: {e.response.text}")
             logger.error(error_msg)
-            raise Exception(error_msg)
+            return None
         
     async def post_data(self, connection_id: str, endpoint: str, payload: Optional[Dict[str, Any]] = None, provider = 'salesforce', ispatch = False) -> Dict[str, Any]:
 
@@ -139,7 +139,7 @@ class NangoService:
                     error_msg += f" - Response text: {e.response.text}"
                     logger.error(f"Nango API error text: {e.response.text}")
             logger.error(error_msg)
-            raise Exception(error_msg)
+            return None
 
     async def patch_data(self, connection_id: str, endpoint: str, eventId: str, payload: Optional[Dict[str, Any]] = None, provider = 'salesforce') -> Dict[str, Any]:
 
@@ -168,7 +168,8 @@ class NangoService:
                 except:
                     error_msg += f" - Response text: {e.response.text}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            return None
+            # raise Exception(error_msg)
 
     async def delete_data(self, connection_id: str, endpoint: str, payload: Optional[Dict[str, Any]] = None, provider = 'salesforce') -> Dict[str, Any]:
 
@@ -196,4 +197,5 @@ class NangoService:
                     error_msg += f" - Response text: {e.response.text}"
                     logger.error(f"Nango API error text: {e.response.text}")
             logger.error(error_msg)
-            raise Exception(error_msg)
+            # raise Exception(error_msg)
+            return None

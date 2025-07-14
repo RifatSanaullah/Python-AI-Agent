@@ -4,7 +4,6 @@ import asyncio
 import logging
 import time, io
 import numpy as np
-from sqlalchemy.orm import Session
 from app.services.playht_service import PlayHT
 from app.services.murf_service import MurfAI
 from app.services.twilio_service import TwilioService
@@ -28,7 +27,6 @@ from app.services.outlook_calendar_service import OutlookCalendarService
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 from datetime import datetime, timezone
 from app.helpers.utils import get_interrupt_message, convert_mulaw_to_wav
-from app.config import settings
 from pydub import AudioSegment
 from threading import Timer
 import numpy as np
@@ -37,12 +35,9 @@ from io import BytesIO
 import numpy as np
 import soundfile as sf
 import time , re
-import traceback
-from app.utils.responseformat import hubspot_patch_format
 from app.utils.datetime_formatter import format_datetime_human_readable, format_datetime_range_human_readable, is_future_datetime, sort_and_group_appointments
 import json, asyncio
 from app.services.cinc_service import CincService # Import the new unified CincService class
-from typing import Dict, Any # Ensure Dict and Any are imported for type hinting
 
 from app.adapters.filler_manager import FillerManager
 from app.helpers.utils import estimate_speech_duration, fast_downsample_mulaw
@@ -982,20 +977,6 @@ class CallHandler:
         self.agents[call_id]['knowledge'] = None
         self.agents[call_id]['aiInstructions'] = None
         return data
-
-    def chunk_text(self, text, chunk_size):
-        chunks = []
-        words = text.split()
-        current_chunk = ''
-        for word in words:
-            if len(current_chunk) + len(word) <= chunk_size:
-                current_chunk += ' ' + word
-            else:
-                chunks.append(current_chunk.strip())
-                current_chunk = word
-        if current_chunk:
-            chunks.append(current_chunk.strip())
-        return chunks
     
     async def synthesize_response(self, text: str, call_id, is_greeting=False):
         session = self.agents.get(call_id)
@@ -1003,43 +984,17 @@ class CallHandler:
             return
         # start_time = datetime.now()
         model = self.agents[call_id]['TTS']['voice']['model']
-        # Select TTS provider based on environment variable
-        if self.agents[call_id]['TTS']['name'] == 'Deepgram':
-            audio_stream = await self.agents[call_id]['synthesis_service'].stream_text_to_speech(text)
-        # elif tts_provider == "playht":
-        #     audio_stream = await self.playht_service.stream_text_to_speech(text, call_id, self.queue_audio)
-        elif self.agents[call_id]['TTS']['name'] == 'Elevenlabs':
-            audio_stream = await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text, model, self.agents[call_id]['TTS']['model'])
-            # audio_stream = await self.sessions[call_id]["synthesis_service"].stream_text_to_speech(text, call_id, self.queue_audio)
-            
-            # await self.twilio_service.send_audio_stream(session['websocket'], call_id, audio_stream)
-            # await self.twilio_service.enqueue_audio(call_id, audio_stream, 'response_buffer')
-            # result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
-            # session['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
-            # session['wait_duration'] = result['duration']
-        elif self.agents[call_id]['TTS']['name'] == 'Microsoft Azure':
-            audio_stream = await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text)
 
-        elif self.agents[call_id]['TTS']['name'] == 'PlayHT':
+        if self.agents[call_id]['TTS']['name'] == 'Elevenlabs':
+            await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text, model, self.agents[call_id]['TTS']['model'])
+        else :
             if is_greeting is True:
-                audio_stream = await self.agents[call_id]['synthesis_service'].send_stream_to_tts(text)
-            else: 
-                audio_stream = await self.agents[call_id]['synthesis_service'].stream_text_to_speech(text)
-        elif self.agents[call_id]['TTS']['name'] == 'Claude':
-            audio_stream = await self.agents[call_id]['synthesis_service'].stream_text_to_speech(text)
-        else:
-            raise ValueError(f"Unsupported TTS provider: {settings.tts_provider}")
-
-        # end_time = datetime.now()
-        # duration = (end_time - start_time).total_seconds() * 1000  # Calculate duration in milliseconds
-
-        # result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
-        # session['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
-        # session['wait_duration'] = result['duration']
+                await self.agents[call_id]['synthesis_service'].send_stream_to_tts(text)
+            else:
+                await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text)
         session['last_user_audio_time'] = time.time()
         return
 
-        # print('audio streamed', session['last_user_audio_time'])
 
     async def queue_audio(self, call_id, audio_stream):
         session = self.agents.get(call_id)
@@ -1050,11 +1005,6 @@ class CallHandler:
             self.agents[call_id]['ai_speaking'] = True
             await self.twilio_service.send_audio_stream(session['websocket'], self.agents[call_id]['stream_sid'], audio_stream)
             await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
-            # result = await self.is_silent_or_empty_mulaw_numpy(audio_stream)
-            # self.sessions[call_id]['prev_wait_duration'] = session['prev_wait_duration'] + session['wait_duration']
-            # self.sessions[call_id]['wait_duration'] = result['duration']
-        # else:
-        #     self.sessions[call_id]['ai_interrupt'] = False
 
     def initialize_session_info(self, stream_sid, call_sid):
         # Initialize a session for this specific call
@@ -1072,45 +1022,6 @@ class CallHandler:
                 "last_user_audio_time" : None,
                 "call_initialized" : False
             }
-        # if self.agents[call_sid]['STT']['name'] == 'Deepgram':
-        #     self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
-        #     # self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
-        # elif self.agents[call_sid]['STT']['name'] == 'AssemblyAI':
-        #     self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(call_sid, stream_sid, TranscribeService)
-        #     # self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
-        # else :
-        #     self.sessions[stream_sid]["transcribe_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
-        #     # self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
-        
-
-
-        # if self.agents[call_sid]['TTS']['name'] == 'Deepgram':
-        #     if self.agents[call_sid]['STT']['name'] == 'Deepgram':
-        #         self.sessions[stream_sid]["synthesis_service"] = self.sessions[stream_sid]["transcribe_service"]
-        #     else :
-        #         self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
-        # elif self.agents[call_sid]['TTS']['name'] == 'Elevenlabs':
-        #     self.sessions[stream_sid]["synthesis_service"] = self.elevenlabs_service
-        # elif self.agents[call_sid]['TTS']['name'] == 'Microsoft Azure':
-        #     self.sessions[stream_sid]["synthesis_service"] = AzureService(self.loop)
-        # elif self.agents[call_sid]['TTS']['name'] == 'PlayHT':
-        #     self.sessions[stream_sid]["synthesis_service"] = PlayHT(self.loop)
-        # else:
-        #     self.sessions[stream_sid]["synthesis_service"] = self.initialize_transcriber(call_sid, stream_sid, DeepgramService)
-
-        # if stream_sid not in self.sessions:
-        #     self.sessions[stream_sid]={
-        #         "ai_speaking": False,
-        #         "ai_interrupt": False,
-        #         "wait_counter": 0,
-        #         "wait_duration": 12,
-        #         "prev_wait_duration": 0,
-        #         "stream_sid": stream_sid,
-        #         "background_sound": None,
-        #         "websocket" : None,
-        #         "call_sid" : call_sid,
-        #         "last_user_audio_time" : None
-        #     }
 
     def formatToSalesforceNumber(self, phone):
         digits = re.sub(r'\D', '', phone)
@@ -1322,13 +1233,13 @@ class CallHandler:
         self.ai_service.add_system_message(call_id, "assistant", greetings)
         
         if fullname is not None and fullname != "":
-            self.ai_service.add_message(call_id, "user", f"My Name is: {fullname}")
+            # self.ai_service.add_message(call_id, "user", f"My Name is: {fullname}", "temp")
             self.ai_service.add_system_message(call_id, "system", f"Don't forget. This is the Name of the user you will use in this conversation: {fullname}")
         if email is not None and email != "":
-            self.ai_service.add_message(call_id, "user", f"My Email Address is: {email}")
+            # self.ai_service.add_message(call_id, "user", f"My Email Address is: {email}", "temp")
             self.ai_service.add_system_message(call_id, "system", f"Don't forget. This is the email address of the user you will use in this conversation : {email}.")
         if phone is not None and phone != "":
-            self.ai_service.add_message(call_id, "user", f"My Phone Number is: {phone}")
+            # self.ai_service.add_message(call_id, "user", f"My Phone Number is: {phone}", "temp")
             self.ai_service.add_system_message(call_id, "system", f"Don't forget. This is the Phone Number of the user you will use in this conversation: {phone}")
         else:
             self.ai_service.add_system_message(call_id, "system", f"This is the Phone Number of the user you will use in this conversation and you can ask the user if he/she wants to change the phone number: {self.format_us_phone(self.agents[call_id]['leadbound'])}")
@@ -1377,17 +1288,14 @@ class CallHandler:
             await self.update_agent_data(call_id, data)
             self.agents[call_id]['call_sid'] = call_id
             response = self.twilio_service.initialize_call(call_id)
-        # self.transcribe_service.connect()  # Connect the transcriber service
-        # await self.initialize_session_info(call_id)
             return response
         else:
-            print(self.calls)
+
             u_call_id = self.calls[data['to']]
             del self.calls[data['to']]
             self.agents[u_call_id]['call_sid'] = call_id
             response = self.twilio_service.initialize_call(u_call_id)
-        # self.transcribe_service.connect()  # Connect the transcriber service
-        # await self.initialize_session_info(call_id)
+
             return response
 
     
@@ -1553,19 +1461,6 @@ class CallHandler:
         ])
         if greetings_from_ai:
             greetings = greetings_from_ai
-
-        print(f"Greeting after AI processing: {len(greetings) if greetings else 0} chars")
-
-        if call_sid in self.agents and "id" in self.agents[call_sid]:
-            agent_id = self.agents[call_sid]['id']
-            if agent_id == '17' or agent_id == 17:
-                greetings = f'Hi {name}, welcome back! This is Cindy — happy to assist you again with your senior living needs. How can I help you today?'
-                print("Using hardcoded greeting for agent 17")
-                return greetings
-            elif agent_id == '16' or agent_id == 16:
-                greetings = f'Hi {name}, welcome back! This is Sam — happy to assist you again with your real estate needs. How can I help you today?'
-                print("Using hardcoded greeting for agent 16")
-                return greetings
                 
         print(f"Final greeting length: {len(greetings) if greetings else 0}")
         print(f"=== END MODIFY_GREETING DEBUG ===")
@@ -1613,7 +1508,7 @@ class CallHandler:
             formatted_number = self.formatToSalesforceNumber(self.agents[call_sid]['leadbound'])
             result = await self.ai_service.salesforce_service.get_lead_by_phone(self.agents[call_sid]['integrations']['salesforce_connection_id'], formatted_number)
             
-            if len(result) > 0:
+            if result and len(result) > 0:
                 details = result[0]
                 fullname = details['LastName']
                 # if details['FirstName']:
@@ -1629,7 +1524,7 @@ class CallHandler:
 
             result = await self.ai_service.hubspot_service.get_contact_by_phone(self.agents[call_sid]['integrations']['hubspot_connection_id'], self.agents[call_sid]['leadbound'])
             
-            if 'results' in result and len(result['results']) > 0:
+            if result and 'results' in result and len(result['results']) > 0:
                 details = result['results'][0]['properties']
                 fullname = details['firstname'] + ' ' + details['lastname']
                 email = details['email']
@@ -1643,7 +1538,7 @@ class CallHandler:
 
             result = await self.ai_service.zoho_service.get_lead_by_phone(self.agents[call_sid]['integrations']['zoho_connection_id'], self.agents[call_sid]['leadbound'])
             
-            if len(result) > 0:
+            if result and len(result) > 0:
                 details = result[0]
                 fullname = details['Last_Name']
                 if details['First_Name'] and details['First_Name'] is not None:

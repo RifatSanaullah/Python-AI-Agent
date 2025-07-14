@@ -70,6 +70,9 @@ class MurfAI:
         except Exception as e:
             print(f"An error occurred: {e}")
             raise
+        
+    async def send_stream_to_tts(self, text):
+        await self.send_audio(text)
 
     async def send_audio(self, text):
         res = self.client.text_to_speech.stream(

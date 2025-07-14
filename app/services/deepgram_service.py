@@ -60,6 +60,9 @@ class DeepgramService:
         
     def is_sentence_complete(self, sentence):
         return bool(re.search(r'[.!?]$', sentence.strip()))
+    
+    async def send_stream_to_tts(self, text):
+        await self.sp_dg_connection.send_text(text)
 
     async def stream_text_to_speech(self, text: str):
         try:
@@ -72,7 +75,7 @@ class DeepgramService:
             # response = self.speaker.stream({"text": text}, options)
             # return response.stream.getbuffer()
 
-            await self.sp_dg_connection.send_text(text)
+            await self.send_stream_to_tts(text)
             # self._socket.send(json.dumps({"type": "Speak", "text": text}))
         except Exception as e:
             print(f"An error occurred: {e}")
@@ -113,7 +116,6 @@ class DeepgramService:
 
     async def on_sp_open(self, open, val):
         "Called when the connection has been established."
-        print("Speak Session ID:", open)
         self.sp_dg_connection.on(SpeakWebSocketEvents.AudioData, self.on_binary_data)
         self.sp_dg_connection.on(SpeakWebSocketEvents.Close, self.on_sp_close)
         self.sp_dg_connection.on(SpeakWebSocketEvents.Error, self.on_sp_error)
@@ -141,7 +143,6 @@ class DeepgramService:
     
     async def on_open(self, open, val):
         "Called when the connection has been established."
-        print("Session ID:", open)
         self.dg_connection.on(LiveTranscriptionEvents.Transcript, self.on_data)
         # self.dg_connection.on(LiveTranscriptionEvents.SpeechStarted, self.on_started)
         self.dg_connection.on(LiveTranscriptionEvents.Close, self.on_close)
