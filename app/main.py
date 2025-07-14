@@ -86,9 +86,10 @@ async def receive_webhook(
         if event_type == "lead.created":
             lead_info = data.get("lead", {})
             lead_id = lead_info.get("id")
+            created_by_agent_id = lead_info.get("created_by")
             if lead_id:
                 await cinc_webhook_service.fetch_and_trigger_outbound(
-                    account_id, lead_id, connection_id, call_handler.update_details
+                    account_id, lead_id, connection_id, call_handler.update_details, created_by_agent_id
                 )
         else:
             logger.info(f"ℹ️ Received event of type: {event_type}")
