@@ -38,7 +38,7 @@ class DeepgramService:
             model="nova-3",
             encoding='mulaw',
             sample_rate=8000,
-            smart_format=True,
+            # smart_format=True,
             # vad_events=True,
             utterance_end_ms="1000",
             interim_results=True,
@@ -151,7 +151,7 @@ class DeepgramService:
     async def transmit_after_delay(self):
         try:
             if self.is_sentence_complete(self.complete_sentence):
-                await asyncio.sleep(0.7)  # Wait for more speech
+                await asyncio.sleep(1)  # Wait for more speech
             else:
                 await asyncio.sleep(1)  # Wait for more speech
             # with self.lock:
@@ -168,7 +168,7 @@ class DeepgramService:
         if sentence.strip() == self.prev_sentence.strip():
             self.same_sentence += 1
             self.skip_final = False
-            if self.same_sentence > 3:
+            if self.same_sentence > 2:
                 self.skip_final = True
         else:
             self.prev_sentence = sentence.strip()

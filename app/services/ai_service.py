@@ -425,7 +425,10 @@ class AIService:
         return
         
     def get_interrupt_status(self, conversation_id):
-        return self.ai_interrupt[conversation_id][self.current_chunk[conversation_id]]
+        if self.current_chunk and self.ai_interrupt and  conversation_id in self.ai_interrupt and conversation_id in self.current_chunk:
+            return self.ai_interrupt[conversation_id][self.current_chunk[conversation_id]]
+        else:
+            return False
 
     async def generate_response(self, conversation_id, message: str, synthesize_response,ai_client, flush_ws, streamingResponse):
 

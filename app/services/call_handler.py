@@ -1000,7 +1000,8 @@ class CallHandler:
         session = self.agents.get(call_id)
         if not session :
             return
-        ai_interupted = session.get('ai_interrupt', False)
+        # ai_interupted = session.get('ai_interrupt', False)
+        ai_interupted = self.ai_service.get_interrupt_status(call_id)
         if not ai_interupted and self.agents[call_id]['user_speaking'] is not True:
             self.agents[call_id]['ai_speaking'] = True
             await self.twilio_service.send_audio_stream(session['websocket'], self.agents[call_id]['stream_sid'], audio_stream)
