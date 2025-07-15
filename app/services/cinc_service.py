@@ -715,13 +715,18 @@ class CincService:
         notes = await self.get_lead_notes(account_id, lead_id, connection_id=connection_id)
         
         # Create tasks to fetch all note contents concurrently
-        async def fetch_note_content_safe(note: Dict[str, Any]) -> Dict[str, Any]:
+        async def fetch_note_content_safe(note: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             note_id = note.get('id')
             if note_id:
                 try:
                     note_content = await self.get_lead_note_content(account_id, note_id, connection_id=connection_id)
                     # Use the full note content which includes the content field
                     if note_content:
+                        # Filter out notes that start with "Call Logs:"
+                        content = note_content.get('content', '')
+                        if content and content.strip().startswith('Call Logs:'):
+                            logger.info(f"Filtering out call logs note {note_id}")
+                            return None  # Filter out this note
                         return note_content
                     else:
                         return note  # Keep note without content
@@ -733,6 +738,9 @@ class CincService:
         
         # Execute all note content fetches concurrently
         tasks = [fetch_note_content_safe(note) for note in notes]
-        notes_with_content = await asyncio.gather(*tasks)
+        notes_with_content_raw = await asyncio.gather(*tasks)
+        
+        # Filter out None values (filtered call logs notes)
+        notes_with_content = [note for note in notes_with_content_raw if note is not None]
         
         return notes_with_content

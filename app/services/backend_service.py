@@ -184,7 +184,7 @@ class BackendHandler:
     
             response.raise_for_status()  # Raise an exception for HTTP errors
             result = response.json()
-            print(f"Successfully stored Nango connection in account: {result}")
+            print(f"Successfully Removed Nango connection: {result}")
             return result
     
         except httpx.HTTPStatusError as e:

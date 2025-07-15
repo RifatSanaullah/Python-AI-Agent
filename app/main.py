@@ -295,9 +295,11 @@ async def remove_session(request: Request, call_handler: CallHandler = Depends(g
     print("removing session", connection_id)
     if not connection_id:
         raise HTTPException(status_code=400, detail="Connection ID is required")
+    if not connection_type:
+        raise HTTPException(status_code=400, detail="Connection type is required")
     
     try:
-        await NangoService().delete_connect_session(connection_id)
+        await NangoService().delete_connect_session(connection_id, connection_type)
         response = await call_handler.backend_service.remove_nango_connection(
                     {
 

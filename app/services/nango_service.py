@@ -76,10 +76,27 @@ class NangoService:
             logger.error(error_msg)
             raise Exception(error_msg)
         
-    async def delete_connect_session(self, connectionId: str) -> Dict[str, Any]:
+    async def delete_connect_session(self, connectionId: str, provider_config_key: str) -> Dict[str, Any]:
         url = f"{self.base_url.rstrip('/')}/connection/{connectionId}"
-        response = requests.request("DELETE", url)
-        return response.text
+        params = {'provider_config_key': provider_config_key}
+        logger.info(f"Deleting Nango connection: {connectionId} for provider: {provider_config_key}")
+        try:
+            response = requests.delete(url, headers=self.headers, params=params)
+            response.raise_for_status()
+            result = response.json()
+            logger.info(f"Successfully deleted Nango connection {connectionId}")
+            return result
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Error deleting Nango connection: {str(e)}"
+            if hasattr(e, 'response') and e.response is not None:
+                error_msg += f" - Status code: {e.response.status_code}"
+                try:
+                    error_details = e.response.json()
+                    error_msg += f" - Response: {error_details}"
+                except json.JSONDecodeError:
+                    error_msg += f" - Response text: {e.response.text}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
     
     async def fetch_data(self, connection_id: str, endpoint: str, params: Optional[Dict[str, Any]] = None, provider = 'salesforce') -> Dict[str, Any]:
 
