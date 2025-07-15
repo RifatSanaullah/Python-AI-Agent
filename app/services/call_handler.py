@@ -444,51 +444,52 @@ class CallHandler:
                             cinc_data["notes"] = notes_array
                 
                 # Ensure required email field is present
-                if not cinc_data or not cinc_data.get('info', {}).get('contact', {}).get('email'):
-                    logging.warning("CINC integration skipped: No email address found in summary")
+
+                # Determine if we should create or update based on lead_id or email/phone search
+                should_create_new = True
+                existing_lead_id = lead_id
+                
+                # If no lead_id provided, try to find existing lead by phone or email
+                if not lead_id or lead_id == "null" or lead_id == "":
+                    try:
+                        email = cinc_data['info']['contact']['email']
+                        phone = cinc_data['info']['contact'].get('phone_numbers', {}).get('cell_phone', '')
+                        
+                        # Try to find existing lead by phone first (if phone available)
+                        if phone:
+                            existing_leads = await self.cinc_service.get_leads(
+                                account_id=account_id,
+                                connection_id=cinc_connection_id,
+                                phone=phone
+                            )
+                            if existing_leads and isinstance(existing_leads, dict) and existing_leads.get('leads'):
+                                existing_lead_id = existing_leads['leads'][0]['id']
+                                should_create_new = False
+                                logging.info(f"Found existing CINC lead by phone: {existing_lead_id}")
+                                
+                        # If not found by phone, try by email (CINC API may not support email search directly)
+                        # For now, we'll proceed with create if not found by phone
+                                
+                    except Exception as search_error:
+                        logging.warning(f"Error searching for existing CINC lead: {search_error}")
                 else:
-                    # Determine if we should create or update based on lead_id or email/phone search
-                    should_create_new = True
-                    existing_lead_id = lead_id
-                    
-                    # If no lead_id provided, try to find existing lead by phone or email
-                    if not lead_id or lead_id == "null" or lead_id == "":
-                        try:
-                            email = cinc_data['info']['contact']['email']
-                            phone = cinc_data['info']['contact'].get('phone_numbers', {}).get('cell_phone', '')
-                            
-                            # Try to find existing lead by phone first (if phone available)
-                            if phone:
-                                existing_leads = await self.cinc_service.get_leads(
-                                    account_id=account_id,
-                                    connection_id=cinc_connection_id,
-                                    phone=phone
-                                )
-                                if existing_leads and isinstance(existing_leads, dict) and existing_leads.get('leads'):
-                                    existing_lead_id = existing_leads['leads'][0]['id']
-                                    should_create_new = False
-                                    logging.info(f"Found existing CINC lead by phone: {existing_lead_id}")
-                                    
-                            # If not found by phone, try by email (CINC API may not support email search directly)
-                            # For now, we'll proceed with create if not found by phone
-                                    
-                        except Exception as search_error:
-                            logging.warning(f"Error searching for existing CINC lead: {search_error}")
+                    should_create_new = False  # We have a lead_id, so update existing
+                
+                if not should_create_new and existing_lead_id:
+                    # Update existing lead
+                    logging.info(f"Updating CINC lead {existing_lead_id}")
+                    result = await self.cinc_service.update_lead(
+                        account_id=account_id,
+                        lead_id=existing_lead_id,
+                        lead_data=cinc_data,
+                        connection_id=cinc_connection_id
+                    )
+                    logging.info(f"CINC lead updated successfully: {result}")
+                else:
+                    # Create new lead
+                    if not cinc_data or not cinc_data.get('info', {}).get('contact', {}).get('email'):
+                        logging.warning("CINC integration skipped: No email address found in summary")
                     else:
-                        should_create_new = False  # We have a lead_id, so update existing
-                    
-                    if not should_create_new and existing_lead_id:
-                        # Update existing lead
-                        logging.info(f"Updating CINC lead {existing_lead_id}")
-                        result = await self.cinc_service.update_lead(
-                            account_id=account_id,
-                            lead_id=existing_lead_id,
-                            lead_data=cinc_data,
-                            connection_id=cinc_connection_id
-                        )
-                        logging.info(f"CINC lead updated successfully: {result}")
-                    else:
-                        # Create new lead
                         logging.info("Creating new CINC lead")
                         result = await self.cinc_service.create_lead(
                             account_id=account_id,
@@ -502,7 +503,7 @@ class CallHandler:
                             new_lead_id = result.get('body', {}).get('id') or result.get('id')
                             if new_lead_id:
                                 logging.info(f"New CINC lead ID: {new_lead_id}")
-                                
+                            
             except Exception as e:
                 logging.error(f"Error in CINC integration for account {account_id}: {str(e)}")
                 # Continue with other integrations even if CINC fails
