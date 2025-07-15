@@ -126,6 +126,10 @@ class AzureService:
                     if cancellation_details.reason == speechsdk.CancellationReason.Error:
                         print("Error details: {}".format(cancellation_details.error_details))
                 return
+    
+    async def send_stream_to_tts(self, text):
+        self.tts_request.input_stream.write(text)
+        await self.flush_sp_ws()
 
     async def stream_text_to_speech(self, text: str):
         # return self.tts_request.input_stream.write(text)
@@ -159,8 +163,7 @@ class AzureService:
 
                         # If we found any complete sentences, process them
                         for sentence_to_speak in sentences_to_process:
-                            self.tts_request.input_stream.write(sentence_to_speak)
-                            await self.flush_sp_ws()
+                            await self.send_stream_to_tts(sentence_to_speak)
                         # await self._synthesize_text_chunk(text_to_synthesize, self.current_synth_id)
                             # self.full_text_buffer = ''
                             

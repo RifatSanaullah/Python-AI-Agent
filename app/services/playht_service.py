@@ -1,5 +1,6 @@
 import asyncio
 import base64, json  # Add this import
+from app.services.ai_service import AIService
 
 from app.config import settings
 from pyht import AsyncClient
@@ -34,7 +35,7 @@ class PlayHT:
             "X-User-ID": settings.playht_id,
             "Content-Type": "application/json"
         }
-
+        self.ai_service = AIService()
         self.websocket = False
         self.websocket_url = ""
         self.is_connected = False
@@ -128,10 +129,12 @@ class PlayHT:
             # do something with the audio chunk
             await self.send_to_tts(text)
 
-
         except Exception as e:
             print(f"An error occurred on playht: {e}")
-            raise
+            await self._get_websocket_url()
+            self.websocket = await websockets.connect(self.websocket_url)
+            await self.send_to_tts(text)
+
 
     async def send_stream_to_tts(self, text):
                         
@@ -180,7 +183,7 @@ class PlayHT:
                         if isinstance(message, bytes):
                             # This is binary audio data
                             self.audio_chunks.append(message)
-                            if self.interrupt[self.current_request_id] is not True:
+                            if self.interrupt[self.current_request_id] is not True and self.ai_service.get_interrupt_status(self.call_id) is not True:
                                 await self.queue_audio(self.call_id, message)
 
                         else:
