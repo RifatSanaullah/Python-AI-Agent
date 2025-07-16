@@ -93,8 +93,10 @@ class ElevenLabsService:
                 "text": text,
                 "flush" : True,
                 "voice_settings": {
-                    "stability": 0.5,
-                    "similarity_boost": 0.75
+                    "stability": 0.4,
+                    "similarity_boost": 0.7,
+                    "speed" : 0.99,
+                    "style": 0.2
                 },
                 "output_format": "ulaw_8000"
             }))
