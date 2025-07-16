@@ -959,8 +959,8 @@ class CallHandler:
         # self.sessions[call_id]['prev_wait_duration'] = 0
         # self.sessions[call_id]['wait_duration'] = 0
         streamingResponse = True
-        if self.agents[call_id]['TTS']['name'] == 'Elevenlabs':
-            streamingResponse = False
+        # if self.agents[call_id]['TTS']['name'] == 'Elevenlabs':
+        #     streamingResponse = False
         response = await self.ai_service.generate_response(call_id, transcript, self.synthesize_response, self.agents[call_id]['aiClient'], self.agents[call_id]['synthesis_service'].flush_sp_ws, streamingResponse)
         if 'End Call Message' in response  or  self.contains_any_word(response):
             self.agents[call_id]['end_call'] = True
