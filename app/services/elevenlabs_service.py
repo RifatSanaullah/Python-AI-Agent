@@ -1,6 +1,7 @@
 from elevenlabs.client import ElevenLabs
 from app.config import settings
 import websockets, asyncio, json, re, base64
+from app.services.interval_runner import IntervalRunner
 class ElevenLabsService:
     def __init__(self, loop=None):
         """Initialize the ElevenLabs service with API key from settings"""
@@ -16,6 +17,7 @@ class ElevenLabsService:
         self.websocket= None
         self.ws_task= None
         self.audio_chunks=[]
+        self.runner = IntervalRunner()
 
     async def update_call_id(self, call_id, queue_audio=None):
         self.queue_audio = queue_audio
@@ -119,6 +121,7 @@ class ElevenLabsService:
         self.is_connected = True
         print("Connected to Elevenlabs WebSocket")
         await self.start_synthesiser()
+        self.runner.start_interval(self.call_id, 10, self.flush_sp_ws)
         # Start listening for audio data
 
     async def start_synthesiser(self):
@@ -168,6 +171,7 @@ class ElevenLabsService:
 
     async def disconnect(self):
         """Flush the Elevenlabs websocket connection"""
+        self.runner.stop_interval(self.call_id)  # Stop it manually
         if self.websocket:
             await self.websocket.close()
             self.is_connected = False
