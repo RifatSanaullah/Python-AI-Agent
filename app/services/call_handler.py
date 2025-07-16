@@ -70,7 +70,7 @@ class CallHandler:
         self.sessions = {}
         self.agents = {}
         self.completed_sessions = {}
-        self.timer = None
+        self.timer = {}
         self.loop= asyncio.get_running_loop()
         self.prefetched_details = {}
         self.calls = {}
@@ -330,6 +330,7 @@ class CallHandler:
                     
             del self.sessions[session['stream_sid']]
             del self.agents[call_id]
+            self.clear_timer(call_id)
             try:
                 await websocket.close()
             except Exception as e:
@@ -973,32 +974,32 @@ class CallHandler:
             # wait_time = self.sessions[call_id]['wait_duration'] + self.sessions[call_id]['prev_wait_duration']
             # wait_time = 15
             print("wait_time: ", wait_time)
-            self.clear_timer()
-            self.timer = Timer(wait_time, self.twilio_service.hangup_call, args=[self.agents[call_id]['call_sid']])
-            self.timer.start()
+            self.clear_timer(call_id)
+            self.timer[call_id] = Timer(wait_time, self.twilio_service.hangup_call, args=[self.agents[call_id]['call_sid']])
+            self.timer[call_id].start()
             
         if 'Routing Message' in response or 'I am forwarding the call' in response:
             response = response.replace('Routing Message', '')
             # Schedule the call to end after 2 seconds
-            self.clear_timer()
-            self.timer = Timer(13, self.twilio_service.redirect_call,
+            self.clear_timer(call_id)
+            self.timer[call_id] = Timer(13, self.twilio_service.redirect_call,
                           args=[
                             self.sessions[call_id]['call_sid'],
                             self.agents[self.sessions[call_id]['call_sid']]['routingInfo']['routingNumber'],
                             self.call_routed
                             ]
                         )
-            self.timer.start()
+            self.timer[call_id].start()
         self.sessions[call_id]['last_transcript_time'] = None
         # self.sessions[call_id]['prev_wait_duration'] = 0
         # self.sessions[call_id]['wait_duration'] = 0
         print(f"Response: {response}")
         # await self.synthesize_response(response, call_id)
 
-    def clear_timer(self):
-        if(self.timer):
-            self.timer.cancel()
-            self.timer = None
+    def clear_timer(self,call_id):
+        if(self.timer[call_id]):
+            self.timer[call_id].cancel()
+            self.timer[call_id] = None
 
     def call_routed(self, call_id):
         self.agents[call_id]['route_call'] = True
@@ -1399,7 +1400,7 @@ class CallHandler:
         if (self.agents[call_id]['isAvailable'] == False):
             await self.synthesize_response('Currenty we are not available, Please contact us in our available time', stream_sid)
             # Schedule the call to end after 2 seconds
-            self.clear_timer()
+            self.clear_timer(call_id)
             self.timer = Timer(5, self.twilio_service.hangup_call, args=[self.agents[call_id]['call_sid']])
             self.timer.start()
             return
@@ -1982,10 +1983,12 @@ class CallHandler:
         resolution_status= 'RESOLVED'
         agent_id = None
         # self.sessions[call_sid]['stream_sid'] = stream_sid
-        if call_sid in self.agents and "id" in self.agents[call_sid]:
+    
+
+        if self.agents and  call_sid in self.agents and "id" in self.agents[call_sid]:
             agent_id = self.agents[call_sid]['id']
 
-        if call_sid in self.agents and "route_call" in self.agents[call_sid] and self.agents[call_sid]['route_call'] == True:
+        if self.agents and call_sid in self.agents and "route_call" in self.agents[call_sid] and self.agents[call_sid]['route_call'] == True:
             resolution_status = 'ROUTED'
             
         data= {
@@ -1997,11 +2000,12 @@ class CallHandler:
             "timestamp" : time_stamp,
             "resolution_status": resolution_status
         }
-        
-            
-        await self.backend_service.update_call_info(data)
+        try:
+            await self.backend_service.update_call_info(data)
+        except Exception as e:
+                print(f"Error Updating db on complete: {str(e)}")
 
-        if call_status in ["failed", "busy"]:
+        if call_status in ["failed", "busy", "no-answer", "canceled"]:
             # Ensure the call is fully disconnected
             self.twilio_service.client.calls(call_sid).update(status='completed')
             print(f"Call {call_sid} cleaned up.")
@@ -2023,7 +2027,7 @@ class CallHandler:
         resolution_status= 'FAILED'
         agent_id = None
 
-        if call_sid in self.agents and "id" in self.agents[call_sid]:
+        if self.agents and call_sid in self.agents and "id" in self.agents[call_sid]:
             agent_id = self.agents[call_sid]['id']
 
         data= {
@@ -2040,7 +2044,10 @@ class CallHandler:
         self.twilio_service.client.calls(call_sid).update(status='completed')
         print(f"Call {call_sid} cleaned up.")
 
-        await self.backend_service.update_call_info(data)
+        try:
+            await self.backend_service.update_call_info(data)
+        except Exception as e:
+                print(f"Error Updating db on complete: {str(e)}")
         
     async def get_nango_session_token(self, user_id, allowed_integrations=None):
         """Get a Nango session token for the frontend to use when connecting to third-party services
