@@ -142,8 +142,9 @@ class PlayHT:
             # message = self.options    
             # await self.websocket.send(json.dumps(message))
 
-            voice = self.options['voice']
-            self.options = generate_conservative_random_tts_settings(voice, text)
+            # voice = self.options['voice']
+            # self.options = generate_conservative_random_tts_settings(voice, text)
+
             print("Text To speak: ",text)
             await self.websocket.send(json.dumps(self.options))
 
