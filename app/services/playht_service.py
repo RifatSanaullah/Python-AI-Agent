@@ -138,7 +138,7 @@ class PlayHT:
 
     async def send_stream_to_tts(self, text):
                         
-            # self.options['text'] = text
+            self.options['text'] = text
             # message = self.options    
             # await self.websocket.send(json.dumps(message))
 
