@@ -1367,7 +1367,7 @@ class CallHandler:
             await self.agents[call_id]['synthesis_service'].establish_sp_connection(self.agents[call_id]['TTS']['voice']['model'])
 
         elif self.agents[call_id]['TTS']['name'] == 'Elevenlabs':
-            await self.agents[call_id]['synthesis_service'].establish_connection( self.agents[call_id]['TTS']['voice']['model'], self.agents[call_id]['TTS']['model'])
+            await self.agents[call_id]['synthesis_service'].establish_connection(self.agents[call_id]['TTS']['voice'], self.agents[call_id]['TTS']['model'])
         elif self.agents[call_id]['TTS']['name'] == 'Microsoft Azure':
             await self.agents[call_id]['synthesis_service'].establish_connection(self.agents[call_id]['TTS']['voice']['model'])
         elif self.agents[call_id]['TTS']['name'] == 'PlayHT':

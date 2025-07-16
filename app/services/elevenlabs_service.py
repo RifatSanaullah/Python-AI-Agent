@@ -10,6 +10,7 @@ class ElevenLabsService:
         # self.voice_id = settings.elevenlabs_voice_id
         self.queue_audio = {}
         self.text_queue = asyncio.Queue()
+        self.voice_id = None
         self.voice = None
         self.model = None
         self.full_text_buffer = ''
@@ -90,15 +91,14 @@ class ElevenLabsService:
 
     async def stream_to_tts_ws(self, text):
         print("Text To speak: ",text)
-
         await self.websocket.send(json.dumps({
                 "text": text,
                 "flush" : True,
                 "voice_settings": {
-                    "stability": 0.4,
-                    "similarity_boost": 0.7,
-                    "speed" : 0.99,
-                    "style": 0.2
+                    "stability": self.voice.get('temperature', 0.4),
+                    "similarity_boost": self.voice.get('similarity', 0.7),
+                    "speed" : self.voice.get('speed', 0.99),
+                    "style": self.voice.get('style_guidance', 0.2)
                 },
                 "output_format": "ulaw_8000"
             }))
@@ -106,15 +106,16 @@ class ElevenLabsService:
     def update_tts_interrupt(self, status):
         pass
 
-    async def establish_connection(self, voice_id, model_id):
+    async def establish_connection(self, voice, model_id):
         """
         Establish a connection to the ElevenLabs API.
         This is a placeholder method as the ElevenLabs client handles connections internally.
         """
-        self.voice = voice_id
+        self.voice_id = voice['model']
+        self.voice = voice
         self.model = model_id
         # The ElevenLabs client manages its own connection, so no explicit connection setup is needed.
-        url =f"wss://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream-input?model_id={model_id}&output_format=ulaw_8000"
+        url =f"wss://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}/stream-input?model_id={model_id}&output_format=ulaw_8000"
         headers = {
         "xi-api-key": settings.elevenlabs_apikey,
         "accept": "application/json",
