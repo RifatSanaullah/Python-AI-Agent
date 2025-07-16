@@ -997,7 +997,7 @@ class CallHandler:
         # await self.synthesize_response(response, call_id)
 
     def clear_timer(self,call_id):
-        if(self.timer[call_id]):
+        if call_id in self.timer:
             self.timer[call_id].cancel()
             self.timer[call_id] = None
 
@@ -1025,7 +1025,7 @@ class CallHandler:
         model = self.agents[call_id]['TTS']['voice']['model']
 
         if self.agents[call_id]['TTS']['name'] == 'Elevenlabs':
-            await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text, model, self.agents[call_id]['TTS']['model'])
+            await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text)
         else :
             if is_greeting is True:
                 await self.agents[call_id]['synthesis_service'].send_stream_to_tts(text)
@@ -1223,7 +1223,7 @@ class CallHandler:
                 self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(call_id, DeepgramService)
 
         elif self.agents[call_id]['TTS']['name'] == 'Elevenlabs':
-            self.agents[call_id]["synthesis_service"] = self.elevenlabs_service
+            self.agents[call_id]["synthesis_service"] = ElevenLabsService(self.loop)
         elif self.agents[call_id]['TTS']['name'] == 'Microsoft Azure':
             self.agents[call_id]["synthesis_service"] = AzureService(self.loop)
         elif self.agents[call_id]['TTS']['name'] == 'PlayHT':
@@ -1401,8 +1401,8 @@ class CallHandler:
             await self.synthesize_response('Currenty we are not available, Please contact us in our available time', stream_sid)
             # Schedule the call to end after 2 seconds
             self.clear_timer(call_id)
-            self.timer = Timer(5, self.twilio_service.hangup_call, args=[self.agents[call_id]['call_sid']])
-            self.timer.start()
+            self.timer[call_id] = Timer(5, self.twilio_service.hangup_call, args=[self.agents[call_id]['call_sid']])
+            self.timer[call_id].start()
             return
 
         # await self.synthesize_response("This call may be monitored or recorded for quality and training purposes." , stream_sid)

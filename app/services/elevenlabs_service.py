@@ -2,22 +2,22 @@ from elevenlabs.client import ElevenLabs
 from app.config import settings
 import websockets, asyncio, json
 class ElevenLabsService:
-    def __init__(self):
+    def __init__(self, loop=None):
         """Initialize the ElevenLabs service with API key from settings"""
         self.client = ElevenLabs(api_key=settings.elevenlabs_apikey)
         self.ws = None
         # self.voice_id = settings.elevenlabs_voice_id
         self.queue_audio = {}
         self.text_queue = asyncio.Queue()
+        self.voice = None
+        self.model = None
 
 
     async def update_call_id(self, call_id, queue_audio=None):
-        self.queue_audio = {
-                'call_id': call_id,
-                "queue_audio": queue_audio
-            }
+        self.queue_audio = queue_audio
+        self.call_id = call_id
 
-    async def stream_text_to_speech(self, text: str, voice: str, model: str):
+    async def stream_text_to_speech(self, text: str):
         """
         Convert text to speech using ElevenLabs API and return complete μ-law encoded audio.
         
@@ -33,8 +33,8 @@ class ElevenLabsService:
             # Get audio data from ElevenLabs in μ-law format
             audio_generator = self.client.text_to_speech.stream(
                 text=text,
-                voice_id=voice,
-                model_id=model,
+                voice_id=self.voice,
+                model_id=self.model,
                 output_format="ulaw_8000"
             )
             
@@ -42,7 +42,7 @@ class ElevenLabsService:
             audio_chunks = []
             for chunk in audio_generator:
                 if chunk:
-                    await queue_audio(call_id,chunk)
+                    await self.queue_audio(self.call_id, chunk)
                     audio_chunks.append(chunk)
             
             mulaw_audio = b''.join(audio_chunks)
@@ -51,6 +51,11 @@ class ElevenLabsService:
         except Exception as e:
             print(f"ElevenLabs error: {e}")
             raise
+
+    async def establish_connection(self, voice: str, model: str):
+
+        self.voice = voice
+        self.model = model
 
     # async def stream_text_to_speech(self, text, call_id, queue_audio=None):
     #     self.queue_audio = {
