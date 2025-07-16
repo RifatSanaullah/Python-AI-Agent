@@ -102,6 +102,9 @@ class ElevenLabsService:
                 },
                 "output_format": "ulaw_8000"
             }))
+        
+    def update_tts_interrupt(self, status):
+        pass
 
     async def establish_connection(self, voice_id, model_id):
         """
