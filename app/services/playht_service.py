@@ -109,7 +109,7 @@ class PlayHT:
                         "sample_rate": 8000,
                         "output_format": "mulaw",
                         "speed": 1,
-                        "temperature": 1.02,
+                        "temperature": 1,
                         "voice_conditioning_seconds" : 20,
                     }
                     
