@@ -135,24 +135,17 @@ class ElevenLabsService:
         while True:
             try:
                 message = await self.websocket.recv()
-
-                # if isinstance(message, bytes):
-                #         message_str = message.decode('utf-8')
-                # else:
-                #         message_str = message
                 data = json.loads(message)
                 if data.get("audio"):
                     # yield base64.b64decode(data["audio"])
                     await self.queue_audio(self.call_id, base64.b64decode(data["audio"]))
-                    self.audio_chunks.append(base64.b64decode(data["audio"]))
+                    # self.audio_chunks.append(base64.b64decode(data["audio"]))
 
                 if data.get('isFinal'):
-                    combined_audio = b''.join(self.audio_chunks)
+                    # combined_audio = b''.join(self.audio_chunks)
                     # await self.queue_audio(self.call_id, combined_audio)
 
                     print("[✓] Done speaking current sentence.")
-                # if isinstance(msg, bytes):
-                    
 
             except websockets.exceptions.ConnectionClosed:
                 print("Elevenlabs WebSocket connection closed")

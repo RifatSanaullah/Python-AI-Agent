@@ -198,6 +198,7 @@ class AIService:
         conversations[conversation_id] = [
 
                 {"role": "system", "content": f"Always ask only one question at a time. After each response, follow up with a single question. For example, if you need contact information, ask for the name first, then phone number, then email—one at a time. Do not ask for multiple pieces of information or offer multiple options in one message. Always provide responses that are suitable for phone conversations. Avoid lengthy explanations and special character (*), long lists, or complex details. Current Date is: {date.today()} if you have been asked for any appointment or booking dates do not give the dates which has already been passed. Limit responses to key points and do not rush to complete the conversation. Keep responses under 3 sentences to ensure they are concise and easy to digest."},
+                # {"role": "system", "content": self.generate_emotion_tag_prompt(date.today().isoformat())},
                  # {"role": "system", "content": "Whenever you get any answer and if you left any query. Ask instantly don't wait for querying from user."},
                 # {"role": "system", "content": "Before Ending the call you have to reclarify all the information you gather with user"},
                 # {"role": "system", "content": f"Current Date is: {date.today()}. If you gather any input in tomorrow or yesterday then response any date information in this format : 01 january 1970 with the time and if input only time then use use the time with current date"},
@@ -277,6 +278,8 @@ class AIService:
             knowledge = await get_agent_knowledge(conversation_id)
             # self.initial_message(self.conversations, conversation_id, knowledge)
             self.initial_message(self.system_convo, conversation_id, knowledge)
+            # self.add_system_message(conversation_id, "system" , self.generate_emotion_tag_prompt())
+
             self.conversations[conversation_id] = []
             self.ai_interrupt[conversation_id] = {}
             self.convo_index = len(self.system_convo[conversation_id])
@@ -449,8 +452,17 @@ class AIService:
         
         # Add user input to conversation history
         self.add_message(conversation_id, "user", message)
-        self.add_system_message(conversation_id, "system" , "You respond like a natural human voice, using pauses and hesitations.")
-        self.add_system_message(conversation_id, "user" , self.generate_emotion_tag_prompt(message))
+
+        newPrompt = [
+            {
+                "role" : "system",
+                "content" : "You respond like a natural human voice, using pauses and hesitations."
+            },
+            {
+                "role" : "user",
+                "content" : self.generate_emotion_tag_prompt(message)
+            }
+        ]
         # # self.add_system_message(conversation_id, "system", f"""
         # #             You will respond to the user's question in SSML format with emotional expression.
         # #             Rules:
@@ -460,7 +472,6 @@ class AIService:
         # #             - Don't explain anything, just return the SSML.
         # #             - Keep it short and emotionally expressive.
         # # """)
-        self.add_system_message(conversation_id, "user", message)
         # Check if this conversation has a Zoho or HubSpot connection ID
 
         assistant_reply = ''
@@ -489,10 +500,11 @@ class AIService:
         if ai_client['name'] == 'OpenAI':
             response = openai.chat.completions.create(
                 model=ai_client['model'],
-                messages=self.system_convo[conversation_id],
+                messages=self.system_convo[conversation_id] + newPrompt,
                 stream=True,
                 max_tokens=150,
             )
+            self.add_system_message(conversation_id, "user", message)
 
             # print("Assistant: ", end="", flush=True)  # Print the assistant's response incrementally
             # assistant_reply = response.choices[0].message.content
