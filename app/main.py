@@ -383,5 +383,53 @@ async def disconnect_cinc_integration(account_id: str, cinc_service: CincService
         logger.error(f"Error disconnecting CINC integration for account {account_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to disconnect integration.")
      
+# ==================== OUTBOUND CADENCE ENDPOINTS ====================
+
+@app.get("/api/leads/check-phone-status/{phone}")
+async def check_lead_phone_status(
+    phone: str,
+    account_id: int,
+    connection_id: Optional[str] = None,
+    cinc_service: CincService = Depends(get_cinc_service)
+):
+    """
+    Get lead pipeline info by phone number for outbound cadence checking.
+    """
+    try:
+        logger.info(f"Checking phone status for {phone} with account_id {account_id}")
+        
+        # Get pipeline info by phone number
+        pipeline_info = await cinc_service.get_pipeline_by_phone(account_id, phone, connection_id)
+        
+        response_data = {
+            "phone": phone,
+            "pipeline_info": pipeline_info,
+            "account_id": account_id,
+            "status": "success"
+        }
+        
+        logger.info(f"Returning pipeline info for {phone}: {pipeline_info is not None}")
+        return JSONResponse(
+            status_code=200,
+            content=response_data,
+            headers={"Connection": "close"}
+        )
+        
+    except Exception as e:
+        logger.error(f"Error fetching pipeline info for phone {phone}: {e}")
+        error_response = {
+            "phone": phone,
+            "pipeline_info": None,
+            "error": str(e),
+            "account_id": account_id,
+            "status": "error"
+        }
+        return JSONResponse(
+            status_code=500,
+            content=error_response,
+            headers={"Connection": "close"}
+        )
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -609,6 +609,52 @@ class CincService:
 
     # ==================== UTILITY METHODS ====================
 
+    async def get_pipeline_by_phone(
+        self, 
+        account_id: int, 
+        phone: str, 
+        connection_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Get lead pipeline info by phone number - simple and fast."""
+        try:
+            # Clean phone number
+            clean_phone = ''.join(filter(str.isdigit, phone))
+            
+            if len(clean_phone) == 11 and clean_phone.startswith('1'):
+                clean_phone = clean_phone[1:]  # Remove leading '1'
+            elif len(clean_phone) == 10:
+                pass  # Already in correct format
+            else:
+                logger.warning(f"Invalid phone number format: {phone}, using as-is")
+                clean_phone = phone
+            
+            logger.info(f"Fetching pipeline for phone: {clean_phone}")
+            
+            # Get leads by phone
+            response = await self.get_leads(account_id, connection_id, phone=clean_phone)
+            
+            # Extract leads array from response
+            leads_list = []
+            if isinstance(response, dict) and "leads" in response:
+                leads_list = response["leads"]
+            elif isinstance(response, list):
+                leads_list = response
+            
+            if not leads_list or len(leads_list) == 0:
+                logger.info(f"No leads found for phone: {clean_phone}")
+                return None
+            
+            # Get the most recent lead and return just the pipeline
+            lead = leads_list[-1]
+            pipeline = lead.get('pipeline', {})
+            
+            # If pipeline exists, return it, otherwise return None
+            return pipeline if pipeline else None
+            
+        except Exception as e:
+            logger.error(f"Error fetching pipeline for phone {phone}: {e}")
+            return None
+
     async def get_leads_by_phone(
         self, 
         account_id: int, 

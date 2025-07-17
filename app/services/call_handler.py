@@ -93,7 +93,8 @@ class CallHandler:
         return call_id
 
     async def update_details(self, account_id, details, phone, agentPhone):
-        self.prefetched_details[account_id] = details
+        if account_id and details :
+            self.prefetched_details[account_id] = details
         formattedPhone= self.format_us_number_simple(phone)
         if not formattedPhone.startswith('+'):
             formattedPhone = "+" + formattedPhone
@@ -1330,8 +1331,10 @@ class CallHandler:
             response = self.twilio_service.initialize_call(call_id)
             return response
         else:
-
+            if data['to'] not in self.calls:
+             await self.update_details(None, None, data['to'], data['from'])
             u_call_id = self.calls[data['to']]
+            
             del self.calls[data['to']]
             self.agents[u_call_id]['call_sid'] = call_id
             response = self.twilio_service.initialize_call(u_call_id)
