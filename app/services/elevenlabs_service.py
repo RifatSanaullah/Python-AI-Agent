@@ -27,25 +27,24 @@ class ElevenLabsService:
     async def stream_text_to_speech(self, text_chunk):
         
         self.full_text_buffer += text_chunk
-
         sentences_to_process = []
         self.last_split_index = 0
-        
-        # Loop to find all complete sentences within the current buffer
-        for match in re.finditer(r'[.!?](?:\s|$)', self.full_text_buffer):
-            # The sentence goes from the last split point up to the end of this punctuation mark
+
+        # Improved regex:
+        # Match a period/question mark/exclamation only if:
+        # - not part of ellipsis (...)
+        # - not followed by dash/hyphen
+        pattern = r'(?<!\.)[.!?](?![.\-])(?:\s|$)'  # avoid splitting on ... or .-
+
+        for match in re.finditer(pattern, self.full_text_buffer):
             sentence = self.full_text_buffer[self.last_split_index : match.end()].strip()
             if sentence:
                 sentences_to_process.append(sentence)
             self.last_split_index = match.end()
 
-        # If we found any complete sentences, process them
         for sentence_to_speak in sentences_to_process:
-            await self.stream_to_tts_ws(sentence_to_speak)
-        # await self._synthesize_text_chunk(text_to_synthesize, self.current_synth_id)
-            # self.full_text_buffer = ''
+            await self.send_stream_to_tts(sentence_to_speak)
             
-        # Keep any remaining text in the buffer for the next chunk
         self.full_text_buffer = self.full_text_buffer[self.last_split_index:].strip()
 
     # async def send_to_tts(self, text: str):
@@ -89,7 +88,7 @@ class ElevenLabsService:
     #     self.voice = voice
     #     self.model = model
 
-    async def stream_to_tts_ws(self, text):
+    async def send_stream_to_tts(self, text):
         print("Text To speak: ",text)
         await self.websocket.send(json.dumps({
                 "text": text,

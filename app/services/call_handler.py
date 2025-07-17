@@ -1024,13 +1024,13 @@ class CallHandler:
         # start_time = datetime.now()
         model = self.agents[call_id]['TTS']['voice']['model']
 
-        if self.agents[call_id]['TTS']['name'] == 'Elevenlabs':
+        # if self.agents[call_id]['TTS']['name'] == 'Elevenlabs':
+        #     await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text)
+        # else :
+        if is_greeting is True:
+            await self.agents[call_id]['synthesis_service'].send_stream_to_tts(text)
+        else:
             await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text)
-        else :
-            if is_greeting is True:
-                await self.agents[call_id]['synthesis_service'].send_stream_to_tts(text)
-            else:
-                await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text)
         session['last_user_audio_time'] = time.time()
         return
 

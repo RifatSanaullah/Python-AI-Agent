@@ -429,14 +429,38 @@ class AIService:
             return self.ai_interrupt[conversation_id][self.current_chunk[conversation_id]]
         else:
             return False
+    def generate_emotion_tag_prompt(self, user_input):
+                    return f"""
+            You are a conversational voice assistant that replies with natural speech patterns.
 
+            Respond to the user's question in a way that sounds like it's being spoken out loud.
+
+            Use:
+            - Dashes (— or -) for short pauses
+            - Ellipses (…) for hesitations or trailing thoughts
+
+            Keep it casual, emotionally expressive, and human-like.
+
+            User: "{user_input}"
+            Assistant:
+"""
     async def generate_response(self, conversation_id, message: str, synthesize_response,ai_client, flush_ws, streamingResponse):
 
         
         # Add user input to conversation history
         self.add_message(conversation_id, "user", message)
+        self.add_system_message(conversation_id, "system" , "You respond like a natural human voice, using pauses and hesitations.")
+        self.add_system_message(conversation_id, "user" , self.generate_emotion_tag_prompt(message))
+        # # self.add_system_message(conversation_id, "system", f"""
+        # #             You will respond to the user's question in SSML format with emotional expression.
+        # #             Rules:
+        # #             - Output MUST be wrapped in <speak>...</speak>.
+        # #             - Detect the emotion (happy, sad, surprised, calm, etc.).
+        # #             - Use <prosody>, <emphasis>, and <break> tags.
+        # #             - Don't explain anything, just return the SSML.
+        # #             - Keep it short and emotionally expressive.
+        # # """)
         self.add_system_message(conversation_id, "user", message)
-        
         # Check if this conversation has a Zoho or HubSpot connection ID
 
         assistant_reply = ''
