@@ -1019,7 +1019,7 @@ class CallHandler:
         self.agents[call_id]['aiInstructions'] = None
         return data
     
-    async def synthesize_response(self, text: str, call_id, is_greeting=False):
+    async def synthesize_response(self, text: str, call_id, chunk_id = None, is_greeting=False):
         session = self.agents.get(call_id)
         if not session or not text or text == '':
             return
@@ -1030,19 +1030,19 @@ class CallHandler:
         #     await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text)
         # else :
         if is_greeting is True:
-            await self.agents[call_id]['synthesis_service'].send_stream_to_tts(text)
+            await self.agents[call_id]['synthesis_service'].send_stream_to_tts(text, "Greeting")
         else:
-            await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text)
+            await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text, chunk_id)
         session['last_user_audio_time'] = time.time()
         return
 
 
-    async def queue_audio(self, call_id, audio_stream):
+    async def queue_audio(self, call_id, audio_stream, chunk_id=None):
         session = self.agents.get(call_id)
         if not session :
             return
         interupted = session.get('ai_interrupt', False)
-        ai_interupted = self.ai_service.get_interrupt_status(call_id)
+        ai_interupted = self.ai_service.get_interrupt_status(call_id, chunk_id)
         if not ai_interupted and  not interupted and self.agents[call_id]['user_speaking'] is not True:
             self.agents[call_id]['ai_speaking'] = True
             await self.twilio_service.send_audio_stream(session['websocket'], self.agents[call_id]['stream_sid'], audio_stream)
@@ -1403,12 +1403,12 @@ class CallHandler:
         
         print("Done initializing session info")
         
-        await self.synthesize_response(greetings , call_id, True)
+        await self.synthesize_response(greetings , call_id, None, True)
         # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
         await self.agents[call_id]['synthesis_service'].flush_sp_ws()
 
         if (self.agents[call_id]['isAvailable'] == False):
-            await self.synthesize_response('Currenty we are not available, Please contact us in our available time', stream_sid)
+            await self.synthesize_response('Currenty we are not available, Please contact us in our available time', call_id, None, True)
             # Schedule the call to end after 2 seconds
             self.clear_timer(call_id)
             self.timer[call_id] = Timer(5, self.twilio_service.hangup_call, args=[self.agents[call_id]['call_sid']])

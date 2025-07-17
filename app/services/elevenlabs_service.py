@@ -2,6 +2,7 @@ from elevenlabs.client import ElevenLabs
 from app.config import settings
 import websockets, asyncio, json, re, base64
 from app.services.interval_runner import IntervalRunner
+from app.services.ai_service import AIService
 class ElevenLabsService:
     def __init__(self, loop=None):
         """Initialize the ElevenLabs service with API key from settings"""
@@ -14,7 +15,8 @@ class ElevenLabsService:
         self.voice = None
         self.model = None
         self.full_text_buffer = ''
-        self.last_split_index = 0
+        self.last_split_index = 0        
+        self.ai_service = AIService()
         self.websocket= None
         self.ws_task= None
         self.audio_chunks=[]
@@ -24,8 +26,7 @@ class ElevenLabsService:
         self.queue_audio = queue_audio
         self.call_id = call_id
 
-    async def stream_text_to_speech(self, text_chunk):
-        
+    async def stream_text_to_speech(self, text_chunk, chunk_id):
         self.full_text_buffer += text_chunk
         sentences_to_process = []
         self.last_split_index = 0
@@ -43,7 +44,7 @@ class ElevenLabsService:
             self.last_split_index = match.end()
 
         for sentence_to_speak in sentences_to_process:
-            await self.send_stream_to_tts(sentence_to_speak)
+            await self.send_stream_to_tts(sentence_to_speak, chunk_id)
             
         self.full_text_buffer = self.full_text_buffer[self.last_split_index:].strip()
 
@@ -88,11 +89,12 @@ class ElevenLabsService:
     #     self.voice = voice
     #     self.model = model
 
-    async def send_stream_to_tts(self, text):
+    async def send_stream_to_tts(self, text, chunk_id):
         print("Text To speak: ",text)
         await self.websocket.send(json.dumps({
                 "text": text,
                 "flush" : True,
+                "context_id" : chunk_id,
                 "voice_settings": {
                     "stability": self.voice.get('temperature', 0.4),
                     "similarity_boost": self.voice.get('similarity', 0.7),
@@ -114,7 +116,7 @@ class ElevenLabsService:
         self.voice = voice
         self.model = model_id
         # The ElevenLabs client manages its own connection, so no explicit connection setup is needed.
-        url =f"wss://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}/stream-input?model_id={model_id}&output_format=ulaw_8000"
+        url =f"wss://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}/multi-stream-input?model_id={model_id}&output_format=ulaw_8000"
         headers = {
         "xi-api-key": settings.elevenlabs_apikey,
         "accept": "application/json",
@@ -138,7 +140,12 @@ class ElevenLabsService:
                 data = json.loads(message)
                 if data.get("audio"):
                     # yield base64.b64decode(data["audio"])
-                    await self.queue_audio(self.call_id, base64.b64decode(data["audio"]))
+                    contextId = data.get('contextId')
+                    interrupted = False
+                    if contextId != 'Greeting':
+                        interrupted = self.ai_service.get_interrupt_status(self.call_id, contextId)
+                    if interrupted is False:
+                        await self.queue_audio(self.call_id, base64.b64decode(data["audio"]), contextId)
                     # self.audio_chunks.append(base64.b64decode(data["audio"]))
 
                 if data.get('isFinal'):

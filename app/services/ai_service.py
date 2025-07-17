@@ -427,11 +427,16 @@ class AIService:
             self.ai_interrupt[conversation_id][chunk_id]= False
         return
         
-    def get_interrupt_status(self, conversation_id):
-        if self.current_chunk and self.ai_interrupt and  conversation_id in self.ai_interrupt and conversation_id in self.current_chunk:
-            return self.ai_interrupt[conversation_id][self.current_chunk[conversation_id]]
+    def get_interrupt_status(self, conversation_id, chunk_id = None):
+
+        if not chunk_id and self.current_chunk and  conversation_id in self.current_chunk:
+            chunk_id = self.current_chunk[conversation_id]
+
+        if self.ai_interrupt and  conversation_id in self.ai_interrupt and chunk_id in self.ai_interrupt[conversation_id]:
+            return self.ai_interrupt[conversation_id][chunk_id]
         else:
             return False
+        
     def generate_emotion_tag_prompt(self, user_input):
                     return f"""
             You are a conversational voice assistant that replies with natural speech patterns.
@@ -541,14 +546,14 @@ class AIService:
                                     # Split at prefix
                                     post_prefix_text = prefix_buffer.split(end_call_prefix, 1)[1]
                                     if post_prefix_text.strip() and self.ai_interrupt[conversation_id][chunk.id] is not True:
-                                        await synthesize_response(post_prefix_text, conversation_id)
+                                        await synthesize_response(post_prefix_text, conversation_id, chunk.id)
                                 elif not end_call_prefix.startswith(prefix_buffer) and self.ai_interrupt[conversation_id][chunk.id] is not True:
                                     # Prefix was never part of stream, flush buffer to TTS
-                                    await synthesize_response(prefix_buffer, conversation_id)
+                                    await synthesize_response(prefix_buffer, conversation_id, chunk.id)
 
                                     prefix_buffer = ""
                             elif self.ai_interrupt[conversation_id][chunk.id] is not True:
-                                    await synthesize_response(val, conversation_id)                 
+                                    await synthesize_response(val, conversation_id, chunk.id)                 
 
                         # await chunker.add_stream_data(val)
 
