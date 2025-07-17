@@ -1388,9 +1388,6 @@ class CallHandler:
 
         greetings = self.agents[call_id]['greetings']
 
-        await self.synthesize_response(greetings , call_id, True)
-        # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
-        await self.agents[call_id]['synthesis_service'].flush_sp_ws()
 
         if self.agents[call_id]['STT']['name'] == 'Deepgram':
             await self.agents[call_id]['transcribe_service'].establish_dg_connection(self.agents[call_id]['STT']['model'])
@@ -1405,6 +1402,10 @@ class CallHandler:
         await self.agents[call_id]['transcribe_service'].update_call_id(call_id, self.queue_audio)
         
         print("Done initializing session info")
+        
+        await self.synthesize_response(greetings , call_id, True)
+        # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
+        await self.agents[call_id]['synthesis_service'].flush_sp_ws()
 
         if (self.agents[call_id]['isAvailable'] == False):
             await self.synthesize_response('Currenty we are not available, Please contact us in our available time', stream_sid)
