@@ -447,7 +447,7 @@ class AIService:
             - Dashes (— or -) for short pauses
             - Ellipses (…) for hesitations or trailing thoughts
 
-            Be natural and empathetic, but stay concise and human-like who focused on moving the conversation toward a booking..
+            Keep it casual, emotionally expressive, and human-like.
 
             User: "{user_input}"
             Assistant:
