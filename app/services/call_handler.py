@@ -74,6 +74,7 @@ class CallHandler:
         self.loop= asyncio.get_running_loop()
         self.prefetched_details = {}
         self.calls = {}
+        self.additionalinfo = {}
         self.lock = {}
 
     async def _get_or_create_lock(self, call_sid):
@@ -1005,6 +1006,7 @@ class CallHandler:
 
     def call_routed(self, call_id):
         self.agents[call_id]['route_call'] = True
+        self.additionalinfo[self.agents[call_id]['call_sid']]['route_call'] = True
 
     async def get_agent_knowledge(self, call_id):
         data =  {        
@@ -1019,7 +1021,7 @@ class CallHandler:
         self.agents[call_id]['aiInstructions'] = None
         return data
     
-    async def synthesize_response(self, text: str, call_id, is_greeting=False):
+    async def synthesize_response(self, text: str, call_id, chunk_id = None, is_greeting=False):
         session = self.agents.get(call_id)
         if not session or not text or text == '':
             return
@@ -1030,20 +1032,20 @@ class CallHandler:
         #     await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text)
         # else :
         if is_greeting is True:
-            await self.agents[call_id]['synthesis_service'].send_stream_to_tts(text)
+            await self.agents[call_id]['synthesis_service'].send_stream_to_tts(text, "Greeting")
         else:
-            await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text)
+            await self.agents[call_id]["synthesis_service"].stream_text_to_speech(text, chunk_id)
         session['last_user_audio_time'] = time.time()
         return
 
 
-    async def queue_audio(self, call_id, audio_stream):
+    async def queue_audio(self, call_id, audio_stream, chunk_id=None):
         session = self.agents.get(call_id)
         if not session :
             return
-        # ai_interupted = session.get('ai_interrupt', False)
-        ai_interupted = self.ai_service.get_interrupt_status(call_id)
-        if not ai_interupted and self.agents[call_id]['user_speaking'] is not True:
+        interupted = session.get('ai_interrupt', False)
+        ai_interupted = self.ai_service.get_interrupt_status(call_id, chunk_id)
+        if not ai_interupted and  not interupted and self.agents[call_id]['user_speaking'] is not True:
             self.agents[call_id]['ai_speaking'] = True
             await self.twilio_service.send_audio_stream(session['websocket'], self.agents[call_id]['stream_sid'], audio_stream)
             await self.twilio_service.enqueue_audio(call_id, audio_stream ,'response_buffer')
@@ -1328,6 +1330,10 @@ class CallHandler:
         print("Handling call...", data)
         if data['direction'] != 'outbound-api':
             await self.update_agent_data(call_id, data)
+            self.additionalinfo[call_id] = {
+                "agent_id" : self.agents[call_id]['id'],
+                "route_call" : False
+            }
             self.agents[call_id]['call_sid'] = call_id
             response = self.twilio_service.initialize_call(call_id)
             return response
@@ -1336,6 +1342,10 @@ class CallHandler:
              await self.update_details(None, None, data['to'], data['from'])
             u_call_id = self.calls[data['to']]
             
+            self.additionalinfo[call_id] = {
+                "agent_id" : self.agents[u_call_id]['id'],
+                "route_call" : False
+            }
             del self.calls[data['to']]
             self.agents[u_call_id]['call_sid'] = call_id
             response = self.twilio_service.initialize_call(u_call_id)
@@ -1383,9 +1393,6 @@ class CallHandler:
 
         greetings = self.agents[call_id]['greetings']
 
-        await self.synthesize_response(greetings , call_id, True)
-        # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
-        await self.agents[call_id]['synthesis_service'].flush_sp_ws()
 
         if self.agents[call_id]['STT']['name'] == 'Deepgram':
             await self.agents[call_id]['transcribe_service'].establish_dg_connection(self.agents[call_id]['STT']['model'])
@@ -1400,9 +1407,13 @@ class CallHandler:
         await self.agents[call_id]['transcribe_service'].update_call_id(call_id, self.queue_audio)
         
         print("Done initializing session info")
+        
+        await self.synthesize_response(greetings , call_id, None, True)
+        # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
+        await self.agents[call_id]['synthesis_service'].flush_sp_ws()
 
         if (self.agents[call_id]['isAvailable'] == False):
-            await self.synthesize_response('Currenty we are not available, Please contact us in our available time', stream_sid)
+            await self.synthesize_response('Currenty we are not available, Please contact us in our available time', call_id, None, True)
             # Schedule the call to end after 2 seconds
             self.clear_timer(call_id)
             self.timer[call_id] = Timer(5, self.twilio_service.hangup_call, args=[self.agents[call_id]['call_sid']])
@@ -1989,10 +2000,10 @@ class CallHandler:
         # self.sessions[call_sid]['stream_sid'] = stream_sid
     
 
-        if self.agents and  call_sid in self.agents and "id" in self.agents[call_sid]:
-            agent_id = self.agents[call_sid]['id']
+        if self.additionalinfo and  call_sid in self.additionalinfo and "id" in self.additionalinfo[call_sid]:
+            agent_id = self.additionalinfo[call_sid]['id']
 
-        if self.agents and call_sid in self.agents and "route_call" in self.agents[call_sid] and self.agents[call_sid]['route_call'] == True:
+        if self.additionalinfo and call_sid in self.additionalinfo and "route_call" in self.additionalinfo[call_sid] and self.additionalinfo[call_sid]['route_call'] == True:
             resolution_status = 'ROUTED'
             
         data= {
