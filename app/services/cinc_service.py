@@ -609,6 +609,76 @@ class CincService:
 
     # ==================== UTILITY METHODS ====================
 
+    async def get_pipeline_by_phone(
+        self, 
+        account_id: int, 
+        phone: str, 
+        connection_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Get lead pipeline info by phone number - simple and fast."""
+        print(f"Looking up pipeline for phone: {phone}")
+        try:
+            # Clean phone number
+            clean_phone = ''.join(filter(str.isdigit, phone))
+            
+            if len(clean_phone) == 11 and clean_phone.startswith('1'):
+                clean_phone = clean_phone[1:]  # Remove leading '1'
+            elif len(clean_phone) == 10:
+                pass  # Already in correct format
+            else:
+                logger.warning(f"Invalid phone number format: {phone}, using as-is")
+                clean_phone = phone
+            
+            logger.info(f"Fetching pipeline for phone: {clean_phone}")
+            print(f"Fetching leads for cleaned phone number: {clean_phone}")
+            # Get leads by phone
+            response = await self.get_leads(account_id, connection_id, phone=clean_phone)
+            print(f"Basic leads response: {response}")
+            
+            # Extract leads array from response
+            leads_list = []
+            if isinstance(response, dict) and "leads" in response:
+                leads_list = response["leads"]
+            elif isinstance(response, list):
+                leads_list = response
+            
+            if not leads_list or len(leads_list) == 0:
+                logger.info(f"No leads found for phone: {clean_phone}")
+                return None
+            
+            # Get the most recent lead ID
+            lead = leads_list[-1]
+            lead_id = lead.get('id')
+            
+            if not lead_id:
+                logger.warning(f"No lead ID found for phone: {clean_phone}")
+                return None
+            
+            print(f"Found lead {lead_id}, fetching detailed information...")
+            
+            # Fetch detailed lead information including pipeline
+            detailed_lead = await self.get_lead_details(account_id, lead_id, connection_id)
+            lead_data = detailed_lead.get('lead', detailed_lead)
+            pipeline = lead_data.get('pipeline', {})
+            
+            print(f"Detailed lead {lead_id} with pipeline: {pipeline}")
+            
+            # Return lead information with pipeline data
+            result = {
+                'lead_id': lead_id,
+                'pipeline': pipeline,
+                'lead_exists': True,
+                'stage': pipeline.get('stage') if pipeline else None,
+                'history': pipeline.get('history', []) if pipeline else []
+            }
+            
+            logger.info(f"Returning pipeline info for lead {lead_id}: {result}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error fetching pipeline for phone {phone}: {e}")
+            return None
+
     async def get_leads_by_phone(
         self, 
         account_id: int, 

@@ -383,5 +383,62 @@ async def disconnect_cinc_integration(account_id: str, cinc_service: CincService
         logger.error(f"Error disconnecting CINC integration for account {account_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to disconnect integration.")
      
+# ==================== OUTBOUND CADENCE ENDPOINTS ====================
+
+@app.get("/api/leads/check-phone-status/{phone}")
+async def check_lead_phone_status(
+    phone: str,
+    account_id: int,
+    connection_id: Optional[str] = None,
+    cinc_service: CincService = Depends(get_cinc_service)
+):
+    """
+    Get lead pipeline info by phone number for outbound cadence checking.
+    """
+    try:
+        logger.info(f"Checking phone status for {phone} with account_id {account_id}")
+        
+        # Get pipeline info by phone number
+        pipeline_info = await cinc_service.get_pipeline_by_phone(account_id, phone, connection_id)
+        print("Pipeline info:", pipeline_info)
+        
+        # Check if lead exists and what stage it's in
+        lead_exists = pipeline_info is not None and pipeline_info.get('lead_exists', False)
+        current_stage = pipeline_info.get('stage') if pipeline_info else None
+        is_contacted = current_stage == 'Contacted' if current_stage else False
+        
+        response_data = {
+            "phone": phone,
+            "pipeline_info": pipeline_info,
+            "lead_exists": lead_exists,
+            "current_stage": current_stage,
+            "is_contacted": is_contacted,
+            "account_id": account_id,
+            "status": "success"
+        }
+        
+        logger.info(f"Lead status for {phone}: exists={lead_exists}, stage={current_stage}, contacted={is_contacted}")
+        return JSONResponse(
+            status_code=200,
+            content=response_data,
+            headers={"Connection": "close"}
+        )
+        
+    except Exception as e:
+        logger.error(f"Error fetching pipeline info for phone {phone}: {e}")
+        error_response = {
+            "phone": phone,
+            "pipeline_info": None,
+            "error": str(e),
+            "account_id": account_id,
+            "status": "error"
+        }
+        return JSONResponse(
+            status_code=500,
+            content=error_response,
+            headers={"Connection": "close"}
+        )
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
