@@ -1332,7 +1332,8 @@ class CallHandler:
             await self.update_agent_data(call_id, data)
             self.additionalinfo[call_id] = {
                 "agent_id" : self.agents[call_id]['id'],
-                "route_call" : False
+                "route_call" : False,
+                "call_id":call_id
             }
             self.agents[call_id]['call_sid'] = call_id
             response = self.twilio_service.initialize_call(call_id)
@@ -1344,7 +1345,8 @@ class CallHandler:
             
             self.additionalinfo[call_id] = {
                 "agent_id" : self.agents[u_call_id]['id'],
-                "route_call" : False
+                "route_call" : False,
+                "call_id":u_call_id
             }
             del self.calls[data['to']]
             self.agents[u_call_id]['call_sid'] = call_id
@@ -2005,7 +2007,10 @@ class CallHandler:
 
         if self.additionalinfo and call_sid in self.additionalinfo and "route_call" in self.additionalinfo[call_sid] and self.additionalinfo[call_sid]['route_call'] == True:
             resolution_status = 'ROUTED'
-            
+        
+        if self.additionalinfo and call_sid in self.additionalinfo and "call_id" in self.additionalinfo[call_sid]:
+            call_sid = self.additionalinfo[call_sid]['call_id']
+
         data= {
             "duration" : call_duration,
             "direction": call_direction,
@@ -2045,6 +2050,9 @@ class CallHandler:
         if self.agents and call_sid in self.agents and "id" in self.agents[call_sid]:
             agent_id = self.agents[call_sid]['id']
 
+        if self.additionalinfo and call_sid in self.additionalinfo and "call_id" in self.additionalinfo[call_sid]:
+            call_sid = self.additionalinfo[call_sid]['call_id']
+            
         data= {
             "duration" : call_duration,
             "direction": call_direction,
