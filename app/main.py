@@ -400,15 +400,24 @@ async def check_lead_phone_status(
         
         # Get pipeline info by phone number
         pipeline_info = await cinc_service.get_pipeline_by_phone(account_id, phone, connection_id)
+        print("Pipeline info:", pipeline_info)
+        
+        # Check if lead exists and what stage it's in
+        lead_exists = pipeline_info is not None and pipeline_info.get('lead_exists', False)
+        current_stage = pipeline_info.get('stage') if pipeline_info else None
+        is_contacted = current_stage == 'Contacted' if current_stage else False
         
         response_data = {
             "phone": phone,
             "pipeline_info": pipeline_info,
+            "lead_exists": lead_exists,
+            "current_stage": current_stage,
+            "is_contacted": is_contacted,
             "account_id": account_id,
             "status": "success"
         }
         
-        logger.info(f"Returning pipeline info for {phone}: {pipeline_info is not None}")
+        logger.info(f"Lead status for {phone}: exists={lead_exists}, stage={current_stage}, contacted={is_contacted}")
         return JSONResponse(
             status_code=200,
             content=response_data,

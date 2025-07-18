@@ -362,7 +362,7 @@ class CallHandler:
                     if 'info' in summary and 'contact' in summary['info']:
                         cinc_data = summary.copy()
                         
-                        # Handle Description and CallLogs fields by converting them to notes array
+                        # Get call logs from multiple sources
                         description = cinc_data.get('Description', '') or cinc_data.get('description', '')
                         call_logs = cinc_data.get('CallLogs', '') or cinc_data.get('call_logs', '')
                         
@@ -372,23 +372,23 @@ class CallHandler:
                         cinc_data.pop('CallLogs', None)
                         cinc_data.pop('call_logs', None)
                         
-                        # Create notes array with both description and call logs
+                        # Create notes array - ALWAYS include both CallLogs and Description as separate notes
                         notes_array = []
                         
-                        # Add description note if it exists
-                        if description and description.strip():
+                        # Add CallLogs note if available
+                        if call_logs and call_logs.strip():
                             notes_array.append({
-                                "content": description,
+                                "content": call_logs,
                                 "category": "call",
                                 "is_pinned": True,
                                 "created_by": "Verbacall",
                             })
                         
-                        # Add call logs note if it exists
-                        if call_logs and call_logs.strip():
+                        # ALWAYS add Description note if available (regardless of CallLogs content)
+                        if description and description.strip():
                             notes_array.append({
-                                "content": call_logs,
-                                "category": "call",
+                                "content": description,
+                                "category": "call", 
                                 "is_pinned": True,
                                 "created_by": "Verbacall",
                             })
@@ -400,6 +400,7 @@ class CallHandler:
                         # If summary doesn't have CINC format, create basic structure
                         description = summary.get('Description', '') or summary.get('description', '')
                         call_logs = summary.get('CallLogs', '') or summary.get('call_logs', '')
+                        
                         cinc_data = {
                             "info": {
                                 "contact": {
@@ -420,22 +421,22 @@ class CallHandler:
                             "timezone": summary.get('timezone', 'America/New_York'),
                         }
                         
-                        # Create notes array with both description and call logs
+                        # Create notes array - ALWAYS include both CallLogs and Description as separate notes
                         notes_array = []
                         
-                        # Add description note if it exists
-                        if description and description.strip():
-                            notes_array.append({
-                                "content": description,
-                                "category": "call",
-                                "is_pinned": True,
-                                "created_by":"Verbacall",
-                            })
-                        
-                        # Add call logs note if it exists
+                        # Add CallLogs note if available
                         if call_logs and call_logs.strip():
                             notes_array.append({
                                 "content": call_logs,
+                                "category": "call",
+                                "is_pinned": True,
+                                "created_by": "Verbacall",
+                            })
+                        
+                        # ALWAYS add Description note if available (regardless of CallLogs content)
+                        if description and description.strip():
+                            notes_array.append({
+                                "content": description,
                                 "category": "call",
                                 "is_pinned": True,
                                 "created_by": "Verbacall",
