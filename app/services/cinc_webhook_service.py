@@ -28,6 +28,7 @@ async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_i
             try:
                 agent_data = await cinc_service.get_agent(account_id, created_by_agent_id, connection_id)
                 agent_cell_phone = agent_data.get('agent', agent_data)['info']['contact']['phone_numbers']['cell_phone']
+                agent_home_phone = agent_data.get('agent', agent_data)['info']['contact']['phone_numbers']['home_phone']
                 print(f"[CRON] Agent {created_by_agent_id} cell phone: {agent_cell_phone}")
             except Exception as e:
                 print(f"[CRON] Failed to fetch agent data: {e}")
@@ -55,7 +56,7 @@ async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_i
                 current_lead_details = await cinc_service.get_lead_details(account_id, lead_id, connection_id)
                 lead_data = current_lead_details.get('lead', current_lead_details)
                 current_stage = lead_data.get('pipeline', {}).get('stage', '')
-                
+                lead_data['routing_phone'] = agent_home_phone
                 # Extract lead cell phone
                 cell_phone = lead_data['info']['contact']['phone_numbers']['cell_phone']
                 if not cell_phone or cell_phone.strip() == "":

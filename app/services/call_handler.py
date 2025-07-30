@@ -1050,7 +1050,7 @@ class CallHandler:
     async def get_agent_knowledge(self, call_id):
         lead_routing_phone = self.agents[call_id].get('lead_routing_phone', None)
         if lead_routing_phone:
-            self.agents[call_id]['aiInstructions'] += f"""If the caller requests a transfer, always respond with the following message: "Routing Message: I am connecting the call with a real agent. Please hold on."""
+            self.agents[call_id]['aiInstructions'] += f"""If the caller requests a transfer or want to connect with agent now, always respond with the following message: "Routing Message: I am connecting the call with a real agent. Please hold on."""
         data =  {        
             "knowledge" : self.agents[call_id]['knowledge'],
             "aiInstructions" : self.agents[call_id]['aiInstructions'],
@@ -1716,6 +1716,7 @@ class CallHandler:
                         lead = result[0]
                         contact_info = lead.get('info', {}).get('contact', {})
                         self.agents[call_sid]['lead_routing_phone'] = lead.get('routing_phone')
+                        print("Routing phone: ", self.agents[call_sid]['lead_routing_phone'])
                         # Extract contact information
                         first_name = contact_info.get('first_name', '')
                         last_name = contact_info.get('last_name', '')
