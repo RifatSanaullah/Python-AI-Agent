@@ -93,7 +93,7 @@ class CallHandler:
 
         return call_id
 
-    async def update_details(self, account_id, details, phone, agentPhone):
+    async def update_details(self, account_id, details, phone, agentPhone, pre_call_sid=None):
         if account_id and details :
             self.prefetched_details[account_id] = details
         formattedPhone= self.format_us_number_simple(phone)
@@ -107,6 +107,7 @@ class CallHandler:
             "application_sid" : None,
             "direction" : 'outbound-api',
             "isBoom": None,
+            "pre_call_sid" : pre_call_sid
         }
         return await self.update_agent_data(call_id, data)
 
@@ -965,6 +966,7 @@ class CallHandler:
         # if self.agents[call_id]['TTS']['name'] == 'Elevenlabs':
         #     streamingResponse = False
         response = await self.ai_service.generate_response(call_id, transcript, self.synthesize_response, self.agents[call_id]['aiClient'], self.agents[call_id]['synthesis_service'].flush_sp_ws, streamingResponse)
+        print(f"Response: {response}")
         if 'End Call Message' in response  or  self.contains_any_word(response):
             self.agents[call_id]['end_call'] = True
             response = response.replace('End Call Message', '')
@@ -981,23 +983,60 @@ class CallHandler:
             self.timer[call_id] = Timer(wait_time, self.twilio_service.hangup_call, args=[self.agents[call_id]['call_sid']])
             self.timer[call_id].start()
             
-        if 'Routing Message' in response or 'I am forwarding the call' in response:
+        if 'Routing Message' in response or 'I am connecting the call with a real agent' in response:
             response = response.replace('Routing Message', '')
+            estamitate_result = await estimate_speech_duration(response, 180)
+            wait_time = estamitate_result['total_seconds']
+            await asyncio.sleep(wait_time)
+            call_from = self.agents[call_id]['to']
+            if self.agents[call_id]['direction'] == 'outbound-api':
+                call_from = self.agents[call_id]['from']
+            lead_routing_phone = self.agents[call_id].get('lead_routing_phone', None)
+            if lead_routing_phone:
+                call = self.twilio_service.call_agent(
+                    agent_number=lead_routing_phone,
+                    # agent_number=self.agents[call_id]['routingInfo']['routingNumber'],
+                    # agent_number="+16313494110",
+                    twilio_number=call_from,
+                    call_sid=self.agents[call_id]['call_sid'])
+                # print(call)
+
+                summary = await self.ai_service.get_summary(call_id)
+                self.agents[call_id]['summary'] = summary
+
+                self.agents[call_id]['route_call'] = True
+
             # Schedule the call to end after 2 seconds
-            self.clear_timer(call_id)
-            self.timer[call_id] = Timer(13, self.twilio_service.redirect_call,
-                          args=[
-                            self.sessions[call_id]['call_sid'],
-                            self.agents[self.sessions[call_id]['call_sid']]['routingInfo']['routingNumber'],
-                            self.call_routed
-                            ]
-                        )
-            self.timer[call_id].start()
-        self.sessions[call_id]['last_transcript_time'] = None
+            # self.clear_timer(call_id)
+            # self.timer[call_id] = Timer(13, self.twilio_service.redirect_call,
+            #               args=[
+            #                 self.sessions[call_id]['call_sid'],
+            #                 self.agents[self.sessions[call_id]['call_sid']]['routingInfo']['routingNumber'],
+            #                 self.call_routed
+            #                 ]
+            #             )
+            # self.timer[call_id].start()
         # self.sessions[call_id]['prev_wait_duration'] = 0
         # self.sessions[call_id]['wait_duration'] = 0
-        print(f"Response: {response}")
+
+        elif 'Tranferring Message' in response or 'The person has connected on the call right now' in response:
+
+            await self.establish_tts(response, self.agents[call_id]['pre_call_sid'])
+            estamitate_result = await estimate_speech_duration(response, 180)
+            wait_time = estamitate_result['total_seconds'] + 1
+            await asyncio.sleep(wait_time)
+            self.agents[call_id]['route_call'] = True
+            self.twilio_service.update_call(self.agents[call_id]['pre_call_sid'], f"conf_{self.agents[call_id]['pre_call_sid']}")
+            self.twilio_service.update_call(self.agents[call_id]['call_sid'], f"conf_{self.agents[call_id]['pre_call_sid']}")
+
+        if 'will not be transferred' in response or "won't be transferred" in response or "won’t be transferred" in response or "won’t transfer" in response or "won't transfer" in response:
+            await self.establish_tts("The agent is busy right now. Will connect you later", self.agents[call_id]['pre_call_sid'])
+            self.agents[self.additionalinfo[self.agents[call_id]['pre_call_sid']]['call_id']]['route_call'] = False
+
+
+
         # await self.synthesize_response(response, call_id)
+        self.agents[call_id]['last_transcript_time'] = None
 
     def clear_timer(self,call_id):
         if call_id in self.timer:
@@ -1009,6 +1048,9 @@ class CallHandler:
         self.additionalinfo[self.agents[call_id]['call_sid']]['route_call'] = True
 
     async def get_agent_knowledge(self, call_id):
+        lead_routing_phone = self.agents[call_id].get('lead_routing_phone', None)
+        if lead_routing_phone:
+            self.agents[call_id]['aiInstructions'] += f"""If the caller requests a transfer, always respond with the following message: "Routing Message: I am connecting the call with a real agent. Please hold on."""
         data =  {        
             "knowledge" : self.agents[call_id]['knowledge'],
             "aiInstructions" : self.agents[call_id]['aiInstructions'],
@@ -1025,6 +1067,7 @@ class CallHandler:
         session = self.agents.get(call_id)
         if not session or not text or text == '':
             return
+        
         # start_time = datetime.now()
         model = self.agents[call_id]['TTS']['voice']['model']
 
@@ -1198,17 +1241,48 @@ class CallHandler:
         else:
             self.agents[call_id]['user_id'] = None
             
+
+        self.agents[call_id]['pre_call_sid'] = data['pre_call_sid']
+        pre_summary = self.agents.get(self.agents[call_id]['pre_call_sid'], {}).get('summary', None)
+        self.agents[call_id]['pre_summary'] = pre_summary
+        fullname = None
+        email = None
+        phone = None
+        description = None
+        existing_appointment = None
         greetings = self.agents[call_id]['greetings']
+        if self.agents[call_id]['pre_summary'] is not None and self.agents[call_id]['pre_summary'] != "":
+            self.agents[call_id]['greetings'] = self.agents[call_id]['pre_summary']
+            greetings = self.agents[call_id]['greetings']
+            self.agents[call_id]['knowledge'] = [{ 
+                "type" : "Business",
+                "content" : "You cannnot give other information instead of the call summary. You have a user waiting to connect here is the summary of that conversation with that user: " + self.agents[call_id]['pre_summary']}]
+            self.agents[call_id]['aiInstructions'] = f"""
+                        Ask the caller:
+            "Would you like to transfer this call to a user now?"
 
-        result = await self.gather_contact_info(call_id, greetings, self.agents[call_id]['direction'])
+            If the caller confirms, respond with the following transfer message:
+            "Transferring message: The person has connected on the call right now. You can discuss with each other now.
+            If the caller declines or don't want to connect or don't want to transfer or busy right now then always respond with the following message:
+            "Alright, the call will not be transferred. Let me know if you need anything else."
+        """
+        else:
+            result = await self.gather_contact_info(call_id, greetings, self.agents[call_id]['direction'])
 
-        self.agents[call_id]['fullname'] = result['fullname']
-        self.agents[call_id]['greetings'] = result['greetings']
-        self.agents[call_id]['email'] = result['email']
-        self.agents[call_id]['phone'] = result['phone']
-        self.agents[call_id]['description'] = result['description']
-        self.agents[call_id]['existing_appointment'] = result['existing_appointment']
-        self.agents[call_id]['address'] = result['address']
+            self.agents[call_id]['fullname'] = result['fullname']
+            self.agents[call_id]['greetings'] = result['greetings']
+            self.agents[call_id]['email'] = result['email']
+            self.agents[call_id]['phone'] = result['phone']
+            self.agents[call_id]['description'] = result['description']
+            self.agents[call_id]['existing_appointment'] = result['existing_appointment']
+            self.agents[call_id]['address'] = result['address']
+
+            fullname =self.agents[call_id]['fullname']
+            greetings = self.agents[call_id]['greetings']
+            email = self.agents[call_id]['email']
+            phone = self.agents[call_id]['phone']
+            description =self.agents[call_id]['description']
+            existing_appointment =self.agents[call_id]['existing_appointment']
 
         if self.agents[call_id]['STT']['name'] == 'Deepgram':
             self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, DeepgramService)
@@ -1241,12 +1315,7 @@ class CallHandler:
         # self.agents[call_id]["VAD"] =  VoiceActivityDetector(on_start=self.create_on_user_speech_handler(call_id))
 
 
-        fullname =self.agents[call_id]['fullname']
-        greetings = self.agents[call_id]['greetings']
-        email = self.agents[call_id]['email']
-        phone = self.agents[call_id]['phone']
-        description =self.agents[call_id]['description']
-        existing_appointment =self.agents[call_id]['existing_appointment']
+
         current_time = datetime.utcnow()
         print(f"Current UTC time: {current_time.isoformat()}")
         
@@ -1340,7 +1409,7 @@ class CallHandler:
             return response
         else:
             if data['to'] not in self.calls:
-             await self.update_details(None, None, data['to'], data['from'])
+             await self.update_details(None, None, data['to'], data['from'], data['pre_call_sid'])
             u_call_id = self.calls[data['to']]
             
             self.additionalinfo[call_id] = {
@@ -1444,6 +1513,17 @@ class CallHandler:
         # }
         # await self.backend_service.update_call_info(updaedata)
 
+    async def establish_tts(self,response, call_id):
+
+        if call_id in self.additionalinfo and 'call_id' in self.additionalinfo[call_id]:
+            if self.additionalinfo[call_id]['call_id'] in self.agents and self.agents[self.additionalinfo[call_id]['call_id']]['synthesis_service'].check_ws_connection() is None:
+                await self.agents[self.additionalinfo[call_id]['call_id']]['synthesis_service'].establish_connection(self.agents[self.additionalinfo[call_id]['call_id']]['TTS']['voice'], self.agents[self.additionalinfo[call_id]['call_id']]['TTS']['model'])
+            self.ai_service.add_message(self.additionalinfo[call_id]['call_id'], "assistant", response)
+            self.ai_service.add_system_message(self.additionalinfo[call_id]['call_id'], "assistant", response)
+            if self.additionalinfo[call_id]['call_id'] in self.agents:
+                await self.synthesize_response(response, self.additionalinfo[call_id]['call_id'], None, True)
+                await self.agents[self.additionalinfo[call_id]['call_id']]['synthesis_service'].flush_sp_ws()
+
     async def handle_stream_callback(self, data):
         """Handle the stream callback to get the streamSid."""
         stream_sid = data.get("StreamSid")
@@ -1462,15 +1542,7 @@ class CallHandler:
         city = ''
         if address is not None and 'city' in address and address['city'] != '':
             city = address['city']
-        print("====ADDRESS===",address)
-        print("====city===",city)
-        print(f"=== MODIFY_GREETING DEBUG ===")
-        print(f"Call SID: {call_sid}")
-        print(f"Original direction: {call_direction}")
-        print(f"Normalized direction: {direction}")
-        print(f"Handle call type: {handle_call_type}")
-        print(f"Actual call direction: {actual_call_direction}")
-        print(f"Greeting length before processing: {len(greetings) if greetings else 0}")
+
         
         # Use the actual call direction from backend for better accuracy
         final_direction = actual_call_direction if actual_call_direction else direction
@@ -1519,8 +1591,6 @@ class CallHandler:
         if greetings_from_ai:
             greetings = greetings_from_ai
                 
-        print(f"Final greeting length: {len(greetings) if greetings else 0}")
-        print(f"=== END MODIFY_GREETING DEBUG ===")
         return greetings
     
     def process_audio_for_twilio(self, playht_audio_chunk_pcm):
@@ -1613,7 +1683,7 @@ class CallHandler:
                 account_id = self.agents[call_sid].get('account_id')
                 if account_id:
                     if account_id in self.prefetched_details:
-                        print("Prefetched Data" , self.prefetched_details)
+
                         lead = self.prefetched_details[account_id]
                         lead_id = lead.get('id')
                         if lead_id:
@@ -1645,7 +1715,7 @@ class CallHandler:
                         # Use the first matching lead
                         lead = result[0]
                         contact_info = lead.get('info', {}).get('contact', {})
-                        
+                        self.agents[call_sid]['lead_routing_phone'] = lead.get('routing_phone')
                         # Extract contact information
                         first_name = contact_info.get('first_name', '')
                         last_name = contact_info.get('last_name', '')
@@ -1989,7 +2059,7 @@ class CallHandler:
                 self.twilio_service.background_sound = audio_stream
             await self.twilio_service.send_audio_stream(self.sessions[call_id]['websocket'], call_id, self.twilio_service.background_sound)
 
-    async def complete_status_callback(self, data):
+    async def complete_status_callback(self, data, pre_call_sid):
         """Handle the stream callback to get the streamSid."""
 
         call_sid = data.get("CallSid")
@@ -2010,6 +2080,10 @@ class CallHandler:
         
         if self.additionalinfo and call_sid in self.additionalinfo and "call_id" in self.additionalinfo[call_sid]:
             call_sid = self.additionalinfo[call_sid]['call_id']
+
+        if pre_call_sid is not None:
+                await self.establish_tts("The agent is busy right now. Will connect you later", pre_call_sid)
+                self.agents[self.additionalinfo[pre_call_sid]['call_id']]['route_call'] = False
 
         data= {
             "duration" : call_duration,
@@ -2038,7 +2112,7 @@ class CallHandler:
         if call_sid in self.agents and self.agents[call_sid]['complete_call'] == True and self.agents[call_sid]['websocket_closed'] == True:
             del self.agents[call_sid]
     
-    async def fallback_status_callback(self, data):
+    async def fallback_status_callback(self, data, pre_call_sid=None):
         call_sid = data.get("CallSid")
         call_duration = data.get("CallDuration")
         call_direction = data.get("Direction")
@@ -2063,6 +2137,9 @@ class CallHandler:
             "resolution_status": resolution_status
 
         }
+        if pre_call_sid is not None:
+                await self.establish_tts("The agent is busy right now. Will connect you later", pre_call_sid)
+                self.agents[self.additionalinfo[pre_call_sid]['call_id']]['route_call'] = False
 
         self.twilio_service.client.calls(call_sid).update(status='completed')
         print(f"Call {call_sid} cleaned up.")

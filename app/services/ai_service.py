@@ -432,7 +432,7 @@ class AIService:
         if not chunk_id and self.current_chunk and  conversation_id in self.current_chunk:
             chunk_id = self.current_chunk[conversation_id]
 
-        if self.ai_interrupt and  conversation_id in self.ai_interrupt and chunk_id in self.ai_interrupt[conversation_id]:
+        if chunk_id and self.ai_interrupt and  conversation_id in self.ai_interrupt and chunk_id in self.ai_interrupt[conversation_id]:
             return self.ai_interrupt[conversation_id][chunk_id]
         else:
             return False
@@ -520,6 +520,8 @@ class AIService:
             # chunker = StreamingChunker(max_length=50, onTTS=synthesize_response, conversation_id=conversation_id, flush_ws=flush_ws)
             # await chunker.add_stream_data(assistant_reply)  # Simulating stream input
             end_call_prefix = "End Call Message"
+            route_call_prefix = "Routing Message"
+            transfer_call_prefix = "Tranferring Message"
             prefix_buffer = ""
             post_prefix_mode = False
             post_prefix_text = ""
@@ -541,13 +543,22 @@ class AIService:
                                 # Build up prefix buffer
                                 prefix_buffer += val
 
-                                if end_call_prefix in prefix_buffer:
+                                if transfer_call_prefix in prefix_buffer or end_call_prefix in prefix_buffer or route_call_prefix in prefix_buffer:
                                     post_prefix_mode = True
                                     # Split at prefix
-                                    post_prefix_text = prefix_buffer.split(end_call_prefix, 1)[1]
+                                    if end_call_prefix in prefix_buffer:
+                                        post_prefix_text = prefix_buffer.split(end_call_prefix, 1)[1]
+                                    elif route_call_prefix in prefix_buffer:
+                                        post_prefix_text = prefix_buffer.split(route_call_prefix, 1)[1]
+                                    elif transfer_call_prefix in prefix_buffer:
+                                        post_prefix_text = prefix_buffer.split(transfer_call_prefix, 1)[1]
                                     if post_prefix_text.strip() and self.ai_interrupt[conversation_id][chunk.id] is not True:
+                                        post_prefix_text = post_prefix_text.replace('Routing Message', '')
                                         await synthesize_response(post_prefix_text, conversation_id, chunk.id)
-                                elif not end_call_prefix.startswith(prefix_buffer) and self.ai_interrupt[conversation_id][chunk.id] is not True:
+                                elif (not transfer_call_prefix.startswith(prefix_buffer) and 
+                                not route_call_prefix.startswith(prefix_buffer) and
+                                not end_call_prefix.startswith(prefix_buffer) and 
+                                self.ai_interrupt[conversation_id][chunk.id] is not True):
                                     # Prefix was never part of stream, flush buffer to TTS
                                     await synthesize_response(prefix_buffer, conversation_id, chunk.id)
 
@@ -697,18 +708,15 @@ class AIService:
                 return await method(connection_id, params if params else None)
     
             
-    async def get_summary(self, response_format, conversations):
-            summarize_prompt = {
-                    "role": "user",
-                    "content": f"""
-                From the above conversation history, extract and return the following information in JSON format using the structure below. If any fields are not available in the conversation, leave them as empty strings (""). All date/time values should be formatted as JavaScript Date objects.
-                Response Format:
-                {json.dumps(response_format, indent=2)}
-                Return only this structured JSON based on the conversation. If no data is found for a section, return that section with all fields as empty strings. :
-                """
-            }
-            conversations.insert(0, summarize_prompt)
-            result = await self.run_chat_without_tools(conversations)
-            summary = result.choices[0].message.content
-            summary = json.loads(summary)
+    async def get_summary(self, conversation_id):
+            allmessages = 'Greet the caller and tell a person is waiting to connect with you and Give a short in 2 or 3 sentences with of below conversations with that user (The current caller is real human agent and the summary is about the user conversation who wants to connect with the real human agent ) and ask " Would you like to transfer this call to a user now?" : '
+            for index in range(0, len(self.conversations[conversation_id])) :
+                item = self.conversations[conversation_id][index]
+                allmessages +=  f"{item['role']}:  {item['content']}\n\n"
+            
+            response = openai.chat.completions.create(
+                model="gpt-4.1",
+                messages=[{"role" : "user" , "content" : allmessages}],
+            )
+            summary = response.choices[0].message.content
             return summary

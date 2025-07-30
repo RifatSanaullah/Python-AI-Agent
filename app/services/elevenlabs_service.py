@@ -107,6 +107,15 @@ class ElevenLabsService:
     def update_tts_interrupt(self, status):
         pass
 
+    def check_ws_connection(self):
+        """
+        Check if the WebSocket connection is established.
+        
+        Returns:
+            bool: True if connected, False otherwise
+        """
+        return self.websocket
+
     async def establish_connection(self, voice, model_id):
         """
         Establish a connection to the ElevenLabs API.
