@@ -1054,7 +1054,7 @@ class CallHandler:
         lead_routing_phone = self.agents[call_id].get('lead_routing_phone', None)
         if lead_routing_phone:
             self.agents[call_id]['aiInstructions'] += f""" 
-            If the caller requests to speak with an agent without being prompted, treat it as confirmation and respond with:
+            If the caller requests a transfer or want to connect/talk/discuss/meet with agent now treat it as confirmation and respond with:
                 Routing Message: I am connecting the call with a real agent. Please hold on."""
         data =  {        
             "knowledge" : self.agents[call_id]['knowledge'],
@@ -1265,7 +1265,7 @@ class CallHandler:
             self.agents[call_id]['aiInstructions'] = f"""
                     Ask the caller:
                     Would you like to transfer this call to a user now?
-                    If the caller confirms, respond with:
+                    If the caller confirms a transfer or want to connect/talk/discuss/meet, respond with:
                     Transferring message: The person has connected on the call right now. You can discuss with each other now.
                     If the caller declines, doesn’t want to connect or transfer, or is busy, respond with:
                     Alright, the call will not be transferred. Let me know if you need anything else."
