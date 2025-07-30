@@ -987,12 +987,16 @@ class CallHandler:
             response = response.replace('Routing Message', '')
             estamitate_result = await estimate_speech_duration(response, 180)
             wait_time = estamitate_result['total_seconds']
-            await asyncio.sleep(wait_time)
+            summary = await self.ai_service.get_summary(call_id)
+            self.agents[call_id]['summary'] = summary
+            await asyncio.sleep(wait_time - 1)
+
             call_from = self.agents[call_id]['to']
             if self.agents[call_id]['direction'] == 'outbound-api':
                 call_from = self.agents[call_id]['from']
             lead_routing_phone = self.agents[call_id].get('lead_routing_phone', None)
             if lead_routing_phone:
+                await self.update_details(None, None, lead_routing_phone, call_from, self.agents[call_id]['call_sid'])
                 call = self.twilio_service.call_agent(
                     agent_number=lead_routing_phone,
                     # agent_number=self.agents[call_id]['routingInfo']['routingNumber'],
@@ -1001,8 +1005,7 @@ class CallHandler:
                     call_sid=self.agents[call_id]['call_sid'])
                 # print(call)
 
-                summary = await self.ai_service.get_summary(call_id)
-                self.agents[call_id]['summary'] = summary
+
 
                 self.agents[call_id]['route_call'] = True
 
@@ -1019,7 +1022,7 @@ class CallHandler:
         # self.sessions[call_id]['prev_wait_duration'] = 0
         # self.sessions[call_id]['wait_duration'] = 0
 
-        elif 'Tranferring Message' in response or 'The person has connected on the call right now' in response:
+        elif 'Transferring Message' in response or 'The person has connected on the call right now' in response:
 
             await self.establish_tts(response, self.agents[call_id]['pre_call_sid'])
             estamitate_result = await estimate_speech_duration(response, 180)
@@ -1050,7 +1053,9 @@ class CallHandler:
     async def get_agent_knowledge(self, call_id):
         lead_routing_phone = self.agents[call_id].get('lead_routing_phone', None)
         if lead_routing_phone:
-            self.agents[call_id]['aiInstructions'] += f"""If the caller requests a transfer or want to connect with agent now, always respond with the following message: "Routing Message: I am connecting the call with a real agent. Please hold on."""
+            self.agents[call_id]['aiInstructions'] += f""" 
+            If the caller requests to speak with an agent without being prompted, treat it as confirmation and respond with:
+                Routing Message: I am connecting the call with a real agent. Please hold on."""
         data =  {        
             "knowledge" : self.agents[call_id]['knowledge'],
             "aiInstructions" : self.agents[call_id]['aiInstructions'],
@@ -1258,14 +1263,13 @@ class CallHandler:
                 "type" : "Business",
                 "content" : "You cannnot give other information instead of the call summary. You have a user waiting to connect here is the summary of that conversation with that user: " + self.agents[call_id]['pre_summary']}]
             self.agents[call_id]['aiInstructions'] = f"""
-                        Ask the caller:
-            "Would you like to transfer this call to a user now?"
-
-            If the caller confirms, respond with the following transfer message:
-            "Transferring message: The person has connected on the call right now. You can discuss with each other now.
-            If the caller declines or don't want to connect or don't want to transfer or busy right now then always respond with the following message:
-            "Alright, the call will not be transferred. Let me know if you need anything else."
-        """
+                    Ask the caller:
+                    Would you like to transfer this call to a user now?
+                    If the caller confirms, respond with:
+                    Transferring message: The person has connected on the call right now. You can discuss with each other now.
+                    If the caller declines, doesn’t want to connect or transfer, or is busy, respond with:
+                    Alright, the call will not be transferred. Let me know if you need anything else."
+                            """
         else:
             result = await self.gather_contact_info(call_id, greetings, self.agents[call_id]['direction'])
 
@@ -1398,7 +1402,6 @@ class CallHandler:
     async def handle_call(self, call_id: str, data):
         print("Handling call...", data)
         if data['direction'] != 'outbound-api':
-            await self.update_agent_data(call_id, data)
             self.additionalinfo[call_id] = {
                 "agent_id" : self.agents[call_id]['id'],
                 "route_call" : False,
