@@ -1248,7 +1248,8 @@ class CallHandler:
             
 
         self.agents[call_id]['pre_call_sid'] = data['pre_call_sid']
-        pre_summary = self.agents.get(self.additionalinfo[data['pre_call_sid']]['call_id'], {}).get('summary', None)
+        call_uid = self.additionalinfo.get(data['pre_call_sid'], {}).get('call_id', None)
+        pre_summary = self.agents.get(call_uid, {}).get('summary', None)
         self.agents[call_id]['pre_summary'] = pre_summary
         fullname = None
         email = None
