@@ -1266,8 +1266,8 @@ class CallHandler:
                     "content" : "You cannnot give other information instead of the call summary. You have a user waiting to connect here is the summary of that conversation with that user: " + self.agents[call_id]['pre_summary']}]
                 self.agents[call_id]['aiInstructions'] = f"""
                         Ask the caller:
-                        Would you like to transfer this call to a user now?
-                        If the caller confirms a transfer or want to connect/talk/discuss/meet, respond with:
+                        Would you like to connect this call to a user now?
+                        If the caller confirms a transfer/connect/talk/discuss/meet with the user, respond with:
                         Transferring message: The person has connected on the call right now. You can discuss with each other now.
                         If the caller declines, doesn’t want to connect or transfer, or is busy, respond with:
                         Alright, the call will not be transferred. Let me know if you need anything else."
