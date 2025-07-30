@@ -1248,7 +1248,7 @@ class CallHandler:
             
 
         self.agents[call_id]['pre_call_sid'] = data['pre_call_sid']
-        pre_summary = self.agents.get(self.agents[call_id]['pre_call_sid'], {}).get('summary', None)
+        pre_summary = self.agents.get(self.additionalinfo[data['pre_call_sid']]['call_id'], {}).get('summary', None)
         self.agents[call_id]['pre_summary'] = pre_summary
         fullname = None
         email = None
@@ -1257,6 +1257,7 @@ class CallHandler:
         existing_appointment = None
         greetings = self.agents[call_id]['greetings']
         if self.agents[call_id]['pre_summary'] is not None and self.agents[call_id]['pre_summary'] != "":
+            print("Found pre_summary: ", self.agents[call_id]['pre_summary'])
             self.agents[call_id]['greetings'] = self.agents[call_id]['pre_summary']
             greetings = self.agents[call_id]['greetings']
             self.agents[call_id]['knowledge'] = [{ 
@@ -1412,7 +1413,7 @@ class CallHandler:
             return response
         else:
             if data['to'] not in self.calls:
-             await self.update_details(None, None, data['to'], data['from'], data['pre_call_sid'])
+                await self.update_details(None, None, data['to'], data['from'], data['pre_call_sid'])
             u_call_id = self.calls[data['to']]
             
             self.additionalinfo[call_id] = {
