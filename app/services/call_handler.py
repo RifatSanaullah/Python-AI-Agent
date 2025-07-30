@@ -389,7 +389,7 @@ class CallHandler:
                         if description and description.strip():
                             notes_array.append({
                                 "content": description,
-                                "category": "call", 
+                                "category": "general", 
                                 "is_pinned": True,
                                 "created_by": "Verbacall",
                             })
