@@ -1246,32 +1246,32 @@ class CallHandler:
         else:
             self.agents[call_id]['user_id'] = None
             
-
-        self.agents[call_id]['pre_call_sid'] = data['pre_call_sid']
-        call_uid = self.additionalinfo.get(data['pre_call_sid'], {}).get('call_id', None)
-        pre_summary = self.agents.get(call_uid, {}).get('summary', None)
-        self.agents[call_id]['pre_summary'] = pre_summary
         fullname = None
         email = None
         phone = None
         description = None
         existing_appointment = None
         greetings = self.agents[call_id]['greetings']
-        if self.agents[call_id]['pre_summary'] is not None and self.agents[call_id]['pre_summary'] != "":
-            print("Found pre_summary: ", self.agents[call_id]['pre_summary'])
-            self.agents[call_id]['greetings'] = self.agents[call_id]['pre_summary']
-            greetings = self.agents[call_id]['greetings']
-            self.agents[call_id]['knowledge'] = [{ 
-                "type" : "Business",
-                "content" : "You cannnot give other information instead of the call summary. You have a user waiting to connect here is the summary of that conversation with that user: " + self.agents[call_id]['pre_summary']}]
-            self.agents[call_id]['aiInstructions'] = f"""
-                    Ask the caller:
-                    Would you like to transfer this call to a user now?
-                    If the caller confirms a transfer or want to connect/talk/discuss/meet, respond with:
-                    Transferring message: The person has connected on the call right now. You can discuss with each other now.
-                    If the caller declines, doesn’t want to connect or transfer, or is busy, respond with:
-                    Alright, the call will not be transferred. Let me know if you need anything else."
-                            """
+        if data.get('pre_call_sid'):
+            self.agents[call_id]['pre_call_sid'] = data['pre_call_sid']
+            call_uid = self.additionalinfo.get(data['pre_call_sid'], {}).get('call_id', None)
+            pre_summary = self.agents.get(call_uid, {}).get('summary', None)
+            self.agents[call_id]['pre_summary'] = pre_summary
+            if self.agents[call_id]['pre_summary'] is not None and self.agents[call_id]['pre_summary'] != "":
+                print("Found pre_summary: ", self.agents[call_id]['pre_summary'])
+                self.agents[call_id]['greetings'] = self.agents[call_id]['pre_summary']
+                greetings = self.agents[call_id]['greetings']
+                self.agents[call_id]['knowledge'] = [{ 
+                    "type" : "Business",
+                    "content" : "You cannnot give other information instead of the call summary. You have a user waiting to connect here is the summary of that conversation with that user: " + self.agents[call_id]['pre_summary']}]
+                self.agents[call_id]['aiInstructions'] = f"""
+                        Ask the caller:
+                        Would you like to transfer this call to a user now?
+                        If the caller confirms a transfer or want to connect/talk/discuss/meet, respond with:
+                        Transferring message: The person has connected on the call right now. You can discuss with each other now.
+                        If the caller declines, doesn’t want to connect or transfer, or is busy, respond with:
+                        Alright, the call will not be transferred. Let me know if you need anything else."
+                                """
         else:
             result = await self.gather_contact_info(call_id, greetings, self.agents[call_id]['direction'])
 
