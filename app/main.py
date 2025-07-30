@@ -1,6 +1,6 @@
 # app/main.py
 import uvicorn
-import logging
+import logging, asyncio
 from dotenv import load_dotenv
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -17,6 +17,7 @@ from app.services.nango_service import NangoService # Added NangoService import 
 from app.services.cinc_service import CincService # Import the new unified CincService
 from app.services import cinc_webhook_service # Import the webhook service
 from typing import Optional, Dict, Any # Added Dict and Any for type hinting
+from app.helpers.utils import estimate_speech_duration, fast_downsample_mulaw
 
 load_dotenv()
 
@@ -106,15 +107,75 @@ async def receive_webhook(
 async def audio_stream(call_id : str, websocket: WebSocket, call_handler: CallHandler = Depends(get_call_handler)):
     await call_handler.process_input(call_id, websocket)
 
+
+@app.post("/hold-user-twiml")
+def hold_twiml_view(request: Request,call_handler: CallHandler = Depends(get_call_handler)):
+    response = call_handler.twilio_service.wait_caller()
+    return PlainTextResponse(content=str(response), media_type="application/xml")
+
+@app.post("/ai-transfer")
+async def ai_transfer(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
+    """
+    This is triggered when AI decides user wants a real human.
+    Holds the user in a conference with hold music/ringtone.
+    """
+    data = request.query_params
+    print("data", data)
+    conference_name = data.get("conference_name")
+    response = call_handler.twilio_service.ai_transfer(conference_name)
+    return PlainTextResponse(content=str(response), media_type="application/xml")
+
+
+
+@app.post("/ask-agent")
+async def ask_agent(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
+    """
+    When agent answers, ask them if they want to talk to user.
+    Press 1 to join the call.
+    """
+    data = await request.form()
+    params = request.query_params
+
+    print("params", params)
+
+    call_sid = params.get("call_sid", "conf_default_conference")
+    summary = call_handler.agents.get(call_sid, {}).get('summary', 'No summary available')
+    response = call_handler.twilio_service.ask_agent(call_sid, summary)
+    return PlainTextResponse(content=str(response), media_type="application/xml")
+
+
+@app.post("/agent-response")
+async def agent_response(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
+    """Handle agent keypress response"""
+    data = await request.form()
+    print("data", data)
+    params = request.query_params
+    call_sid = params.get("call_sid", "conf_default_conference")
+    digits= data.get('Digits')
+    if digits == '1':
+        print("Connecting agent to user" , call_sid)
+        speech = "The agent has connected on the call right now. You can discuss with the agent now. "
+        await call_handler.establish_tts(call_sid)  # Establish TTS connection
+        await call_handler.synthesize_response(speech, call_sid)
+        estamitate_result = await estimate_speech_duration(speech, 180)
+        print("estamitate_result: ", estamitate_result)
+        wait_time = estamitate_result['total_seconds'] + 1
+        await asyncio.sleep(wait_time)
+
+    response = await call_handler.twilio_service.agent_response(digits, call_sid)
+    return PlainTextResponse(content=str(response), media_type="application/xml")
+
+
 @app.post("/incoming_call")
 async def incoming_call(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
     data = await request.form()
     application_sid = data.get('ApplicationSid')
     direction = data.get('Direction')
     fromNumber = data.get('From')
+    params = request.query_params
+    pre_call_sid = params.get("call_sid", None)
     dialed_number = data.get('To')
     call_id = data.get("CallSid")
-    print(data.get("IsBoom"))
     data = {
         "call_sid" : call_id,
         "from" : fromNumber,
@@ -122,6 +183,7 @@ async def incoming_call(request: Request, call_handler: CallHandler = Depends(ge
         "application_sid" : application_sid,
         "direction" : direction,
         "isBoom": data.get("IsBoom"),
+        "pre_call_sid": pre_call_sid,
     }
     response = await call_handler.handle_call(call_id, data)
     return PlainTextResponse(content=str(response), media_type="application/xml")
@@ -170,7 +232,9 @@ async def complete_status_callback(request: Request, call_handler: CallHandler =
     #     return PlainTextResponse(content=str(response), media_type="application/xml")
 
     # else:
-    return await call_handler.complete_status_callback(data)
+    params = request.query_params
+    pre_call_sid = params.get("call_sid", None)
+    return await call_handler.complete_status_callback(data,pre_call_sid)
 
 @app.post("/fallback_status_callback")
 async def fallback_status_callback(request: Request, call_handler: CallHandler = Depends(get_call_handler)):
@@ -186,7 +250,9 @@ async def fallback_status_callback(request: Request, call_handler: CallHandler =
     #     return PlainTextResponse(content=str(response), media_type="application/xml")
 
     # else:
-    return await call_handler.fallback_status_callback(data)
+    params = request.query_params
+    pre_call_sid = params.get("call_sid", None)
+    return await call_handler.fallback_status_callback(data,pre_call_sid)
 
 
 @app.post("/nango-callback")

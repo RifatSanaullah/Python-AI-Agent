@@ -716,6 +716,12 @@ class CincService:
         
         # Process the last lead (or only lead) and enrich it with notes
         lead = leads_list[-1]  # Get the last/most recent lead
+        lead['routing_phone'] = None
+        created_by_agent_id = lead.get("assigned_agents",{}).get("primary_agent",{}).get("id")
+        if created_by_agent_id:
+                agent_data = await self.get_agent(account_id, created_by_agent_id, connection_id)
+                agent_home_phone = agent_data.get('agent', agent_data)['info']['contact']['phone_numbers']['home_phone']
+                lead['routing_phone'] = agent_home_phone
         lead_id = lead.get('id')
         if lead_id:
             try:
