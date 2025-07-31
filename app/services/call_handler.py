@@ -983,7 +983,7 @@ class CallHandler:
             self.timer[call_id] = Timer(wait_time, self.twilio_service.hangup_call, args=[self.agents[call_id]['call_sid']])
             self.timer[call_id].start()
             
-        if 'Routing Message' in response or 'I am connecting the call with a real agent' in response:
+        if 'Routing Message' in response or 'I am connecting the call with a real agent' in response  or 'connect you with a real agent' in response   or 'connecting you to a real agent' in response  or 'hold on' in response:
             response = response.replace('Routing Message', '')
             estamitate_result = await estimate_speech_duration(response, 180)
             wait_time = estamitate_result['total_seconds']
