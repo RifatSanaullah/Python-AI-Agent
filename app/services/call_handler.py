@@ -983,19 +983,25 @@ class CallHandler:
             self.timer[call_id] = Timer(wait_time, self.twilio_service.hangup_call, args=[self.agents[call_id]['call_sid']])
             self.timer[call_id].start()
             
-        if 'Routing Message' in response or 'I am connecting the call with a real agent' in response  or 'connect you with a real agent' in response   or 'connecting you to a real agent' in response  or 'hold on' in response:
-            response = response.replace('Routing Message', '')
-            estamitate_result = await estimate_speech_duration(response, 180)
-            wait_time = estamitate_result['total_seconds']
-            summary = await self.ai_service.get_summary(call_id)
-            self.agents[call_id]['summary'] = summary
-            await asyncio.sleep(wait_time - 1)
-
-            call_from = self.agents[call_id]['to']
-            if self.agents[call_id]['direction'] == 'outbound-api':
-                call_from = self.agents[call_id]['from']
+        if ('Routing Message' in response
+             or 'I am connecting the call with a real agent' in response 
+               or 'connect you with a real agent' in response 
+                 or 'getting a real agent on the line for you' in response 
+                   or 'connecting you to a real agent' in response 
+                     or 'hold on' in response):
             lead_routing_phone = self.agents[call_id].get('lead_routing_phone', None)
             if lead_routing_phone:
+                self.agents[call_id]['route_call'] = True
+                response = response.replace('Routing Message', '')
+                estamitate_result = await estimate_speech_duration(response, 180)
+                wait_time = estamitate_result['total_seconds']
+                summary = await self.ai_service.get_summary(call_id)
+                self.agents[call_id]['summary'] = summary
+                await asyncio.sleep(wait_time - 1)
+
+                call_from = self.agents[call_id]['to']
+                if self.agents[call_id]['direction'] == 'outbound-api':
+                    call_from = self.agents[call_id]['from']
                 await self.update_details(None, None, lead_routing_phone, call_from, self.agents[call_id]['call_sid'])
                 call = self.twilio_service.call_agent(
                     agent_number=lead_routing_phone,
@@ -1007,7 +1013,6 @@ class CallHandler:
 
 
 
-                self.agents[call_id]['route_call'] = True
 
             # Schedule the call to end after 2 seconds
             # self.clear_timer(call_id)
