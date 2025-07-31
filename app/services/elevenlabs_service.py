@@ -45,6 +45,7 @@ class ElevenLabsService:
 
         for sentence_to_speak in sentences_to_process:
             sentence_to_speak = sentence_to_speak.replace("Routing Message ", "")
+            sentence_to_speak = sentence_to_speak.replace("Transferring Message", "")
             await self.send_stream_to_tts(sentence_to_speak, chunk_id)
             
         self.full_text_buffer = self.full_text_buffer[self.last_split_index:].strip()

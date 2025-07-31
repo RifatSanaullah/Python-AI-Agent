@@ -1509,7 +1509,7 @@ class CallHandler:
         await self.agents[call_id]['transcribe_service'].update_call_id(call_id, self.queue_audio)
         
         print("Done initializing session info")
-        
+        await asyncio.sleep(1)
         await self.synthesize_response(greetings , call_id, None, True)
         # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
         await self.agents[call_id]['synthesis_service'].flush_sp_ws()
