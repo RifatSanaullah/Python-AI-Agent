@@ -326,9 +326,9 @@ class CallHandler:
                 self.twilio_service.remove_stream_from_queue(call_id)
                 self.agents[call_id]['websocket_closed'] = True
                 # self.flush_agent(call_id)
-            if self.agents[call_id].get('synthesis_service') is not None:
+            if call_id in self.agents and self.agents[call_id].get('synthesis_service') is not None:
                 await self.agents[call_id]['synthesis_service'].disconnect()
-            if self.agents[call_id].get('transcribe_service') is not None:
+            if call_id in self.agents and self.agents[call_id].get('transcribe_service') is not None:
                 await self.agents[call_id]['transcribe_service'].disconnect()  # Close the transcriber service
                     
             del self.sessions[session['stream_sid']]
