@@ -988,8 +988,8 @@ class CallHandler:
             response = response.replace('Routing Message', '')
             estamitate_result = await estimate_speech_duration(response, 180)
             wait_time = estamitate_result['total_seconds']
-            # summary = await self.ai_service.get_summary(call_id)
-            self.agents[call_id]['summary'] = self.ai_service.conversations[call_id]
+            summary = await self.ai_service.get_summary(call_id)
+            self.agents[call_id]['summary'] = summary
 
             call_from = self.agents[call_id]['to']
             if self.agents[call_id]['direction'] == 'outbound-api':
@@ -1274,7 +1274,7 @@ class CallHandler:
                         If the caller declines, doesn’t want to connect or transfer, or is busy, respond with:
                             "Alright, the call will not be transferred. Let me know if you need anything else."
                         
-                        The current caller is real human agent and the conversations is about the user who wants to connect with the real human agent. This is the conversation with the user: {pre_summary}""
+                        The current person who is in call is real human agent and the conversations is about the user who wants to connect with you. This is the summary of conversation with the user: {pre_summary}""
                                 """
                 
                 
