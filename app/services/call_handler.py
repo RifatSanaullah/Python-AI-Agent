@@ -332,7 +332,8 @@ class CallHandler:
                 await self.agents[call_id]['transcribe_service'].disconnect()  # Close the transcriber service
                     
             del self.sessions[session['stream_sid']]
-            del self.agents[call_id]
+            if call_id in self.agents:
+                del self.agents[call_id]
             self.clear_timer(call_id)
             try:
                 await websocket.close()
