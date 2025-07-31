@@ -1033,7 +1033,7 @@ class CallHandler:
             self.twilio_service.update_call(self.agents[call_id]['call_sid'], f"conf_{self.agents[call_id]['pre_call_sid']}")
 
         if 'will not be transferred' in response or "won't be transferred" in response or "won’t be transferred" in response or "won’t transfer" in response or "won't transfer" in response:
-            await self.establish_tts("The agent is busy right now. Will connect you later", self.agents[call_id]['pre_call_sid'])
+            await self.establish_tts("The agent is busy right now. Will connect you later. Would you like to appointment instead?", self.agents[call_id]['pre_call_sid'])
             self.agents[self.additionalinfo[self.agents[call_id]['pre_call_sid']]['call_id']]['route_call'] = False
 
 
@@ -2092,7 +2092,7 @@ class CallHandler:
             call_sid = self.additionalinfo[call_sid]['call_id']
 
         if pre_call_sid is not None:
-                await self.establish_tts("The agent is busy right now. Will connect you later", pre_call_sid)
+                await self.establish_tts("The agent is busy right now. Will connect you later. Would you like to appointment instead?", pre_call_sid)
                 self.agents[self.additionalinfo[pre_call_sid]['call_id']]['route_call'] = False
 
         data= {
@@ -2148,7 +2148,7 @@ class CallHandler:
 
         }
         if pre_call_sid is not None:
-                await self.establish_tts("The agent is busy right now. Will connect you later", pre_call_sid)
+                await self.establish_tts("The agent is busy right now. Will connect you later. Would you like to appointment instead?", pre_call_sid)
                 self.agents[self.additionalinfo[pre_call_sid]['call_id']]['route_call'] = False
 
         self.twilio_service.client.calls(call_sid).update(status='completed')
