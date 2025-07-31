@@ -177,6 +177,7 @@ class TwilioService:
 
     
     def update_call(self, call_sid, conference_name):
+        print("Updating call to hold in conference:", conference_name)
         hold_twiml_url = f"{settings.base_url}/ai-transfer?conference_name={conference_name}"  # Endpoint that serves the TwiML with the hold message
         call = self.client.calls(call_sid).update(
             url=hold_twiml_url,

@@ -1022,13 +1022,13 @@ class CallHandler:
         # self.sessions[call_id]['prev_wait_duration'] = 0
         # self.sessions[call_id]['wait_duration'] = 0
 
-        elif 'Transferring Message' in response or 'The person has connected on the call right now' in response:
+        elif 'Transferring Message' in response or 'The person has connected on the call right now' in response or 'The person is on the line' in response or 'The person is on the call right now' in response or 'The person is on the line right now' in response:
 
+            self.agents[call_id]['route_call'] = True
             await self.establish_tts(response, self.agents[call_id]['pre_call_sid'])
             estamitate_result = await estimate_speech_duration(response, 180)
-            wait_time = estamitate_result['total_seconds'] + 1
+            wait_time = estamitate_result['total_seconds']
             await asyncio.sleep(wait_time)
-            self.agents[call_id]['route_call'] = True
             self.twilio_service.update_call(self.agents[call_id]['pre_call_sid'], f"conf_{self.agents[call_id]['pre_call_sid']}")
             self.twilio_service.update_call(self.agents[call_id]['call_sid'], f"conf_{self.agents[call_id]['pre_call_sid']}")
 
