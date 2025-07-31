@@ -983,7 +983,7 @@ class CallHandler:
             self.timer[call_id] = Timer(wait_time, self.twilio_service.hangup_call, args=[self.agents[call_id]['call_sid']])
             self.timer[call_id].start()
             
-        if 'Routing Message' in response or 'connecting the call with a real agent' in response  or 'connect you with a real agent' in response  or 'getting a real agent on the line for you' in response  or 'connecting you to a real agent' in response  or 'hold on' in response or 'hang-on' in response or 'hang on' in response:
+        if 'Routing Message' in response or 'connecting the call with a real agent' in response  or 'connect you with a real agent' in response  or 'getting a real agent on the line for you' in response  or 'connecting you to a real agent' in response  or 'hold on' in response or 'hang-on' in response or 'hang on' in response or 'hang tight' in response  or 'hang-tight' in response:
             response = response.replace('Routing Message', '')
             estamitate_result = await estimate_speech_duration(response, 180)
             wait_time = estamitate_result['total_seconds']
@@ -1022,7 +1022,7 @@ class CallHandler:
         # self.sessions[call_id]['prev_wait_duration'] = 0
         # self.sessions[call_id]['wait_duration'] = 0
 
-        elif 'Transferring Message' in response or 'The person has connected on the call right now' in response or 'The person is on the line' in response or 'The person is on the call right now' in response or 'The person is on the line right now' in response:
+        elif  'Transferring message' in response or 'transferring-message' in response or 'Transferring Message' in response or "You're now connected" in response or "You’re now connected" in response or "You are now connected" in response or 'The person has connected on the call right now' in response or 'The person is on the line' in response or 'The person is on the call right now' in response or 'The person is on the line right now' in response:
 
             self.agents[call_id]['route_call'] = True
             await self.establish_tts(response, self.agents[call_id]['pre_call_sid'])
@@ -1055,7 +1055,8 @@ class CallHandler:
         if lead_routing_phone:
             self.agents[call_id]['aiInstructions'] += f""" 
             If the caller requests a transfer or want to connect/talk/discuss/meet with agent now treat it as confirmation and respond with:
-                Routing Message: I am connecting the call with a real agent. Please hold on."""
+                "Routing Message: I am connecting the call with a real agent. Please hold on."
+                """
         data =  {        
             "knowledge" : self.agents[call_id]['knowledge'],
             "aiInstructions" : self.agents[call_id]['aiInstructions'],
@@ -1268,9 +1269,9 @@ class CallHandler:
                                 2.Ask the caller:
                                     Would you like to connect this call to a user now?
                         If the caller confirms a transfer/connect/talk/discuss/meet with the user, respond with:
-                            Transferring message: The person has connected on the call right now. You can discuss with each other now.
+                            "Transferring Message: Thanks for holding. You’re now connected — you can go ahead and chat about next steps, availability, or any questions about homes you’re interested in. I’ll step away so you can take it from here"
                         If the caller declines, doesn’t want to connect or transfer, or is busy, respond with:
-                            Alright, the call will not be transferred. Let me know if you need anything else.
+                            "Alright, the call will not be transferred. Let me know if you need anything else."
                         
                         The current caller is real human agent and the conversations is about the user who wants to connect with the real human agent. This is the conversation with the user: {pre_summary}""
                                 """
