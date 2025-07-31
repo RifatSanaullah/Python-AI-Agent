@@ -987,8 +987,8 @@ class CallHandler:
             response = response.replace('Routing Message', '')
             estamitate_result = await estimate_speech_duration(response, 180)
             wait_time = estamitate_result['total_seconds']
-            summary = await self.ai_service.get_summary(call_id)
-            self.agents[call_id]['summary'] = summary
+            # summary = await self.ai_service.get_summary(call_id)
+            self.agents[call_id]['summary'] = self.ai_service.conversations[call_id]
             await asyncio.sleep(wait_time - 1)
 
             call_from = self.agents[call_id]['to']
@@ -1259,8 +1259,6 @@ class CallHandler:
             self.agents[call_id]['pre_summary'] = pre_summary
             if self.agents[call_id]['pre_summary'] is not None and self.agents[call_id]['pre_summary'] != "":
                 print("Found pre_summary: ", self.agents[call_id]['pre_summary'])
-                self.agents[call_id]['greetings'] = "Hello, a user is waiting to connect with you. Do you want to connect with the lead or would you like to have the lead details first?" 
-                greetings = self.agents[call_id]['greetings']
                 self.agents[call_id]['knowledge'] = [{ 
                     "type" : "Business",
                     "content" : """Your main goal is to make a hot transfer to a live user who is waiting to connect with you. You cannnot give other information instead of the call summary.  """}]
@@ -1274,8 +1272,31 @@ class CallHandler:
                         If the caller declines, doesn’t want to connect or transfer, or is busy, respond with:
                             Alright, the call will not be transferred. Let me know if you need anything else.
                         
-                        The current caller is real human agent and the summary is about the user conversation who wants to connect with the real human agent. This is the summary of the conversation with the user: {pre_summary}""
+                        The current caller is real human agent and the conversations is about the user who wants to connect with the real human agent. This is the conversation with the user: {pre_summary}""
                                 """
+                
+                
+                greetings_from_ai = await self.ai_service.run_chat_without_tools([
+                    {
+                        "role" :"user",
+                        "content" : f"""You are the AI assistant who just finished speaking with a real estate lead and are now making a live transfer to a human agent. Based on your conversation with the lead, generate a 3–4 line spoken summary that you, the AI, will say right after the human agent picks up the phone.
+                            The summary should sound natural and helpful, and include the following key details if available:
+                            Lead’s name
+                            Whether they are looking to buy or sell
+                            Desired location(s)
+                            Budget or price range
+                            Timeline or urgency
+                            Specific preferences (e.g. number of bedrooms, property type, etc.)
+                            After the summary, ask the agent:
+                            Would it be okay if I connected the call with them now?
+                            Example Output Format:
+                            Hi [Agent's Name], it’s Alex from your AI assistant. I just spoke with [Lead's Name]. They’re looking to [buy/sell] a home in [location], ideally within the [budget] range. They mentioned they’re hoping to move [timeline], and they’re looking for [specific preferences]. Would it be okay if I connected the call with them now?
+                            input: {pre_summary}
+                                        """
+                    }
+                ])
+                self.agents[call_id]['greetings'] = greetings_from_ai
+                greetings = self.agents[call_id]['greetings']
         else:
             result = await self.gather_contact_info(call_id, greetings, self.agents[call_id]['direction'])
 
