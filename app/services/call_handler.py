@@ -989,7 +989,6 @@ class CallHandler:
             wait_time = estamitate_result['total_seconds']
             # summary = await self.ai_service.get_summary(call_id)
             self.agents[call_id]['summary'] = self.ai_service.conversations[call_id]
-            await asyncio.sleep(wait_time - 1)
 
             call_from = self.agents[call_id]['to']
             if self.agents[call_id]['direction'] == 'outbound-api':
@@ -997,6 +996,7 @@ class CallHandler:
             lead_routing_phone = self.agents[call_id].get('lead_routing_phone', None)
             if lead_routing_phone:
                 await self.update_details(None, None, lead_routing_phone, call_from, self.agents[call_id]['call_sid'])
+                await asyncio.sleep(wait_time - 2)
                 call = self.twilio_service.call_agent(
                     agent_number=lead_routing_phone,
                     # agent_number=self.agents[call_id]['routingInfo']['routingNumber'],
