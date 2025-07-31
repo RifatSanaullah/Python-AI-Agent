@@ -1259,18 +1259,22 @@ class CallHandler:
             self.agents[call_id]['pre_summary'] = pre_summary
             if self.agents[call_id]['pre_summary'] is not None and self.agents[call_id]['pre_summary'] != "":
                 print("Found pre_summary: ", self.agents[call_id]['pre_summary'])
-                self.agents[call_id]['greetings'] = self.agents[call_id]['pre_summary']
+                self.agents[call_id]['greetings'] = "Hello, a user is waiting to connect with you. Do you want to connect with the lead or would you like to have the lead details first?" 
                 greetings = self.agents[call_id]['greetings']
                 self.agents[call_id]['knowledge'] = [{ 
                     "type" : "Business",
-                    "content" : "You cannnot give other information instead of the call summary. You have a user waiting to connect here is the summary of that conversation with that user: " + self.agents[call_id]['pre_summary']}]
+                    "content" : """Your main goal is to make a hot transfer to a live user who is waiting to connect with you. You cannnot give other information instead of the call summary.  """}]
                 self.agents[call_id]['aiInstructions'] = f"""
-                        Ask the caller:
-                        Would you like to connect this call to a user now?
+                        if he/she want lead detail first then 
+                                1.Give the below summary.
+                                2.Ask the caller:
+                                    Would you like to connect this call to a user now?
                         If the caller confirms a transfer/connect/talk/discuss/meet with the user, respond with:
-                        Transferring message: The person has connected on the call right now. You can discuss with each other now.
+                            Transferring message: The person has connected on the call right now. You can discuss with each other now.
                         If the caller declines, doesn’t want to connect or transfer, or is busy, respond with:
-                        Alright, the call will not be transferred. Let me know if you need anything else."
+                            Alright, the call will not be transferred. Let me know if you need anything else.
+                        
+                        The current caller is real human agent and the summary is about the user conversation who wants to connect with the real human agent. This is the summary of the conversation with the user: {pre_summary}""
                                 """
         else:
             result = await self.gather_contact_info(call_id, greetings, self.agents[call_id]['direction'])

@@ -709,12 +709,8 @@ class AIService:
     
             
     async def get_summary(self, conversation_id):
-            allmessages = 'Greet the caller and tell a person is waiting to connect with you do you want to connect the call or have the lead details and ' \
-            'if he/she want lead detail first then ' \
-            'Give a short in 2 or 3 sentences with of below conversations with that user (The current caller is real human agent and the summary is about the user conversation who wants to connect with the real human agent ) and ask " Would you like to transfer this call to a user now?"' \
-            'else if he/she want to connect the call then ' \
-            'Would you like to connect this call to a user now?' \
-            'This is the summary of the conversation with the user: \n\n'
+            allmessages = 'Give a short in 2 or 3 sentences with of below conversations with that user (The current caller is real human agent and the summary is about the user conversation who wants to connect with the real human agent )' \
+            'This is the conversation with the user: \n\n'
             for index in range(0, len(self.conversations[conversation_id])) :
                 item = self.conversations[conversation_id][index]
                 allmessages +=  f"{item['role']}:  {item['content']}\n\n"
