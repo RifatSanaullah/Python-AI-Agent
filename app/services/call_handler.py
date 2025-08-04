@@ -1444,6 +1444,7 @@ class CallHandler:
     async def handle_call(self, call_id: str, data):
         print("Handling call...", data)
         if data['direction'] != 'outbound-api':
+            await self.update_agent_data(call_id, data)
             self.additionalinfo[call_id] = {
                 "agent_id" : self.agents[call_id]['id'],
                 "route_call" : False,
