@@ -1285,7 +1285,7 @@ class CallHandler:
                         Ask the caller:
                                     Would you like to connect this call to a user now?
                         If the caller confirms a transfer/connect/talk/discuss/meet with the user, respond with:
-                            "Transferring Message: Thanks for holding. You’re now connected — you can go ahead and chat about next steps, availability, or any questions about homes you’re interested in. I’ll step away so you can take it from here"
+                            "Transferring Message: Thanks for holding. You’re now connected. I’ll step away so you can take it from here."
                         If the caller declines, doesn’t want to connect or transfer, or is busy, respond with:
                             "Alright, the call will not be transferred. Let me know if you need anything else."
                                 """
