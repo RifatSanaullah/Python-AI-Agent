@@ -22,7 +22,14 @@ logger = logging.getLogger(__name__)
 CINC_API_BASE_URL = "https://public.cincapi.com/v2"
 
 cinc_service = CincService()
-
+def format_us_number_simple(number_str):
+        digits = ''.join(filter(str.isdigit, number_str))
+        if len(digits) == 10:
+            return '+1' + digits
+        elif len(digits) == 11 and digits.startswith('1'):
+            return '+' + digits
+        else:
+            return number_str
 
 async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_id: str, update_details, created_by_agent_id: str = None):
     try:
@@ -38,8 +45,9 @@ async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_i
         
         # Get connection configuration using agent's phone
         backend = BackendHandler()
+        agent_cell_phone = format_us_number_simple(agent_cell_phone)
         payload = {"phone_number": "temp", "account_id": account_id, "agent_cell_number": agent_cell_phone}
-        
+        is_cadence_enabled = True
         try:
             connection_data = await backend.get_connection_details(payload)
             wait_time_minutes = connection_data.get('outbound_cadence_interval', 5)
