@@ -1270,7 +1270,7 @@ class CallHandler:
                     "type" : "Business",
                     "content" : """Your main goal is to make a hot transfer to a live user who is waiting to connect with you. You cannnot give other information instead of the call summary.  """}]
                 self.agents[call_id]['aiInstructions'] = f"""
-                        You are the AI assistant who just finished speaking with a real estate lead and are now making a live transfer to a human agent. Based on your conversation with the lead, generate a 3–4 line spoken summary that you, the AI, will say right after the human agent picks up the phone.
+                        You are the AI assistant who just finished speaking with a real estate lead and are now making a live transfer to a human agent. Based on your conversation with the lead, generate a 2-3 line spoken summary that you, the AI, will say right after the human agent picks up the phone.
                                 After greetings from user or assistant, give the below summary within 2 or 3 lines.
                                 The summary should sound natural and helpful, and include the following key details if available:
                                     Lead’s name
