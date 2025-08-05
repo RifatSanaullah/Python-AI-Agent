@@ -488,6 +488,7 @@ class CallHandler:
                     # Update existing lead
                     logging.info(f"Updating CINC lead {existing_lead_id}")
                     if self.agents[call_id]['voicemail_detected'] is True:
+                        print("Voicemail detected, updating status to unworked")
                         cinc_data['info']['status'] = "unworked"
                         cinc_data['pipeline']['history'].pop()
                         cinc_data['pipeline']['history'].append({
