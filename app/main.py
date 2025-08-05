@@ -92,6 +92,28 @@ async def receive_webhook(
                 await cinc_webhook_service.fetch_and_trigger_outbound(
                     account_id, lead_id, connection_id, call_handler.update_details, created_by_agent_id
                 )
+        elif event_type == "agent.communications.received":
+            # Check if this is an AI reply (not just any communication)
+            communication = data.get("communication", {})
+            origin = communication.get("origin", {})
+            is_ai = origin.get("is_ai", False)
+            is_reply = origin.get("is_reply", False)
+            
+            # Only cancel outbound calls if this is an AI reply
+            if is_ai and is_reply:
+                from_info = communication.get("from", {})
+                lead_phone = from_info.get("phone_number")
+                
+                if lead_phone:
+                    print(f"🤖 AI reply detected from {lead_phone} - canceling outbound call")
+                    logger.info(f"🤖 AI reply detected from {lead_phone} - canceling outbound call")
+                    await cinc_webhook_service.cancel_outbound_for_ai_response(account_id, lead_phone)
+                else:
+                    print("🤖 AI reply detected - no outbound call (no phone number)")
+                    logger.info("🤖 AI reply detected - no outbound call (no phone number)")
+            else:
+                print(f"ℹ️ Communication received (not AI reply) - is_ai: {is_ai}, is_reply: {is_reply}")
+                logger.info(f"ℹ️ Communication received (not AI reply) - is_ai: {is_ai}, is_reply: {is_reply}")
         else:
             logger.info(f"ℹ️ Received event of type: {event_type}")
 

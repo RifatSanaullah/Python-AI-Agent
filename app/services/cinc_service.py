@@ -576,7 +576,10 @@ class CincService:
 
         data = {
             "url": webhook_url,
-            "event_filters": ["lead.created"],
+            "event_filters": [
+                "lead.created",
+                "{event.type == 'agent.communications.received' && (event.communication.origin.is_ai == true && event.communication.origin.is_reply == true)}"
+            ],
             "headers": {
                 "X-Webhook-Secret": connection_id
             }
