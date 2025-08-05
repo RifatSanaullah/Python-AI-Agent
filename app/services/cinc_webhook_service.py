@@ -48,6 +48,7 @@ async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_i
         agent_cell_phone = format_us_number_simple(agent_cell_phone)
         payload = {"phone_number": "temp", "account_id": account_id, "agent_cell_number": agent_cell_phone}
         is_cadence_enabled = True
+        wait_time_minutes = 5
         try:
             connection_data = await backend.get_connection_details(payload)
             wait_time_minutes = connection_data.get('outbound_cadence_interval', 5)
