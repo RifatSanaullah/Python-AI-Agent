@@ -456,7 +456,7 @@ async def cinc_callback(
     
     # Construct final redirect URL
     redirect_url = f"{base_redirect_url}?{'&'.join([f'{k}={v}' for k, v in redirect_params.items()])}"
-    return RedirectResponse(url="/")
+    return RedirectResponse(url="https://www.cincpro.com/")
     # return RedirectResponse(url=redirect_url)
 
 
