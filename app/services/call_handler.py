@@ -489,7 +489,11 @@ class CallHandler:
                     logging.info(f"Updating CINC lead {existing_lead_id}")
                     if self.agents[call_id]['voicemail_detected'] is True:
                         cinc_data['info']['status'] = "unworked"
-                        cinc_data['pipeline']['stage'] = "Attempted Contact"
+                        cinc_data['pipeline']['history'].pop()
+                        cinc_data['pipeline']['history'].append({
+                            "stage": "Attempted Contact",
+                            "staged_date": datetime.now(timezone.utc).isoformat(),    
+                        })
                     result = await self.cinc_service.update_lead(
                         account_id=account_id,
                         lead_id=existing_lead_id,
