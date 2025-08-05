@@ -34,6 +34,8 @@ def format_us_number_simple(number_str):
 async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_id: str, update_details, created_by_agent_id: str = None):
     try:
         # Get agent cell phone first
+        agent_cell_phone = None
+        agent_home_phone = None
         if created_by_agent_id:
             try:
                 agent_data = await cinc_service.get_agent(account_id, created_by_agent_id, connection_id)
