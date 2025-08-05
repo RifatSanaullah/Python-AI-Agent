@@ -456,7 +456,8 @@ async def cinc_callback(
     
     # Construct final redirect URL
     redirect_url = f"{base_redirect_url}?{'&'.join([f'{k}={v}' for k, v in redirect_params.items()])}"
-    return RedirectResponse(url=redirect_url)
+    return RedirectResponse(url="/")
+    # return RedirectResponse(url=redirect_url)
 
 
 @app.post("/cinc/account/{account_id}/disconnect")
