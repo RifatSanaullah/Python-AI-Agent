@@ -195,6 +195,7 @@ class CallHandler:
                     print("Ending call due to prolonged silence...")
                     self.twilio_service.hangup_call(self.agents[call_id]['call_sid'])
                     self.agents[call_id]['last_user_audio_time'] = None
+                    self.agents[call_id]['voicemail_detected'] = True
                     # if data['streamSid'] and self.sessions[data['streamSid']]['wait_counter'] >= 2:
                     #     self.sessions[data['streamSid']]['wait_counter'] = 0
                     #     message = get_interrupt_message('end_call')
@@ -486,6 +487,9 @@ class CallHandler:
                 if not should_create_new and existing_lead_id:
                     # Update existing lead
                     logging.info(f"Updating CINC lead {existing_lead_id}")
+                    if self.agents[call_id]['voicemail_detected'] is True:
+                        cinc_data['info']['status'] = "unworked"
+                        cinc_data['pipeline']['stage'] = "Attempted Contact"
                     result = await self.cinc_service.update_lead(
                         account_id=account_id,
                         lead_id=existing_lead_id,
@@ -1164,6 +1168,7 @@ class CallHandler:
         self.agents[call_id] = api_response['data']['agent']
         self.agents[call_id]['silence_duration'] = 10
         self.agents[call_id]['last_user_audio_time'] = None
+        self.agents[call_id]['voicemail_detected'] = False
         self.agents[call_id]['isBoom'] = data['isBoom']
         self.agents[call_id]['complete_call'] = False
         self.agents[call_id]['websocket_closed'] = False
