@@ -188,11 +188,13 @@ class CallHandler:
                 if data['streamSid'] not in self.sessions or 'call_sid' not in self.sessions[data['streamSid']]:
                     continue
 
-                if (data['streamSid'] 
-                and self.agents[call_id]['last_user_audio_time']
+                if (data['streamSid']
+                and self.agents[call_id]['last_user_audio_time'] is not None
+                and self.additionalinfo[self.agents[call_id]['call_sid']]['agent_call_in_queue'] is not True
                 and time.time() - self.agents[call_id]['last_user_audio_time'] > self.agents[call_id]['silence_duration']):
-                    
+                    print("Ending call due to prolonged silence...")
                     self.twilio_service.hangup_call(self.agents[call_id]['call_sid'])
+                    self.agents[call_id]['last_user_audio_time'] = None
                     # if data['streamSid'] and self.sessions[data['streamSid']]['wait_counter'] >= 2:
                     #     self.sessions[data['streamSid']]['wait_counter'] = 0
                     #     message = get_interrupt_message('end_call')
@@ -939,7 +941,7 @@ class CallHandler:
         return
 
     async def on_user_speech(self, call_id):
-        self.agents[call_id]['last_user_audio_time'] = time.time()
+        self.agents[call_id]['last_user_audio_time'] = None
         if call_id in self.agents and self.agents[call_id]['user_speaking'] is not True:
             self.agents[call_id]['user_speaking'] = True
             await self.stop_stream(call_id)
@@ -969,13 +971,15 @@ class CallHandler:
         #     streamingResponse = False
         response = await self.ai_service.generate_response(call_id, transcript, self.synthesize_response, self.agents[call_id]['aiClient'], self.agents[call_id]['synthesis_service'].flush_sp_ws, streamingResponse)
         print(f"Response: {response}")
+        estamitate_result = await estimate_speech_duration(response, 180)
+        self.agents[call_id]['last_user_audio_time'] = time.time() + (estamitate_result['total_seconds'] - 2)
+
         if 'End Call Message' in response  or  self.contains_any_word(response):
             self.agents[call_id]['end_call'] = True
             response = response.replace('End Call Message', '')
             # Schedule the call to end after 2 seconds
             # wait_time = self.sessions[call_id]['wait_duration']
             # if self.sessions[call_id]['last_transcript_time']:
-            estamitate_result = await estimate_speech_duration(response, 180)
             print("estamitate_result: ", estamitate_result)
             wait_time = estamitate_result['total_seconds'] + 1
             # wait_time = self.sessions[call_id]['wait_duration'] + self.sessions[call_id]['prev_wait_duration']
@@ -987,7 +991,7 @@ class CallHandler:
             
         if 'Routing Message' in response or 'connecting the call with a real agent' in response  or 'connect you with a real agent' in response  or 'getting a real agent on the line for you' in response  or 'connecting you to a real agent' in response  or 'hold on' in response or 'hang-on' in response or 'hang on' in response or 'hang tight' in response  or 'hang-tight' in response:
             response = response.replace('Routing Message', '')
-            estamitate_result = await estimate_speech_duration(response, 180)
+
             wait_time = estamitate_result['total_seconds']
             summary = await self.ai_service.get_summary(call_id)
             self.agents[call_id]['summary'] = summary
@@ -1030,7 +1034,6 @@ class CallHandler:
 
             self.agents[call_id]['route_call'] = True
             await self.establish_tts(response, self.agents[call_id]['pre_call_sid'])
-            estamitate_result = await estimate_speech_duration(response, 180)
             wait_time = estamitate_result['total_seconds']
             await asyncio.sleep(wait_time)
             self.twilio_service.update_call(self.agents[call_id]['pre_call_sid'], f"conf_{self.agents[call_id]['pre_call_sid']}")
@@ -1057,9 +1060,9 @@ class CallHandler:
     async def get_agent_knowledge(self, call_id):
         lead_routing_phone = self.agents[call_id].get('lead_routing_phone', None)
         if lead_routing_phone:
-            self.agents[call_id]['aiInstructions'] += f""" 
+            self.agents[call_id]['aiInstructions'] += f"""
             If the caller requests a transfer or want to connect/talk/discuss/meet with agent now treat it as confirmation and respond with:
-                "Routing Message: I am connecting the call with a real agent. Please hold on."
+                "Routing Message: I am connecting the call with a real agent. Please hold on and in the meantime do you have anything to query?"
                 """
         data =  {        
             "knowledge" : self.agents[call_id]['knowledge'],
