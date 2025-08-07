@@ -1777,8 +1777,11 @@ class CallHandler:
                         # Use the first matching lead
                         lead = result[0]
                         contact_info = lead.get('info', {}).get('contact', {})
-                        routing_phone =  self.format_us_number_simple(lead.get('routing_phone', ''))
-                        self.agents[call_sid]['lead_routing_phone'] = routing_phone
+                        self.agents[call_sid]['lead_routing_phone'] = None
+                        routing_phone = lead.get('routing_phone', None)
+                        if routing_phone is not None:
+                            routing_phone =  self.format_us_number_simple(lead.get('routing_phone'))
+                            self.agents[call_sid]['lead_routing_phone'] = routing_phone
                         print("Routing phone: ", self.agents[call_sid]['lead_routing_phone'])
                         # Extract contact information
                         first_name = contact_info.get('first_name', '')
