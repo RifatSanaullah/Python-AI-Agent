@@ -93,7 +93,7 @@ class CallHandler:
 
         return call_id
 
-    async def update_details(self, account_id, details, phone, agentPhone, pre_call_sid=None):
+    async def update_details(self, account_id, details, phone, agentPhone, pre_call_sid=None, init_service=True):
         if account_id and details :
             self.prefetched_details[account_id] = details
         formattedPhone= self.format_us_number_simple(phone)
@@ -109,7 +109,7 @@ class CallHandler:
             "isBoom": None,
             "pre_call_sid" : pre_call_sid
         }
-        return await self.update_agent_data(call_id, data)
+        return await self.update_agent_data(call_id, data, init_service)
 
 
     def get_business_agent(self, call_id: str):
@@ -1002,24 +1002,10 @@ class CallHandler:
             response = response.replace('Routing Message', '')
 
             wait_time = estamitate_result['total_seconds']
-            summary = await self.ai_service.get_summary(call_id)
-            self.agents[call_id]['summary'] = summary
 
-            call_from = self.agents[call_id]['to']
-            if self.agents[call_id]['direction'] == 'outbound-api':
-                call_from = self.agents[call_id]['from']
-            lead_routing_phone = self.agents[call_id].get('lead_routing_phone', None)
-            if lead_routing_phone and self.additionalinfo[self.agents[call_id]['call_sid']]['agent_call_in_queue'] is not True:
-                await self.update_details(None, None, lead_routing_phone, call_from, self.agents[call_id]['call_sid'])
-                # await asyncio.sleep(wait_time - 2)
-                call = self.twilio_service.call_agent(
-                    agent_number=lead_routing_phone,
-                    # agent_number=self.agents[call_id]['routingInfo']['routingNumber'],
-                    # agent_number="+16313494110",
-                    twilio_number=call_from,
-                    call_sid=self.agents[call_id]['call_sid'])
+            if self.additionalinfo[self.agents[call_id]['call_sid']]['agent_call_in_queue'] is not True:
+                await self.process_agent_call(call_id)
                 
-                self.additionalinfo[self.agents[call_id]['call_sid']]['agent_call_in_queue'] =  True
                 # print(call)
 
 
@@ -1056,6 +1042,27 @@ class CallHandler:
 
         # await self.synthesize_response(response, call_id)
         self.agents[call_id]['last_transcript_time'] = time.time()
+
+    async def process_agent_call(self, call_id):
+            
+            summary = await self.ai_service.get_summary(call_id)
+            self.agents[call_id]['summary'] = summary
+
+            call_from = self.agents[call_id]['to']
+            if self.agents[call_id]['direction'] == 'outbound-api':
+                call_from = self.agents[call_id]['from']
+            lead_routing_phone = self.agents[call_id].get('lead_routing_phone', None)
+            if lead_routing_phone:
+                await self.update_details(None, None, lead_routing_phone, call_from, self.agents[call_id]['call_sid'], False)
+                # await asyncio.sleep(wait_time - 2)
+                call = self.twilio_service.call_agent(
+                    agent_number=lead_routing_phone,
+                    # agent_number=self.agents[call_id]['routingInfo']['routingNumber'],
+                    # agent_number="+16313494110",
+                    twilio_number=call_from,
+                    call_sid=self.agents[call_id]['call_sid'])
+                
+                self.additionalinfo[self.agents[call_id]['call_sid']]['agent_call_in_queue'] =  True
 
     def clear_timer(self,call_id):
         if call_id in self.timer:
@@ -1158,7 +1165,7 @@ class CallHandler:
             return number
 
 
-    async def update_agent_data(self, call_id, data):
+    async def update_agent_data(self, call_id, data , init_service=True):
         if call_id in self.agents:
             return
         api_response = await self.backend_service.create_call_info(data)
@@ -1345,33 +1352,9 @@ class CallHandler:
             description =self.agents[call_id]['description']
             existing_appointment =self.agents[call_id]['existing_appointment']
 
-        if self.agents[call_id]['STT']['name'] == 'Deepgram':
-            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, DeepgramService)
-            # self.agents[call_id]["synthesis_service"] = self.agents[call_id]["transcribe_service"]
-        elif self.agents[call_id]['STT']['name'] == 'AssemblyAI':
-            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, TranscribeService)
-            # self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
-        else :
-            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, DeepgramService)
-            
-
-        if self.agents[call_id]['TTS']['name'] == 'Deepgram':
-            if self.agents[call_id]['STT']['name'] == 'Deepgram' and self.agents[call_id]["transcribe_service"]:
-                self.agents[call_id]["synthesis_service"] = self.agents[call_id]["transcribe_service"]
-            else :
-                self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(call_id, DeepgramService)
-
-        elif self.agents[call_id]['TTS']['name'] == 'Elevenlabs':
-            self.agents[call_id]["synthesis_service"] = ElevenLabsService(self.loop)
-        elif self.agents[call_id]['TTS']['name'] == 'Microsoft Azure':
-            self.agents[call_id]["synthesis_service"] = AzureService(self.loop)
-        elif self.agents[call_id]['TTS']['name'] == 'PlayHT':
-            self.agents[call_id]["synthesis_service"] = PlayHT(self.loop)
-        elif self.agents[call_id]['TTS']['name'] == 'Claude':
-            self.agents[call_id]["synthesis_service"] = MurfAI(self.loop)
-        else:
-            self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(call_id, DeepgramService)
-
+        if init_service is True:
+            await self.initialize_services(call_id)
+           
 
         # self.agents[call_id]["VAD"] =  VoiceActivityDetector(on_start=self.create_on_user_speech_handler(call_id))
 
@@ -1446,7 +1429,6 @@ class CallHandler:
             Do not proactively list available times unless there's a scheduling conflict.
             """
         )
-        await self.agents[call_id]['synthesis_service'].update_call_id(call_id, self.queue_audio)
 
         self.agents[call_id]['user_speaking'] = False
         self.agents[call_id]['ai_speaking'] = False
@@ -1455,6 +1437,36 @@ class CallHandler:
         
 
         return True
+    
+    async def initialize_services(self, call_id):
+        if self.agents[call_id]['STT']['name'] == 'Deepgram':
+            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, DeepgramService)
+            # self.agents[call_id]["synthesis_service"] = self.agents[call_id]["transcribe_service"]
+        elif self.agents[call_id]['STT']['name'] == 'AssemblyAI':
+            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, TranscribeService)
+            # self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(stream_sid, DeepgramService)
+        else :
+            self.agents[call_id]["transcribe_service"] = self.initialize_transcriber(call_id, DeepgramService)
+            
+
+        if self.agents[call_id]['TTS']['name'] == 'Deepgram':
+            if self.agents[call_id]['STT']['name'] == 'Deepgram' and self.agents[call_id]["transcribe_service"]:
+                self.agents[call_id]["synthesis_service"] = self.agents[call_id]["transcribe_service"]
+            else :
+                self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(call_id, DeepgramService)
+
+        elif self.agents[call_id]['TTS']['name'] == 'Elevenlabs':
+            self.agents[call_id]["synthesis_service"] = ElevenLabsService(self.loop)
+        elif self.agents[call_id]['TTS']['name'] == 'Microsoft Azure':
+            self.agents[call_id]["synthesis_service"] = AzureService(self.loop)
+        elif self.agents[call_id]['TTS']['name'] == 'PlayHT':
+            self.agents[call_id]["synthesis_service"] = PlayHT(self.loop)
+        elif self.agents[call_id]['TTS']['name'] == 'Claude':
+            self.agents[call_id]["synthesis_service"] = MurfAI(self.loop)
+        else:
+            self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(call_id, DeepgramService)
+
+        await self.agents[call_id]['synthesis_service'].update_call_id(call_id, self.queue_audio)
         
     async def handle_call(self, call_id: str, data):
         print("Handling call...", data)
@@ -1473,7 +1485,8 @@ class CallHandler:
             if data['to'] not in self.calls:
                 await self.update_details(None, None, data['to'], data['from'], data['pre_call_sid'])
             u_call_id = self.calls[data['to']]
-            
+            if data['pre_call_sid']:
+                await self.initialize_services(u_call_id)
             self.additionalinfo[call_id] = {
                 "agent_id" : self.agents[u_call_id]['id'],
                 "route_call" : False,
@@ -1743,6 +1756,7 @@ class CallHandler:
             try:
                 # Get account_id from agent info
                 account_id = self.agents[call_sid].get('account_id')
+                self.agents[call_sid]['lead_routing_phone'] = None
                 if account_id:
                     if account_id in self.prefetched_details:
 
@@ -1777,7 +1791,6 @@ class CallHandler:
                         # Use the first matching lead
                         lead = result[0]
                         contact_info = lead.get('info', {}).get('contact', {})
-                        self.agents[call_sid]['lead_routing_phone'] = None
                         routing_phone = lead.get('routing_phone', None)
                         if routing_phone is not None:
                             routing_phone =  self.format_us_number_simple(lead.get('routing_phone'))
@@ -2150,7 +2163,7 @@ class CallHandler:
 
         if pre_call_sid is not None:
                 await self.establish_tts("The agent is busy right now. Will connect you later. Would you like to appointment instead?", pre_call_sid)
-                self.agents[self.additionalinfo[pre_call_sid]['call_id']]['route_call'] = False
+                # self.agents[self.additionalinfo[pre_call_sid]['call_id']]['route_call'] = False
 
         data= {
             "duration" : call_duration,

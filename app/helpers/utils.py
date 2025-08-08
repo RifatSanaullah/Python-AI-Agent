@@ -1,5 +1,5 @@
     
-import random
+import random, re
 from fastapi import UploadFile, WebSocketDisconnect
 from docx import Document
 from PyPDF2 import PdfReader
@@ -243,4 +243,21 @@ def generate_conservative_random_tts_settings(voice, text):
         "style_guidance": random.randint(4, 8),  # 4 to 6
         "text_guidance": round(random.uniform(0, 0.5), 2)
     }
+
+def filter_sentences_by_keywords(text):
+
+    # Example array of words to remove
+    words_to_remove = ["Routing Message", "Transferring Message"]
+
+    # Join words into a regex pattern, escaping special chars if needed
+    pattern = r"\b(" + "|".join(re.escape(word) for word in words_to_remove) + r")\b"
+
+
+    # Replace words with empty string (case-insensitive)
+    result = re.sub(pattern, "", text, flags=re.IGNORECASE)
+
+    # Remove extra spaces caused by replacement
+    result = re.sub(r"\s+", " ", result).strip()
+
+    return result
     

@@ -791,7 +791,8 @@ class CincService:
     ) -> List[Dict[str, Any]]:
         """Get all notes for a lead with their full content."""
         # First get the notes list (metadata only)
-        notes = await self.get_lead_notes(account_id, lead_id, connection_id=connection_id)
+        notes = []
+        # notes = await self.get_lead_notes(account_id, lead_id, connection_id=connection_id)
         
         # Create tasks to fetch all note contents concurrently
         async def fetch_note_content_safe(note: Dict[str, Any]) -> Optional[Dict[str, Any]]:

@@ -3,6 +3,7 @@ from app.config import settings
 import websockets, asyncio, json, re, base64
 from app.services.interval_runner import IntervalRunner
 from app.services.ai_service import AIService
+from app.helpers.utils import filter_sentences_by_keywords
 class ElevenLabsService:
     def __init__(self, loop=None):
         """Initialize the ElevenLabs service with API key from settings"""
@@ -91,8 +92,7 @@ class ElevenLabsService:
 
     async def send_stream_to_tts(self, text, chunk_id):
         print("Text To speak: ",text)
-        text = text.replace("Routing Message", "")
-        text = text.replace("Transferring Message", "")
+        text = filter_sentences_by_keywords(text)
         await self.websocket.send(json.dumps({
                 "text": text,
                 "flush" : True,
