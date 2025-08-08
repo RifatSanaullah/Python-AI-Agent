@@ -25,3 +25,4 @@ python-multipart
 elevenlabs
 azure-cognitiveservices-speech
 apscheduler
+honeybadger
