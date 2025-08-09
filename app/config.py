@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     azure_key: str = os.getenv("AZURE_KEY")
     azure_endpoint: str = os.getenv("AZURE_ENDPOINT")
     azure_region: str = os.getenv("AZURE_REGION")
+    honeybadger_api_key: str = os.getenv("HONEYBADGER_API_KEY", "")
 
 
 settings = Settings()
