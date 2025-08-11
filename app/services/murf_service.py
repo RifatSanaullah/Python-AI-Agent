@@ -71,7 +71,7 @@ class MurfAI:
             print(f"An error occurred: {e}")
             raise
         
-    async def send_stream_to_tts(self, text):
+    async def send_stream_to_tts(self, text, chunk_id=None):
         await self.send_audio(text)
 
     async def send_audio(self, text):

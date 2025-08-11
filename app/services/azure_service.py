@@ -127,7 +127,7 @@ class AzureService:
                         print("Error details: {}".format(cancellation_details.error_details))
                 return
     
-    async def send_stream_to_tts(self, text):
+    async def send_stream_to_tts(self, text, chunk_id=None):
         self.tts_request.input_stream.write(text)
         await self.flush_sp_ws()
 

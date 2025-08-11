@@ -136,7 +136,7 @@ class PlayHT:
             await self.send_to_tts(text)
 
 
-    async def send_stream_to_tts(self, text):
+    async def send_stream_to_tts(self, text, chunk_id=None):
                         
             self.options['text'] = text
             # message = self.options    

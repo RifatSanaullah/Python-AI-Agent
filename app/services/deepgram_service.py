@@ -61,7 +61,7 @@ class DeepgramService:
     def is_sentence_complete(self, sentence):
         return bool(re.search(r'[.!?]$', sentence.strip()))
     
-    async def send_stream_to_tts(self, text):
+    async def send_stream_to_tts(self, text, chunk_id=None):
         await self.sp_dg_connection.send_text(text)
 
     async def stream_text_to_speech(self, text: str):
