@@ -981,7 +981,7 @@ class CallHandler:
         response = await self.ai_service.generate_response(call_id, transcript, self.synthesize_response, self.agents[call_id]['aiClient'], self.agents[call_id]['synthesis_service'].flush_sp_ws, streamingResponse)
         print(f"Response: {response}")
         estamitate_result = await estimate_speech_duration(response, 180)
-        self.agents[call_id]['last_user_audio_time'] = time.time() + (estamitate_result['total_seconds'] - 2)
+        self.agents[call_id]['last_user_audio_time'] = time.time() + (estamitate_result['total_seconds'])
 
         if 'End Call Message' in response  or  self.contains_any_word(response):
             self.agents[call_id]['end_call'] = True
@@ -1178,7 +1178,10 @@ class CallHandler:
         print(f"Agent Keys: {list(api_response.get('data', {}).get('agent', {}).keys())}")
         
         self.agents[call_id] = api_response['data']['agent']
-        self.agents[call_id]['silence_duration'] = 10
+        self.agents[call_id]['silence_duration'] = 15
+        self.agents[call_id]['lead_routing_phone'] = None
+        if self.agents[call_id]['routingInfo']['routingNumber'] and self.agents[call_id]['routingInfo']['routingNumber'] is not None:
+            self.agents[call_id]['lead_routing_phone'] = self.agents[call_id]['routingInfo']['routingNumber']
         self.agents[call_id]['last_user_audio_time'] = None
         self.agents[call_id]['voicemail_detected'] = False
         self.agents[call_id]['isBoom'] = data['isBoom']
@@ -1554,6 +1557,10 @@ class CallHandler:
         await self.agents[call_id]['transcribe_service'].update_call_id(call_id, self.queue_audio)
         
         print("Done initializing session info")
+
+        estamitate_result = await estimate_speech_duration(greetings, 180)
+        self.agents[call_id]['last_user_audio_time'] = time.time() + (estamitate_result['total_seconds'])
+
         await self.synthesize_response(greetings , call_id, None, True)
         # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
         await self.agents[call_id]['synthesis_service'].flush_sp_ws()
