@@ -1180,8 +1180,11 @@ class CallHandler:
         self.agents[call_id] = api_response['data']['agent']
         self.agents[call_id]['silence_duration'] = 15
         self.agents[call_id]['lead_routing_phone'] = None
-        if self.agents[call_id]['routingInfo']['routingNumber'] is not None:
-            self.agents[call_id]['lead_routing_phone'] = self.agents[call_id]['routingInfo']['routingNumber']
+        routing_number = self.agents[call_id]['routingInfo'].get('routingNumber', None)
+        if routing_number is not None:
+            self.agents[call_id]['lead_routing_phone'] = routing_number
+
+        print('=== PYTHON HANDLER DEBUG - Agent Data ===')
         self.agents[call_id]['last_user_audio_time'] = None
         self.agents[call_id]['voicemail_detected'] = False
         self.agents[call_id]['isBoom'] = data['isBoom']
