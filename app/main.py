@@ -18,14 +18,26 @@ from app.services.cinc_service import CincService # Import the new unified CincS
 from app.services import cinc_webhook_service # Import the webhook service
 from typing import Optional, Dict, Any # Added Dict and Any for type hinting
 from app.helpers.utils import estimate_speech_duration, fast_downsample_mulaw
+from honeybadger import honeybadger, contrib
+from honeybadger.contrib.fastapi import HoneybadgerRoute
 
 load_dotenv()
+
+# Configure Honeybadger
+if settings.honeybadger_api_key:
+    honeybadger.configure(api_key=settings.honeybadger_api_key)
+    logger.info("✅ Honeybadger configured successfully")
+else:
+    logger.warning("⚠️ Honeybadger API key not provided - error tracking disabled")
 
 app = FastAPI(
     title="BoomerCall API",
     description="API for Voice Assistant",
     version="0.0.2",
 )
+
+# Use Honeybadger's custom APIRoute to safely capture request bodies on errors
+app.router.route_class = HoneybadgerRoute
 
 # Add CORS middleware to allow requests from frontend
 app.add_middleware(
@@ -34,6 +46,14 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Add Honeybadger ASGI middleware
+app.add_middleware(
+    contrib.ASGIHoneybadger,
+    params_filters=[
+        "dont-include-this",
+    ],
 )
 # Create global service instance
 call_handler_instance = None
