@@ -124,16 +124,16 @@ class PlayHT:
     async def start_synthesiser(self):
         self.ws_task = asyncio.create_task(self._listen_for_audio())
 
-    async def stream_text_to_speech(self, text: str):
+    async def stream_text_to_speech(self, text: str, chunk_id=None):
         try:
             # do something with the audio chunk
-            await self.send_to_tts(text)
+            await self.send_to_tts(text, chunk_id)
 
         except Exception as e:
             print(f"An error occurred on playht: {e}")
             await self._get_websocket_url()
             self.websocket = await websockets.connect(self.websocket_url)
-            await self.send_to_tts(text)
+            await self.send_to_tts(text, chunk_id)
 
 
     async def send_stream_to_tts(self, text, chunk_id=None):
@@ -148,29 +148,28 @@ class PlayHT:
             print("Text To speak: ",text)
             await self.websocket.send(json.dumps(self.options))
 
-    async def send_to_tts(self, text_chunk):
-        
+    async def send_to_tts(self, text_chunk, chunk_id=None):
         self.full_text_buffer += text_chunk
-
         sentences_to_process = []
         self.last_split_index = 0
-        
-        # Loop to find all complete sentences within the current buffer
-        for match in re.finditer(r'[.!?](?:\s|$)', self.full_text_buffer):
-            # The sentence goes from the last split point up to the end of this punctuation mark
+
+        # Improved regex:
+        # Match a period/question mark/exclamation only if:
+        # - not part of ellipsis (...)
+        # - not followed by dash/hyphen
+        pattern = r'(?<!\.)[.!?](?![.\-])(?:\s|$)'  # avoid splitting on ... or .-
+
+        for match in re.finditer(pattern, self.full_text_buffer):
             sentence = self.full_text_buffer[self.last_split_index : match.end()].strip()
             if sentence:
                 sentences_to_process.append(sentence)
             self.last_split_index = match.end()
 
-        # If we found any complete sentences, process them
         for sentence_to_speak in sentences_to_process:
-            await self.send_stream_to_tts(sentence_to_speak)
-        # await self._synthesize_text_chunk(text_to_synthesize, self.current_synth_id)
-            # self.full_text_buffer = ''
+            await self.send_stream_to_tts(sentence_to_speak, chunk_id)
             
-        # Keep any remaining text in the buffer for the next chunk
         self.full_text_buffer = self.full_text_buffer[self.last_split_index:].strip()
+
 
     def update_tts_interrupt(self, status):
         self.interrupt[self.current_request_id] = True

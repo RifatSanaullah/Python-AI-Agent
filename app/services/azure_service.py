@@ -131,45 +131,32 @@ class AzureService:
         self.tts_request.input_stream.write(text)
         await self.flush_sp_ws()
 
-    async def stream_text_to_speech(self, text: str):
+    async def stream_text_to_speech(self, text: str, chunk_id=None):
         # return self.tts_request.input_stream.write(text)
-        return await self.send_to_tts(text)
+        return await self.send_to_tts(text, chunk_id)
 
-    async def send_to_tts(self, text_chunk):
+    async def send_to_tts(self, text_chunk, chunk_id=None):
         
-                        self.full_text_buffer += text_chunk
+        self.full_text_buffer += text_chunk
+        sentences_to_process = []
+        self.last_split_index = 0
 
-                        # --- Core Sentence Detection Logic ---
-                        # Look for common sentence endings: period, exclamation mark, question mark
-                        # This regex looks for these characters followed by either whitespace or the end of the string.
-                        # It will match `. `, `!`, `?`, `.`, `!`, `?`
-                        # This avoids splitting on emails like 'user@example.com' because the '.' is not followed by whitespace.
-                        # It will still split on 'Dr. Smith' if a space follows the period.
-                        
-                        # Find all sentence endings in the current buffer
-                        # re.split keeps the delimiters if you use capturing groups, but we need the index for split.
-                        # The finditer method gives us the end index of the match.
-                        
-                        sentences_to_process = []
-                        self.last_split_index = 0
-                        
-                        # Loop to find all complete sentences within the current buffer
-                        for match in re.finditer(r'[.!?](?:\s|$)', self.full_text_buffer):
-                            # The sentence goes from the last split point up to the end of this punctuation mark
-                            sentence = self.full_text_buffer[self.last_split_index : match.end()].strip()
-                            if sentence:
-                                sentences_to_process.append(sentence)
-                            self.last_split_index = match.end()
+        # Improved regex:
+        # Match a period/question mark/exclamation only if:
+        # - not part of ellipsis (...)
+        # - not followed by dash/hyphen
+        pattern = r'(?<!\.)[.!?](?![.\-])(?:\s|$)'  # avoid splitting on ... or .-
 
-                        # If we found any complete sentences, process them
-                        for sentence_to_speak in sentences_to_process:
-                            await self.send_stream_to_tts(sentence_to_speak)
-                        # await self._synthesize_text_chunk(text_to_synthesize, self.current_synth_id)
-                            # self.full_text_buffer = ''
-                            
-                        # Keep any remaining text in the buffer for the next chunk
-                        self.full_text_buffer = self.full_text_buffer[self.last_split_index:].strip()
+        for match in re.finditer(pattern, self.full_text_buffer):
+            sentence = self.full_text_buffer[self.last_split_index : match.end()].strip()
+            if sentence:
+                sentences_to_process.append(sentence)
+            self.last_split_index = match.end()
 
+        for sentence_to_speak in sentences_to_process:
+            await self.send_stream_to_tts(sentence_to_speak, chunk_id)
+            
+        self.full_text_buffer = self.full_text_buffer[self.last_split_index:].strip()
 
 
 

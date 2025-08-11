@@ -74,7 +74,7 @@ class DeepgramService:
     async def send_stream_to_tts(self, text, chunk_id=None):
         await self.sp_dg_connection.send_text(text)
 
-    async def stream_text_to_speech(self, text: str):
+    async def stream_text_to_speech(self, text: str, chunk_id=None):
         try:
             # options = SpeakOptions(
             #     model= model,
@@ -85,7 +85,7 @@ class DeepgramService:
             # response = self.speaker.stream({"text": text}, options)
             # return response.stream.getbuffer()
 
-            await self.send_stream_to_tts(text)
+            await self.send_stream_to_tts(text, chunk_id)
             # self._socket.send(json.dumps({"type": "Speak", "text": text}))
         except Exception as e:
             print(f"An error occurred: {e}")
