@@ -184,7 +184,7 @@ class AIService:
         
         self.system_convo[conversation_id].append({"role": role, "content": content})
 
-    def initial_message(self , conversations, conversation_id, knowledge_base):
+    def initial_message(self , conversations, conversation_id, knowledge_base, greetings):
         # Initialize conversation with metadata
         if conversation_id not in conversations:
             conversations[conversation_id] = []
@@ -198,6 +198,9 @@ class AIService:
         conversations[conversation_id] = [
 
                 {"role": "system", "content": f"Always ask only one question at a time. After each response, follow up with a single question. For example, if you need contact information, ask for the name first, then phone number, then email—one at a time. Do not ask for multiple pieces of information or offer multiple options in one message. Always provide responses that are suitable for phone conversations. Avoid lengthy explanations and special character (*), long lists, or complex details. Current Date is: {date.today()} if you have been asked for any appointment or booking dates do not give the dates which has already been passed. Limit responses to key points and do not rush to complete the conversation. Keep responses under 3 sentences to ensure they are concise and easy to digest."},
+                {"role": "system", "content": f"""If you didn't give the greetings on start of call:
+                 Follow this greeting after user greetings:
+                 .{greetings}"""},
                 # {"role": "system", "content": self.generate_emotion_tag_prompt(date.today().isoformat())},
                  # {"role": "system", "content": "Whenever you get any answer and if you left any query. Ask instantly don't wait for querying from user."},
                 # {"role": "system", "content": "Before Ending the call you have to reclarify all the information you gather with user"},
@@ -272,12 +275,12 @@ class AIService:
             prompt = re.sub(r'<if new>([\s\S]*?)</if>', r'\1', prompt, flags=re.IGNORECASE)
 
         return prompt.strip()
-    async def process_initial_message(self, conversation_id, get_agent_knowledge):
+    async def process_initial_message(self, conversation_id, get_agent_knowledge, greetings):
 
         if conversation_id not in self.conversations:
             knowledge = await get_agent_knowledge(conversation_id)
             # self.initial_message(self.conversations, conversation_id, knowledge)
-            self.initial_message(self.system_convo, conversation_id, knowledge)
+            self.initial_message(self.system_convo, conversation_id, knowledge, greetings)
             # self.add_system_message(conversation_id, "system" , self.generate_emotion_tag_prompt())
 
             self.conversations[conversation_id] = []
@@ -452,6 +455,26 @@ class AIService:
             User: "{user_input}"
             Assistant:
 """
+    def get_tools(self):
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "connect_to_agent",
+                    "description": "Connects the caller to a live agent immediately when confirmed.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "note": {
+                                "type": "string",
+                                "description": "Reason or context for connecting to the agent"
+                            }
+                        },
+                    }
+                }
+            }
+        ]
+        return tools
     async def generate_response(self, conversation_id, message: str, synthesize_response,ai_client, flush_ws, streamingResponse):
 
         
@@ -508,6 +531,8 @@ class AIService:
                 messages=self.system_convo[conversation_id] + newPrompt,
                 stream=True,
                 max_tokens=150,
+                # tools=self.get_tools(),
+                # tool_choice="auto",
             )
             self.add_system_message(conversation_id, "user", message)
 
@@ -525,6 +550,9 @@ class AIService:
             prefix_buffer = ""
             post_prefix_mode = False
             post_prefix_text = ""
+            # Handle streaming output
+            function_name = None
+            function_args = ""
             for chunk in response:
                 self.update_interrupt_details(conversation_id, chunk.id)
                 if self.ai_interrupt[conversation_id][chunk.id] is True:
@@ -568,6 +596,16 @@ class AIService:
 
                         # await chunker.add_stream_data(val)
 
+
+                            # If it's a tool call
+                    if delta.tool_calls:
+                        print(f"\n\n🔔 Tool Call Detected: {delta.tool_calls[0]}")
+                        tool_data = delta.tool_calls[0]
+                        if tool_data.function:
+                            if tool_data.function.name:
+                                function_name = tool_data.function.name
+                            if tool_data.function.arguments:
+                                function_args += tool_data.function.arguments
             # await chunker.flush()
             if not streamingResponse:
                 await synthesize_response(chunk_reply, conversation_id)
@@ -577,7 +615,20 @@ class AIService:
             #     chunk_reply = chunker.filter_message(chunk_reply)
             #     await synthesize_response(chunk_reply, conversation_id)
 
-                
+            # After stream ends, check for tool call
+            if function_name == "connect_to_agent":
+                try:
+                    args = json.loads(function_args)
+                except json.JSONDecodeError:
+                    args = {}
+
+                print(f"\n\n🔔 Tool Call: connect_to_agent(note={args.get('note')})")
+
+                # Your real agent connection logic here
+                def connect_to_agent(note):
+                    print(f"📞 Connecting to agent for: {note}")
+
+                connect_to_agent(args.get("note", ""))
                     
         self.add_message(conversation_id, "assistant", assistant_reply)
         self.add_system_message(conversation_id, "assistant", assistant_reply)

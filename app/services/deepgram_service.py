@@ -233,10 +233,7 @@ class DeepgramService:
 
                 # Schedule new task: wait 2 seconds, then emit final transcript
                 try:
-                    self.transmit_task = asyncio.run_coroutine_threadsafe(
-                        self.transmit_after_delay(),
-                        self.loop
-                    )
+                    self.transmit_task = asyncio.create_task(self.transmit_after_delay())
                 except Exception as e:
                     self._notify_honeybadger(e, {"operation": "schedule_transmit_after_delay"})
                     raise
@@ -244,7 +241,7 @@ class DeepgramService:
 
 
     def cancel_transmit(self):
-         if self.transmit_task:
+         if self.transmit_task and not self.transmit_task.done():
             self.transmit_task.cancel()
             self.transmit_task = None
 

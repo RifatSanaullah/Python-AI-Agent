@@ -951,6 +951,10 @@ class CallHandler:
 
     async def on_user_speech(self, call_id):
         self.agents[call_id]['last_user_audio_time'] = None
+        if self.agents[call_id].get('transmit_task', None) is not None:
+            print("Cancelling transmit task for call_id")
+            self.agents[call_id]['transmit_task'].cancel()
+            self.agents[call_id]['transmit_task'] = None
         if call_id in self.agents and self.agents[call_id]['user_speaking'] is not True:
             self.agents[call_id]['user_speaking'] = True
             await self.stop_stream(call_id)
@@ -1004,6 +1008,7 @@ class CallHandler:
             wait_time = estamitate_result['total_seconds']
 
             if self.additionalinfo[self.agents[call_id]['call_sid']]['agent_call_in_queue'] is not True:
+                await asyncio.sleep(2)
                 await self.process_agent_call(call_id)
                 
                 # print(call)
@@ -1075,7 +1080,7 @@ class CallHandler:
 
     async def get_agent_knowledge(self, call_id):
         lead_routing_phone = self.agents[call_id].get('lead_routing_phone', None)
-        if lead_routing_phone:
+        if lead_routing_phone and ('pre_call_sid' not in self.agents[call_id] or not self.agents[call_id]['pre_call_sid'] or self.agents[call_id]['pre_call_sid'] is None):
             self.agents[call_id]['aiInstructions'] += f"""
             If the caller requests a transfer or want to connect/talk/discuss/meet with agent now treat it as confirmation and respond with:
                 "Routing Message: I am connecting the call with a real agent. Please hold on and in the meantime do you have anything to query?"
@@ -1319,26 +1324,35 @@ class CallHandler:
                                 """
                 
                 
-                # greetings_from_ai = await self.ai_service.run_chat_without_tools([
-                #     {
-                #         "role" :"user",
-                #         "content" : f"""You are the AI assistant who just finished speaking with a real estate lead and are now making a live transfer to a human agent. Based on your conversation with the lead, generate a 3–4 line spoken summary that you, the AI, will say right after the human agent picks up the phone.
-                #             The summary should sound natural and helpful, and include the following key details if available:
-                #             Lead’s name
-                #             Whether they are looking to buy or sell
-                #             Desired location(s)
-                #             Budget or price range
-                #             Timeline or urgency
-                #             Specific preferences (e.g. number of bedrooms, property type, etc.)
-                #             After the summary, ask the agent:
-                #             Would it be okay if I connected the call with them now?
-                #             Example Output Format:
-                #             Hi [Agent's Name], it’s Alex from your AI assistant. I just spoke with [Lead's Name]. They’re looking to [buy/sell] a home in [location], ideally within the [budget] range. They mentioned they’re hoping to move [timeline], and they’re looking for [specific preferences]. Would it be okay if I connected the call with them now?
-                #             input: {pre_summary}
-                #                         """
-                #     }
-                # ])
-                self.agents[call_id]['greetings'] = ""
+                greetings_from_ai = await self.ai_service.run_chat_without_tools([
+                    {
+                        "role" :"system",
+                        "content" : f"""You are an extraction engine.\n\n
+                                        You will always receive, in this order:\n
+                                        • (optional) FIRST_NAME: <name>      ← line may be missing or value may be blank
+                                        Task:\n
+                                        1. Identify which message to return:\n
+                                            • If the requested tag exists, return exactly the text inside that tag.\n
+                                            • Otherwise, return every line after the headers (FIRST_NAME) unchanged.\n
+                                        2. Handle the <first_name> token
+                                            • If a non‑empty FIRST_NAME was provided, replace every occurrence of
+                                                <first_name> (case‑sensitive) with that name.
+                                            • If FIRST_NAME is missing or empty, delete every occurrence of
+                                                <first_name> and then:
+                                                – collapse any resulting double spaces,
+                                                – remove a space that appears immediately before a comma or period,
+                                                – trim leading/trailing spaces.
+                                        4. Output only the final text—no quotes, no extra whitespace,
+                                        no commentary.
+                                        """
+                    },
+                    {
+                        "role" : "user",
+                        "content" : f"""FIRST_NAME:  \n\n Hi <first_name>, I just spoke with a lead and they are waiting to connect with you. Would you like to connect this call to a user now?"""
+                    }
+                ])
+        
+                self.agents[call_id]['greetings'] = greetings_from_ai
                 greetings = self.agents[call_id]['greetings']
         else:
             result = await self.gather_contact_info(call_id, greetings, self.agents[call_id]['direction'])
@@ -1391,9 +1405,7 @@ class CallHandler:
         isAllowMeetingConflict = self.agents[call_id]['allowMeetingConflict']
         print("isAllowMeetingConflict: ", isAllowMeetingConflict)
 
-        await self.ai_service.process_initial_message(call_id, self.get_agent_knowledge)
-        self.ai_service.add_message(call_id, "assistant", greetings)
-        self.ai_service.add_system_message(call_id, "assistant", greetings)
+        await self.ai_service.process_initial_message(call_id, self.get_agent_knowledge, greetings)
         
         if fullname is not None and fullname != "":
             # self.ai_service.add_message(call_id, "user", f"My Name is: {fullname}", "temp")
@@ -1560,13 +1572,7 @@ class CallHandler:
         await self.agents[call_id]['transcribe_service'].update_call_id(call_id, self.queue_audio)
         
         print("Done initializing session info")
-
-        estamitate_result = await estimate_speech_duration(greetings, 180)
-        self.agents[call_id]['last_user_audio_time'] = time.time() + (estamitate_result['total_seconds'])
-
-        await self.synthesize_response(greetings , call_id, None, True)
-        # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
-        await self.agents[call_id]['synthesis_service'].flush_sp_ws()
+        self.agents[call_id]['transmit_task'] = asyncio.create_task(self.transmit_after_delay(greetings, call_id))
 
         if (self.agents[call_id]['isAvailable'] == False):
             await self.synthesize_response('Currenty we are not available, Please contact us in our available time', call_id, None, True)
@@ -1597,6 +1603,17 @@ class CallHandler:
         #     "call_sid" : call_sid
         # }
         # await self.backend_service.update_call_info(updaedata)
+
+    async def transmit_after_delay(self, greetings, call_id):
+        await asyncio.sleep(4)  # Wait for speech
+        print("Transmitting after delay...")
+        estamitate_result = await estimate_speech_duration(greetings, 180)
+        self.agents[call_id]['last_user_audio_time'] = time.time() + (estamitate_result['total_seconds'])
+        self.ai_service.add_message(call_id, "assistant", greetings)
+        self.ai_service.add_system_message(call_id, "assistant", greetings)
+        await self.synthesize_response(greetings , call_id, None, True)
+        # if self.agents[call_sid]['tts']['name'] == 'Deepgram':
+        await self.agents[call_id]['synthesis_service'].flush_sp_ws()
 
     async def establish_tts(self,response, call_id):
 
@@ -1766,7 +1783,6 @@ class CallHandler:
             try:
                 # Get account_id from agent info
                 account_id = self.agents[call_sid].get('account_id')
-                self.agents[call_sid]['lead_routing_phone'] = None
                 if account_id:
                     if account_id in self.prefetched_details:
 
@@ -2172,7 +2188,10 @@ class CallHandler:
             call_sid = self.additionalinfo[call_sid]['call_id']
 
         if pre_call_sid is not None:
-                await self.establish_tts("The agent is busy right now. Will connect you later. Would you like to appointment instead?", pre_call_sid)
+                try:
+                    await self.establish_tts("The agent is busy right now. Will connect you later. Would you like to appointment instead?", pre_call_sid)
+                except Exception as e:
+                    print(f"Error in Establishing Agent TTS: {str(e)}")
                 # self.agents[self.additionalinfo[pre_call_sid]['call_id']]['route_call'] = False
 
         data= {
@@ -2228,8 +2247,11 @@ class CallHandler:
 
         }
         if pre_call_sid is not None:
-                await self.establish_tts("The agent is busy right now. Will connect you later. Would you like to appointment instead?", pre_call_sid)
-                self.agents[self.additionalinfo[pre_call_sid]['call_id']]['route_call'] = False
+                try:
+                    await self.establish_tts("The agent is busy right now. Will connect you later. Would you like to appointment instead?", pre_call_sid)
+                except Exception as e:
+                    print(f"Error on Establishing TTS on Fallback: {str(e)}")
+                # self.agents[self.additionalinfo[pre_call_sid]['call_id']]['route_call'] = False
 
         self.twilio_service.client.calls(call_sid).update(status='completed')
         print(f"Call {call_sid} cleaned up.")
