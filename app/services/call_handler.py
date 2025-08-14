@@ -1332,7 +1332,7 @@ class CallHandler:
                                         • (optional) FIRST_NAME: <name>      ← line may be missing or value may be blank
                                         Task:\n
                                         1. Identify which message to return:\n
-                                            • If the requested tag exists, return exactly the text inside that tag.\n
+                                            • If the requested tag exists, return exactly or simmilar the text inside that tag.\n
                                             • Otherwise, return every line after the headers (FIRST_NAME) unchanged.\n
                                         2. Handle the <first_name> token
                                             • If a non‑empty FIRST_NAME was provided, replace every occurrence of
@@ -1344,11 +1344,13 @@ class CallHandler:
                                                 – trim leading/trailing spaces.
                                         4. Output only the final text—no quotes, no extra whitespace,
                                         no commentary.
+                                        Get the lead name from this summary and fill the <lead_name> from tehe text or return "lead": {pre_summary}
                                         """
                     },
                     {
                         "role" : "user",
-                        "content" : f"""FIRST_NAME:  \n\n Hi <first_name>, I just spoke with a lead and they are waiting to connect with you. Would you like to connect this call to a user now?"""
+                        "content" : f"""FIRST_NAME:  \n\n Hi <first_name>, I just spoke with <lead_name> and waiting to connect with you. Would you like to have a short breifing or connect this call to a user now?
+                        """
                     }
                 ])
         
