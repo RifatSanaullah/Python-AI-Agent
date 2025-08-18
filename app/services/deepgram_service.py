@@ -12,7 +12,7 @@ from deepgram import (
 
 from app.config import settings
 from app.utils.honeybadger_utils import notify_honeybadger
-import threading
+from app.services.ai_service import AIService
 import re
 class DeepgramService:
     def __init__(self , on_transcript = None,on_start=None ,loop =None, speak_model = "aura-2-thalia-en"):
@@ -33,6 +33,8 @@ class DeepgramService:
         self.same_sentence = 0
         self.prev_sentence = ""
         self.skip_final = False
+        self.ai_service = AIService()
+
         # self.lock = threading.Lock()
         # connect to websocket
         self.transcribeOptions = LiveOptions(
@@ -158,7 +160,9 @@ class DeepgramService:
     async def on_binary_data(self, res , **kwargs):
             data = kwargs.get('data')
             try:
-                await self.queue_audio['queue_audio'](self.queue_audio['call_id'],data)
+                interrupted = self.ai_service.get_interrupt_status(self.queue_audio['call_id'])
+                if not interrupted:
+                    await self.queue_audio['queue_audio'](self.queue_audio['call_id'],data)
             except Exception as e:
                 self._notify_hb(e, {"operation": "on_binary_data", "data_len": len(data) if data else 0})
                 raise
@@ -213,7 +217,7 @@ class DeepgramService:
         return self.skip_final
 
 
-    async def on_data(self,res,**kwargs):
+    async def on_data(self, res, **kwargs):
         "Called when a new transcript has been received."
         result = kwargs['result']
         is_final = result.is_final
@@ -267,6 +271,8 @@ class DeepgramService:
         if self.sp_dg_connection:
             await self.sp_dg_connection.finish()   
             
-    def update_tts_interrupt(self):
+    async def update_tts_interrupt(self, status):
+        if self.sp_dg_connection:
+            await self.sp_dg_connection.clear()
         return
     

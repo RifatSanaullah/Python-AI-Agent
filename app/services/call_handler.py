@@ -945,7 +945,7 @@ class CallHandler:
         await self.twilio_service.stop_audio_stream(self.agents[call_id]['websocket'], self.agents[call_id]['stream_sid'])
         self.agents[call_id]['ai_interrupt'] =  True
         self.ai_service.update_interrupt_status(call_id, True)
-        self.agents[call_id]["synthesis_service"].update_tts_interrupt(True)
+        await self.agents[call_id]["synthesis_service"].update_tts_interrupt(True)
         self.agents[call_id]['background_sound'] = False
         return
 

@@ -106,7 +106,7 @@ class ElevenLabsService:
                 "output_format": "ulaw_8000"
             }))
         
-    def update_tts_interrupt(self, status):
+    async def update_tts_interrupt(self, status):
         pass
 
     def check_ws_connection(self):

@@ -171,7 +171,7 @@ class PlayHT:
         self.full_text_buffer = self.full_text_buffer[self.last_split_index:].strip()
 
 
-    def update_tts_interrupt(self, status):
+    async def update_tts_interrupt(self, status):
         self.interrupt[self.current_request_id] = True
 
     async def _listen_for_audio(self):

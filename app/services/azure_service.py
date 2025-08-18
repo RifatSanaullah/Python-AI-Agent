@@ -58,7 +58,7 @@ class AzureService:
     # async def flush_sp_ws(self):
     #     return
 
-    def update_tts_interrupt(self):
+    async def update_tts_interrupt(self):
         return
     
     async def start_synthesiser(self):
