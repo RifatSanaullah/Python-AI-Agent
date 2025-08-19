@@ -31,16 +31,18 @@ def format_us_number_simple(number_str):
         else:
             return number_str
 
-async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_id: str, update_details, created_by_agent_id: str = None):
+async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_id: str, update_details):
     try:
         # Get agent cell phone first
         agent_cell_phone = None
-        agent_home_phone = None
+        lead_details = await cinc_service.get_lead_details(account_id, lead_id, connection_id)
+        lead_data = lead_details.get('lead', lead_details)
+        created_by_agent_id = lead_data.get("assigned_agents",{}).get("primary_agent",{}).get("id")
+
         if created_by_agent_id:
             try:
                 agent_data = await cinc_service.get_agent(account_id, created_by_agent_id, connection_id)
                 agent_cell_phone = agent_data.get('agent', agent_data)['info']['contact']['phone_numbers']['cell_phone']
-                agent_home_phone = agent_data.get('agent', agent_data)['info']['contact']['phone_numbers']['home_phone']
                 print(f"[CRON] Agent {created_by_agent_id} cell phone: {agent_cell_phone}")
             except Exception as e:
                 print(f"[CRON] Failed to fetch agent data: {e}")
@@ -66,10 +68,8 @@ async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_i
 
         # Get lead phone number for tracking
         try:
-            lead_details = await cinc_service.get_lead_details(account_id, lead_id, connection_id)
-            lead_data = lead_details.get('lead', lead_details)
             lead_phone = lead_data['info']['contact']['phone_numbers']['cell_phone']
-            
+
             # Clean phone number to consistent format for tracking
             clean_phone = ''.join(filter(str.isdigit, lead_phone))
             if len(clean_phone) == 11 and clean_phone.startswith('1'):
@@ -84,8 +84,18 @@ async def fetch_and_trigger_outbound(account_id: int, lead_id: str, connection_i
                 # Get current lead details
                 current_lead_details = await cinc_service.get_lead_details(account_id, lead_id, connection_id)
                 lead_data = current_lead_details.get('lead', current_lead_details)
+                lead_data['routing_phone'] = None
+                created_by_agent_id = lead_data.get("assigned_agents",{}).get("primary_agent",{}).get("id")
+
+                if created_by_agent_id:
+                    try:
+                        agent_data = await cinc_service.get_agent(account_id, created_by_agent_id, connection_id)
+                        agent_home_phone = agent_data.get('agent', agent_data)['info']['contact']['phone_numbers']['home_phone']
+                        lead_data['routing_phone'] = agent_home_phone
+                        print(f"[CRON] Agent on outbound call {created_by_agent_id} Home phone: {agent_home_phone}")
+                    except Exception as e:
+                        print(f"[CRON] Failed to fetch agent data: {e}")
                 current_stage = lead_data.get('pipeline', {}).get('stage', '')
-                lead_data['routing_phone'] = agent_home_phone
                 # Extract lead cell phone
                 cell_phone = lead_data['info']['contact']['phone_numbers']['cell_phone']
                 if not cell_phone or cell_phone.strip() == "":
