@@ -1,0 +1,1771 @@
+chatgpt response.............................Hello. This is Sam from Summit Home realty. How may I help you today? 
+Elevenlabs TTS.......................Hello. This is Sam from Summit Home realty. How may I help you today?
+Deepgram STT..............................Hello. This is Sam from Summit Home realty. How may I help you today?
+Elevenlabs TTS.......................Hey
+Deepgram STT..............................Hey
+Deepgram STT..............................Hey
+Elevenlabs TTS....................... John
+Deepgram STT.............................. John
+Deepgram STT.............................. John
+Elevenlabs TTS.......................—it
+Deepgram STT..............................—it
+Deepgram STT..............................—it
+Elevenlabs TTS.......................’s
+Deepgram STT..............................’s
+Deepgram STT..............................’s
+Elevenlabs TTS....................... great
+Deepgram STT.............................. great
+Deepgram STT.............................. great
+Elevenlabs TTS....................... to
+Deepgram STT.............................. to
+Deepgram STT.............................. to
+Elevenlabs TTS....................... hear
+Deepgram STT.............................. hear
+Deepgram STT.............................. hear
+Elevenlabs TTS....................... from
+Deepgram STT.............................. from
+Deepgram STT.............................. from
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS........................
+Deepgram STT...............................
+Deepgram STT...............................
+Elevenlabs TTS....................... So
+Deepgram STT.............................. So
+Deepgram STT.............................. So
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS.......................’re
+Deepgram STT..............................’re
+Deepgram STT..............................’re
+Elevenlabs TTS....................... looking
+Deepgram STT.............................. looking
+Deepgram STT.............................. looking
+Elevenlabs TTS....................... to
+Deepgram STT.............................. to
+Deepgram STT.............................. to
+Elevenlabs TTS....................... buy
+Deepgram STT.............................. buy
+Deepgram STT.............................. buy
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... property
+Deepgram STT.............................. property
+Deepgram STT.............................. property
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... That
+Deepgram STT.............................. That
+Deepgram STT.............................. That
+Elevenlabs TTS.......................’s
+Deepgram STT..............................’s
+Deepgram STT..............................’s
+Elevenlabs TTS....................... exciting
+Deepgram STT.............................. exciting
+Deepgram STT.............................. exciting
+Elevenlabs TTS.......................!
+Deepgram STT..............................!
+Deepgram STT..............................!
+Elevenlabs TTS....................... Can
+Deepgram STT.............................. Can
+Deepgram STT.............................. Can
+Elevenlabs TTS....................... I
+Deepgram STT.............................. I
+Deepgram STT.............................. I
+Elevenlabs TTS....................... double
+Deepgram STT.............................. double
+Deepgram STT.............................. double
+Elevenlabs TTS.......................-check
+Deepgram STT..............................-check
+Deepgram STT..............................-check
+Elevenlabs TTS....................... if
+Deepgram STT.............................. if
+Deepgram STT.............................. if
+Elevenlabs TTS....................... your
+Deepgram STT.............................. your
+Deepgram STT.............................. your
+Elevenlabs TTS....................... best
+Deepgram STT.............................. best
+Deepgram STT.............................. best
+Elevenlabs TTS....................... phone
+Deepgram STT.............................. phone
+Deepgram STT.............................. phone
+Elevenlabs TTS....................... number
+Deepgram STT.............................. number
+Deepgram STT.............................. number
+Elevenlabs TTS....................... is
+Deepgram STT.............................. is
+Deepgram STT.............................. is
+Elevenlabs TTS....................... still
+Deepgram STT.............................. still
+Deepgram STT.............................. still
+Elevenlabs TTS....................... 
+Deepgram STT.............................. 
+Deepgram STT.............................. 
+Elevenlabs TTS.......................631
+Deepgram STT..............................631
+Deepgram STT..............................631
+Elevenlabs TTS.......................-
+Deepgram STT..............................-
+Deepgram STT..............................-
+Elevenlabs TTS.......................349
+Deepgram STT..............................349
+Deepgram STT..............................349
+Elevenlabs TTS.......................-
+Deepgram STT..............................-
+Deepgram STT..............................-
+Elevenlabs TTS.......................411
+Deepgram STT..............................411
+Deepgram STT..............................411
+Elevenlabs TTS.......................0
+Deepgram STT..............................0
+Deepgram STT..............................0
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... or
+Deepgram STT.............................. or
+Deepgram STT.............................. or
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................would
+Deepgram STT..............................would
+Deepgram STT..............................would
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS....................... like
+Deepgram STT.............................. like
+Deepgram STT.............................. like
+Elevenlabs TTS....................... to
+Deepgram STT.............................. to
+Deepgram STT.............................. to
+Elevenlabs TTS....................... use
+Deepgram STT.............................. use
+Deepgram STT.............................. use
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... different
+Deepgram STT.............................. different
+Deepgram STT.............................. different
+Elevenlabs TTS....................... one
+Deepgram STT.............................. one
+Deepgram STT.............................. one
+Elevenlabs TTS.......................?
+Deepgram STT..............................?
+Deepgram STT..............................?
+Openai Response..............................Hey John—it’s great to hear from you. So you’re looking to buy a property… That’s exciting! Can I double-check if your best phone number is still 631-349-4110, or—would you like to use a different one?
+Elevenlabs TTS.......................Perfect
+Deepgram STT..............................Perfect
+Deepgram STT..............................Perfect
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... thanks
+Deepgram STT.............................. thanks
+Deepgram STT.............................. thanks
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... John
+Deepgram STT.............................. John
+Deepgram STT.............................. John
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................just
+Deepgram STT..............................just
+Deepgram STT..............................just
+Elevenlabs TTS....................... wanted
+Deepgram STT.............................. wanted
+Deepgram STT.............................. wanted
+Elevenlabs TTS....................... to
+Deepgram STT.............................. to
+Deepgram STT.............................. to
+Elevenlabs TTS....................... make
+Deepgram STT.............................. make
+Deepgram STT.............................. make
+Elevenlabs TTS....................... sure
+Deepgram STT.............................. sure
+Deepgram STT.............................. sure
+Elevenlabs TTS........................
+Deepgram STT...............................
+Deepgram STT...............................
+Elevenlabs TTS....................... So
+Deepgram STT.............................. So
+Deepgram STT.............................. So
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... to
+Deepgram STT.............................. to
+Deepgram STT.............................. to
+Elevenlabs TTS....................... help
+Deepgram STT.............................. help
+Deepgram STT.............................. help
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS....................... best
+Deepgram STT.............................. best
+Deepgram STT.............................. best
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... what
+Deepgram STT.............................. what
+Deepgram STT.............................. what
+Elevenlabs TTS.......................’s
+Deepgram STT..............................’s
+Deepgram STT..............................’s
+Elevenlabs TTS....................... your
+Deepgram STT.............................. your
+Deepgram STT.............................. your
+Elevenlabs TTS....................... email
+Deepgram STT.............................. email
+Deepgram STT.............................. email
+Elevenlabs TTS....................... address
+Deepgram STT.............................. address
+Deepgram STT.............................. address
+Elevenlabs TTS.......................?
+Deepgram STT..............................?
+Deepgram STT..............................?
+Openai Response..............................Perfect, thanks, John—just wanted to make sure. So, to help you best… what’s your email address?
+Elevenlabs TTS.......................Alright
+Deepgram STT..............................Alright
+Deepgram STT..............................Alright
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................got
+Deepgram STT..............................got
+Deepgram STT..............................got
+Elevenlabs TTS....................... it
+Deepgram STT.............................. it
+Deepgram STT.............................. it
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... John
+Deepgram STT.............................. John
+Deepgram STT.............................. John
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................so
+Deepgram STT..............................so
+Deepgram STT..............................so
+Elevenlabs TTS....................... that's
+Deepgram STT.............................. that's
+Deepgram STT.............................. that's
+Elevenlabs TTS....................... john
+Deepgram STT.............................. john
+Deepgram STT.............................. john
+Elevenlabs TTS.......................@gmail
+Deepgram STT..............................@gmail
+Deepgram STT..............................@gmail
+Elevenlabs TTS........................com
+Deepgram STT...............................com
+Deepgram STT...............................com
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... right
+Deepgram STT.............................. right
+Deepgram STT.............................. right
+Elevenlabs TTS.......................?
+Deepgram STT..............................?
+Deepgram STT..............................?
+Elevenlabs TTS....................... Just
+Deepgram STT.............................. Just
+Deepgram STT.............................. Just
+Elevenlabs TTS....................... making
+Deepgram STT.............................. making
+Deepgram STT.............................. making
+Elevenlabs TTS....................... sure
+Deepgram STT.............................. sure
+Deepgram STT.............................. sure
+Elevenlabs TTS....................... I
+Deepgram STT.............................. I
+Deepgram STT.............................. I
+Elevenlabs TTS....................... heard
+Deepgram STT.............................. heard
+Deepgram STT.............................. heard
+Elevenlabs TTS....................... that
+Deepgram STT.............................. that
+Deepgram STT.............................. that
+Elevenlabs TTS....................... right
+Deepgram STT.............................. right
+Deepgram STT.............................. right
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Openai Response..............................Alright—got it, John—so that's john@gmail.com, right? Just making sure I heard that right…
+Elevenlabs TTS.......................Awesome
+Deepgram STT..............................Awesome
+Deepgram STT..............................Awesome
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... John
+Deepgram STT.............................. John
+Deepgram STT.............................. John
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................thanks
+Deepgram STT..............................thanks
+Deepgram STT..............................thanks
+Elevenlabs TTS....................... for
+Deepgram STT.............................. for
+Deepgram STT.............................. for
+Elevenlabs TTS....................... confirming
+Deepgram STT.............................. confirming
+Deepgram STT.............................. confirming
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... So
+Deepgram STT.............................. So
+Deepgram STT.............................. So
+Elevenlabs TTS....................... let
+Deepgram STT.............................. let
+Deepgram STT.............................. let
+Elevenlabs TTS.......................’s
+Deepgram STT..............................’s
+Deepgram STT..............................’s
+Elevenlabs TTS....................... get
+Deepgram STT.............................. get
+Deepgram STT.............................. get
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... sense
+Deepgram STT.............................. sense
+Deepgram STT.............................. sense
+Elevenlabs TTS....................... of
+Deepgram STT.............................. of
+Deepgram STT.............................. of
+Elevenlabs TTS....................... what
+Deepgram STT.............................. what
+Deepgram STT.............................. what
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS.......................’re
+Deepgram STT..............................’re
+Deepgram STT..............................’re
+Elevenlabs TTS....................... looking
+Deepgram STT.............................. looking
+Deepgram STT.............................. looking
+Elevenlabs TTS....................... for
+Deepgram STT.............................. for
+Deepgram STT.............................. for
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................do
+Deepgram STT..............................do
+Deepgram STT..............................do
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS....................... have
+Deepgram STT.............................. have
+Deepgram STT.............................. have
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... price
+Deepgram STT.............................. price
+Deepgram STT.............................. price
+Elevenlabs TTS....................... range
+Deepgram STT.............................. range
+Deepgram STT.............................. range
+Elevenlabs TTS....................... or
+Deepgram STT.............................. or
+Deepgram STT.............................. or
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... ball
+Deepgram STT.............................. ball
+Deepgram STT.............................. ball
+Elevenlabs TTS.......................park
+Deepgram STT..............................park
+Deepgram STT..............................park
+Elevenlabs TTS....................... budget
+Deepgram STT.............................. budget
+Deepgram STT.............................. budget
+Elevenlabs TTS....................... in
+Deepgram STT.............................. in
+Deepgram STT.............................. in
+Elevenlabs TTS....................... mind
+Deepgram STT.............................. mind
+Deepgram STT.............................. mind
+Elevenlabs TTS.......................?
+Deepgram STT..............................?
+Deepgram STT..............................?
+Openai Response..............................Awesome, John—thanks for confirming… So let’s get a sense of what you’re looking for—do you have a price range or a ballpark budget in mind?
+Elevenlabs TTS.......................Okay
+Deepgram STT..............................Okay
+Deepgram STT..............................Okay
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... so
+Deepgram STT.............................. so
+Deepgram STT.............................. so
+Elevenlabs TTS....................... your
+Deepgram STT.............................. your
+Deepgram STT.............................. your
+Elevenlabs TTS....................... budget
+Deepgram STT.............................. budget
+Deepgram STT.............................. budget
+Elevenlabs TTS.......................’s
+Deepgram STT..............................’s
+Deepgram STT..............................’s
+Elevenlabs TTS....................... around
+Deepgram STT.............................. around
+Deepgram STT.............................. around
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... hundred
+Deepgram STT.............................. hundred
+Deepgram STT.............................. hundred
+Elevenlabs TTS....................... thousand
+Deepgram STT.............................. thousand
+Deepgram STT.............................. thousand
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................thanks
+Deepgram STT..............................thanks
+Deepgram STT..............................thanks
+Elevenlabs TTS....................... for
+Deepgram STT.............................. for
+Deepgram STT.............................. for
+Elevenlabs TTS....................... sharing
+Deepgram STT.............................. sharing
+Deepgram STT.............................. sharing
+Elevenlabs TTS....................... that
+Deepgram STT.............................. that
+Deepgram STT.............................. that
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... John
+Deepgram STT.............................. John
+Deepgram STT.............................. John
+Elevenlabs TTS........................
+Deepgram STT...............................
+Deepgram STT...............................
+Elevenlabs TTS....................... Hmm
+Deepgram STT.............................. Hmm
+Deepgram STT.............................. Hmm
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... now
+Deepgram STT.............................. now
+Deepgram STT.............................. now
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... are
+Deepgram STT.............................. are
+Deepgram STT.............................. are
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS....................... thinking
+Deepgram STT.............................. thinking
+Deepgram STT.............................. thinking
+Elevenlabs TTS....................... more
+Deepgram STT.............................. more
+Deepgram STT.............................. more
+Elevenlabs TTS....................... of
+Deepgram STT.............................. of
+Deepgram STT.............................. of
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... house
+Deepgram STT.............................. house
+Deepgram STT.............................. house
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... condo
+Deepgram STT.............................. condo
+Deepgram STT.............................. condo
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... or
+Deepgram STT.............................. or
+Deepgram STT.............................. or
+Elevenlabs TTS....................... maybe
+Deepgram STT.............................. maybe
+Deepgram STT.............................. maybe
+Elevenlabs TTS....................... something
+Deepgram STT.............................. something
+Deepgram STT.............................. something
+Elevenlabs TTS....................... else
+Deepgram STT.............................. else
+Deepgram STT.............................. else
+Elevenlabs TTS.......................?
+Deepgram STT..............................?
+Deepgram STT..............................?
+Openai Response..............................Okay… so your budget’s around a hundred thousand—thanks for sharing that, John. Hmm… now, are you thinking more of a house, a condo… or maybe something else?
+Elevenlabs TTS.......................Yeah
+Deepgram STT..............................Yeah
+Deepgram STT..............................Yeah
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................hey
+Deepgram STT..............................hey
+Deepgram STT..............................hey
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... John
+Deepgram STT.............................. John
+Deepgram STT.............................. John
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... I
+Deepgram STT.............................. I
+Deepgram STT.............................. I
+Elevenlabs TTS....................... can
+Deepgram STT.............................. can
+Deepgram STT.............................. can
+Elevenlabs TTS....................... hear
+Deepgram STT.............................. hear
+Deepgram STT.............................. hear
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS....................... just
+Deepgram STT.............................. just
+Deepgram STT.............................. just
+Elevenlabs TTS....................... fine
+Deepgram STT.............................. fine
+Deepgram STT.............................. fine
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... No
+Deepgram STT.............................. No
+Deepgram STT.............................. No
+Elevenlabs TTS....................... worries
+Deepgram STT.............................. worries
+Deepgram STT.............................. worries
+Elevenlabs TTS....................... at
+Deepgram STT.............................. at
+Deepgram STT.............................. at
+Elevenlabs TTS....................... all
+Deepgram STT.............................. all
+Deepgram STT.............................. all
+Elevenlabs TTS........................
+Deepgram STT...............................
+Deepgram STT...............................
+Elevenlabs TTS....................... So
+Deepgram STT.............................. So
+Deepgram STT.............................. So
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................about
+Deepgram STT..............................about
+Deepgram STT..............................about
+Elevenlabs TTS....................... that
+Deepgram STT.............................. that
+Deepgram STT.............................. that
+Elevenlabs TTS....................... property
+Deepgram STT.............................. property
+Deepgram STT.............................. property
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS.......................’re
+Deepgram STT..............................’re
+Deepgram STT..............................’re
+Elevenlabs TTS....................... hoping
+Deepgram STT.............................. hoping
+Deepgram STT.............................. hoping
+Elevenlabs TTS....................... to
+Deepgram STT.............................. to
+Deepgram STT.............................. to
+Elevenlabs TTS....................... buy
+Deepgram STT.............................. buy
+Deepgram STT.............................. buy
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................are
+Deepgram STT..............................are
+Deepgram STT..............................are
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS....................... pict
+Deepgram STT.............................. pict
+Deepgram STT.............................. pict
+Elevenlabs TTS.......................uring
+Deepgram STT..............................uring
+Deepgram STT..............................uring
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... house
+Deepgram STT.............................. house
+Deepgram STT.............................. house
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... condo
+Deepgram STT.............................. condo
+Deepgram STT.............................. condo
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... or
+Deepgram STT.............................. or
+Deepgram STT.............................. or
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS....................... know
+Deepgram STT.............................. know
+Deepgram STT.............................. know
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... maybe
+Deepgram STT.............................. maybe
+Deepgram STT.............................. maybe
+Elevenlabs TTS....................... something
+Deepgram STT.............................. something
+Deepgram STT.............................. something
+Elevenlabs TTS....................... different
+Deepgram STT.............................. different
+Deepgram STT.............................. different
+Elevenlabs TTS.......................?
+Deepgram STT..............................?
+Deepgram STT..............................?
+Openai Response..............................Yeah—hey, John, I can hear you just fine… No worries at all. So—about that property you’re hoping to buy—are you picturing a house, a condo, or… you know, maybe something different?
+Elevenlabs TTS.......................Got
+Deepgram STT..............................Got
+Deepgram STT..............................Got
+Elevenlabs TTS....................... it
+Deepgram STT.............................. it
+Deepgram STT.............................. it
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................so
+Deepgram STT..............................so
+Deepgram STT..............................so
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS.......................’re
+Deepgram STT..............................’re
+Deepgram STT..............................’re
+Elevenlabs TTS....................... after
+Deepgram STT.............................. after
+Deepgram STT.............................. after
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... two
+Deepgram STT.............................. two
+Deepgram STT.............................. two
+Elevenlabs TTS.......................-bedroom
+Deepgram STT..............................-bedroom
+Deepgram STT..............................-bedroom
+Elevenlabs TTS....................... apartment
+Deepgram STT.............................. apartment
+Deepgram STT.............................. apartment
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... Yeah
+Deepgram STT.............................. Yeah
+Deepgram STT.............................. Yeah
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... that
+Deepgram STT.............................. that
+Deepgram STT.............................. that
+Elevenlabs TTS....................... helps
+Deepgram STT.............................. helps
+Deepgram STT.............................. helps
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... lot
+Deepgram STT.............................. lot
+Deepgram STT.............................. lot
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... John
+Deepgram STT.............................. John
+Deepgram STT.............................. John
+Elevenlabs TTS........................
+Deepgram STT...............................
+Deepgram STT...............................
+Elevenlabs TTS....................... And
+Deepgram STT.............................. And
+Deepgram STT.............................. And
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................just
+Deepgram STT..............................just
+Deepgram STT..............................just
+Elevenlabs TTS....................... so
+Deepgram STT.............................. so
+Deepgram STT.............................. so
+Elevenlabs TTS....................... I
+Deepgram STT.............................. I
+Deepgram STT.............................. I
+Elevenlabs TTS....................... have
+Deepgram STT.............................. have
+Deepgram STT.............................. have
+Elevenlabs TTS....................... the
+Deepgram STT.............................. the
+Deepgram STT.............................. the
+Elevenlabs TTS....................... full
+Deepgram STT.............................. full
+Deepgram STT.............................. full
+Elevenlabs TTS....................... picture
+Deepgram STT.............................. picture
+Deepgram STT.............................. picture
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................how
+Deepgram STT..............................how
+Deepgram STT..............................how
+Elevenlabs TTS....................... many
+Deepgram STT.............................. many
+Deepgram STT.............................. many
+Elevenlabs TTS....................... bathrooms
+Deepgram STT.............................. bathrooms
+Deepgram STT.............................. bathrooms
+Elevenlabs TTS....................... are
+Deepgram STT.............................. are
+Deepgram STT.............................. are
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS....................... hoping
+Deepgram STT.............................. hoping
+Deepgram STT.............................. hoping
+Elevenlabs TTS....................... for
+Deepgram STT.............................. for
+Deepgram STT.............................. for
+Elevenlabs TTS.......................?
+Deepgram STT..............................?
+Deepgram STT..............................?
+Elevenlabs TTS....................... One
+Deepgram STT.............................. One
+Deepgram STT.............................. One
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... two
+Deepgram STT.............................. two
+Deepgram STT.............................. two
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... maybe
+Deepgram STT.............................. maybe
+Deepgram STT.............................. maybe
+Elevenlabs TTS....................... more
+Deepgram STT.............................. more
+Deepgram STT.............................. more
+Elevenlabs TTS.......................?
+Deepgram STT..............................?
+Deepgram STT..............................?
+Openai Response..............................Got it—so you’re after a two-bedroom apartment… Yeah, that helps a lot, John. And—just so I have the full picture—how many bathrooms are you hoping for? One… two… maybe more?
+Elevenlabs TTS.......................Oh
+Deepgram STT..............................Oh
+Deepgram STT..............................Oh
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................tot
+Deepgram STT..............................tot
+Deepgram STT..............................tot
+Elevenlabs TTS.......................ally
+Deepgram STT..............................ally
+Deepgram STT..............................ally
+Elevenlabs TTS....................... makes
+Deepgram STT.............................. makes
+Deepgram STT.............................. makes
+Elevenlabs TTS....................... sense
+Deepgram STT.............................. sense
+Deepgram STT.............................. sense
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... So
+Deepgram STT.............................. So
+Deepgram STT.............................. So
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS.......................’re
+Deepgram STT..............................’re
+Deepgram STT..............................’re
+Elevenlabs TTS....................... looking
+Deepgram STT.............................. looking
+Deepgram STT.............................. looking
+Elevenlabs TTS....................... for
+Deepgram STT.............................. for
+Deepgram STT.............................. for
+Elevenlabs TTS....................... two
+Deepgram STT.............................. two
+Deepgram STT.............................. two
+Elevenlabs TTS....................... bedrooms
+Deepgram STT.............................. bedrooms
+Deepgram STT.............................. bedrooms
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................did
+Deepgram STT..............................did
+Deepgram STT..............................did
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS....................... have
+Deepgram STT.............................. have
+Deepgram STT.............................. have
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... preference
+Deepgram STT.............................. preference
+Deepgram STT.............................. preference
+Elevenlabs TTS....................... on
+Deepgram STT.............................. on
+Deepgram STT.............................. on
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS....................... know
+Deepgram STT.............................. know
+Deepgram STT.............................. know
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... how
+Deepgram STT.............................. how
+Deepgram STT.............................. how
+Elevenlabs TTS....................... many
+Deepgram STT.............................. many
+Deepgram STT.............................. many
+Elevenlabs TTS....................... bathrooms
+Deepgram STT.............................. bathrooms
+Deepgram STT.............................. bathrooms
+Elevenlabs TTS.......................?
+Deepgram STT..............................?
+Deepgram STT..............................?
+Elevenlabs TTS....................... Like
+Deepgram STT.............................. Like
+Deepgram STT.............................. Like
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... just
+Deepgram STT.............................. just
+Deepgram STT.............................. just
+Elevenlabs TTS....................... one
+Deepgram STT.............................. one
+Deepgram STT.............................. one
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... or
+Deepgram STT.............................. or
+Deepgram STT.............................. or
+Elevenlabs TTS....................... is
+Deepgram STT.............................. is
+Deepgram STT.............................. is
+Elevenlabs TTS....................... two
+Deepgram STT.............................. two
+Deepgram STT.............................. two
+Elevenlabs TTS....................... kind
+Deepgram STT.............................. kind
+Deepgram STT.............................. kind
+Elevenlabs TTS....................... of
+Deepgram STT.............................. of
+Deepgram STT.............................. of
+Elevenlabs TTS....................... more
+Deepgram STT.............................. more
+Deepgram STT.............................. more
+Elevenlabs TTS....................... your
+Deepgram STT.............................. your
+Deepgram STT.............................. your
+Elevenlabs TTS....................... style
+Deepgram STT.............................. style
+Deepgram STT.............................. style
+Elevenlabs TTS.......................?
+Deepgram STT..............................?
+Deepgram STT..............................?
+Openai Response..............................Oh—totally makes sense… So, you’re looking for two bedrooms—did you have a preference on… you know, how many bathrooms? Like, just one, or is two kind of more your style?
+Elevenlabs TTS.......................Alright
+Deepgram STT..............................Alright
+Deepgram STT..............................Alright
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................perfect
+Deepgram STT..............................perfect
+Deepgram STT..............................perfect
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... just
+Deepgram STT.............................. just
+Deepgram STT.............................. just
+Elevenlabs TTS....................... want
+Deepgram STT.............................. want
+Deepgram STT.............................. want
+Elevenlabs TTS....................... to
+Deepgram STT.............................. to
+Deepgram STT.............................. to
+Elevenlabs TTS....................... make
+Deepgram STT.............................. make
+Deepgram STT.............................. make
+Elevenlabs TTS....................... sure
+Deepgram STT.............................. sure
+Deepgram STT.............................. sure
+Elevenlabs TTS....................... I
+Deepgram STT.............................. I
+Deepgram STT.............................. I
+Elevenlabs TTS....................... got
+Deepgram STT.............................. got
+Deepgram STT.............................. got
+Elevenlabs TTS....................... it
+Deepgram STT.............................. it
+Deepgram STT.............................. it
+Elevenlabs TTS....................... right
+Deepgram STT.............................. right
+Deepgram STT.............................. right
+Elevenlabs TTS.......................—you
+Deepgram STT..............................—you
+Deepgram STT..............................—you
+Elevenlabs TTS.......................’re
+Deepgram STT..............................’re
+Deepgram STT..............................’re
+Elevenlabs TTS....................... looking
+Deepgram STT.............................. looking
+Deepgram STT.............................. looking
+Elevenlabs TTS....................... for
+Deepgram STT.............................. for
+Deepgram STT.............................. for
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... two
+Deepgram STT.............................. two
+Deepgram STT.............................. two
+Elevenlabs TTS.......................-bedroom
+Deepgram STT..............................-bedroom
+Deepgram STT..............................-bedroom
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... two
+Deepgram STT.............................. two
+Deepgram STT.............................. two
+Elevenlabs TTS.......................-b
+Deepgram STT..............................-b
+Deepgram STT..............................-b
+Elevenlabs TTS.......................ath
+Deepgram STT..............................ath
+Deepgram STT..............................ath
+Elevenlabs TTS.......................room
+Deepgram STT..............................room
+Deepgram STT..............................room
+Elevenlabs TTS....................... apartment
+Deepgram STT.............................. apartment
+Deepgram STT.............................. apartment
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... yeah
+Deepgram STT.............................. yeah
+Deepgram STT.............................. yeah
+Elevenlabs TTS.......................?
+Deepgram STT..............................?
+Deepgram STT..............................?
+Elevenlabs TTS....................... That
+Deepgram STT.............................. That
+Deepgram STT.............................. That
+Elevenlabs TTS....................... really
+Deepgram STT.............................. really
+Deepgram STT.............................. really
+Elevenlabs TTS....................... helps
+Deepgram STT.............................. helps
+Deepgram STT.............................. helps
+Elevenlabs TTS....................... narrow
+Deepgram STT.............................. narrow
+Deepgram STT.............................. narrow
+Elevenlabs TTS....................... it
+Deepgram STT.............................. it
+Deepgram STT.............................. it
+Elevenlabs TTS....................... down
+Deepgram STT.............................. down
+Deepgram STT.............................. down
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... John
+Deepgram STT.............................. John
+Deepgram STT.............................. John
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... Is
+Deepgram STT.............................. Is
+Deepgram STT.............................. Is
+Elevenlabs TTS....................... there
+Deepgram STT.............................. there
+Deepgram STT.............................. there
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... specific
+Deepgram STT.............................. specific
+Deepgram STT.............................. specific
+Elevenlabs TTS....................... city
+Deepgram STT.............................. city
+Deepgram STT.............................. city
+Elevenlabs TTS....................... or
+Deepgram STT.............................. or
+Deepgram STT.............................. or
+Elevenlabs TTS....................... area
+Deepgram STT.............................. area
+Deepgram STT.............................. area
+Elevenlabs TTS....................... around
+Deepgram STT.............................. around
+Deepgram STT.............................. around
+Elevenlabs TTS....................... Southern
+Deepgram STT.............................. Southern
+Deepgram STT.............................. Southern
+Elevenlabs TTS....................... California
+Deepgram STT.............................. California
+Deepgram STT.............................. California
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS.......................’d
+Deepgram STT..............................’d
+Deepgram STT..............................’d
+Elevenlabs TTS....................... like
+Deepgram STT.............................. like
+Deepgram STT.............................. like
+Elevenlabs TTS....................... to
+Deepgram STT.............................. to
+Deepgram STT.............................. to
+Elevenlabs TTS....................... focus
+Deepgram STT.............................. focus
+Deepgram STT.............................. focus
+Elevenlabs TTS....................... on
+Deepgram STT.............................. on
+Deepgram STT.............................. on
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... or
+Deepgram STT.............................. or
+Deepgram STT.............................. or
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... are
+Deepgram STT.............................. are
+Deepgram STT.............................. are
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS....................... still
+Deepgram STT.............................. still
+Deepgram STT.............................. still
+Elevenlabs TTS....................... figuring
+Deepgram STT.............................. figuring
+Deepgram STT.............................. figuring
+Elevenlabs TTS....................... that
+Deepgram STT.............................. that
+Deepgram STT.............................. that
+Elevenlabs TTS....................... part
+Deepgram STT.............................. part
+Deepgram STT.............................. part
+Elevenlabs TTS....................... out
+Deepgram STT.............................. out
+Deepgram STT.............................. out
+Elevenlabs TTS.......................?
+Deepgram STT..............................?
+Deepgram STT..............................?
+Openai Response..............................Alright—perfect… just want to make sure I got it right—you’re looking for a two-bedroom, two-bathroom apartment, yeah? That really helps narrow it down, John… Is there a specific city or area around Southern California you’d like to focus on, or… are you still figuring that part out?
+Elevenlabs TTS.......................Okay
+Deepgram STT..............................Okay
+Deepgram STT..............................Okay
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................so
+Deepgram STT..............................so
+Deepgram STT..............................so
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS.......................’re
+Deepgram STT..............................’re
+Deepgram STT..............................’re
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... uh
+Deepgram STT.............................. uh
+Deepgram STT.............................. uh
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... looking
+Deepgram STT.............................. looking
+Deepgram STT.............................. looking
+Elevenlabs TTS....................... to
+Deepgram STT.............................. to
+Deepgram STT.............................. to
+Elevenlabs TTS....................... buy
+Deepgram STT.............................. buy
+Deepgram STT.............................. buy
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... place
+Deepgram STT.............................. place
+Deepgram STT.............................. place
+Elevenlabs TTS....................... somewhere
+Deepgram STT.............................. somewhere
+Deepgram STT.............................. somewhere
+Elevenlabs TTS....................... in
+Deepgram STT.............................. in
+Deepgram STT.............................. in
+Elevenlabs TTS....................... California
+Deepgram STT.............................. California
+Deepgram STT.............................. California
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... Got
+Deepgram STT.............................. Got
+Deepgram STT.............................. Got
+Elevenlabs TTS....................... it
+Deepgram STT.............................. it
+Deepgram STT.............................. it
+Elevenlabs TTS........................
+Deepgram STT...............................
+Deepgram STT...............................
+Elevenlabs TTS....................... Is
+Deepgram STT.............................. Is
+Deepgram STT.............................. Is
+Elevenlabs TTS....................... there
+Deepgram STT.............................. there
+Deepgram STT.............................. there
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... like
+Deepgram STT.............................. like
+Deepgram STT.............................. like
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... city
+Deepgram STT.............................. city
+Deepgram STT.............................. city
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS.......................’re
+Deepgram STT..............................’re
+Deepgram STT..............................’re
+Elevenlabs TTS....................... kinda
+Deepgram STT.............................. kinda
+Deepgram STT.............................. kinda
+Elevenlabs TTS....................... drawn
+Deepgram STT.............................. drawn
+Deepgram STT.............................. drawn
+Elevenlabs TTS....................... to
+Deepgram STT.............................. to
+Deepgram STT.............................. to
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... John
+Deepgram STT.............................. John
+Deepgram STT.............................. John
+Elevenlabs TTS.......................—or
+Deepgram STT..............................—or
+Deepgram STT..............................—or
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... are
+Deepgram STT.............................. are
+Deepgram STT.............................. are
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS....................... open
+Deepgram STT.............................. open
+Deepgram STT.............................. open
+Elevenlabs TTS....................... to
+Deepgram STT.............................. to
+Deepgram STT.............................. to
+Elevenlabs TTS....................... checking
+Deepgram STT.............................. checking
+Deepgram STT.............................. checking
+Elevenlabs TTS....................... out
+Deepgram STT.............................. out
+Deepgram STT.............................. out
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... few
+Deepgram STT.............................. few
+Deepgram STT.............................. few
+Elevenlabs TTS....................... different
+Deepgram STT.............................. different
+Deepgram STT.............................. different
+Elevenlabs TTS....................... areas
+Deepgram STT.............................. areas
+Deepgram STT.............................. areas
+Elevenlabs TTS.......................?
+Deepgram STT..............................?
+Deepgram STT..............................?
+Openai Response..............................Okay—so you’re, uh, looking to buy a place somewhere in California… Got it. Is there, like, a city you’re kinda drawn to, John—or… are you open to checking out a few different areas?
+Elevenlabs TTS.......................Alright
+Deepgram STT..............................Alright
+Deepgram STT..............................Alright
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................yeah
+Deepgram STT..............................yeah
+Deepgram STT..............................yeah
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... just
+Deepgram STT.............................. just
+Deepgram STT.............................. just
+Elevenlabs TTS....................... California
+Deepgram STT.............................. California
+Deepgram STT.............................. California
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... got
+Deepgram STT.............................. got
+Deepgram STT.............................. got
+Elevenlabs TTS.......................cha
+Deepgram STT..............................cha
+Deepgram STT..............................cha
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... That
+Deepgram STT.............................. That
+Deepgram STT.............................. That
+Elevenlabs TTS....................... keeps
+Deepgram STT.............................. keeps
+Deepgram STT.............................. keeps
+Elevenlabs TTS....................... it
+Deepgram STT.............................. it
+Deepgram STT.............................. it
+Elevenlabs TTS....................... nice
+Deepgram STT.............................. nice
+Deepgram STT.............................. nice
+Elevenlabs TTS....................... and
+Deepgram STT.............................. and
+Deepgram STT.............................. and
+Elevenlabs TTS....................... broad
+Deepgram STT.............................. broad
+Deepgram STT.............................. broad
+Elevenlabs TTS........................
+Deepgram STT...............................
+Deepgram STT...............................
+Elevenlabs TTS....................... So
+Deepgram STT.............................. So
+Deepgram STT.............................. So
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... John
+Deepgram STT.............................. John
+Deepgram STT.............................. John
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... just
+Deepgram STT.............................. just
+Deepgram STT.............................. just
+Elevenlabs TTS....................... to
+Deepgram STT.............................. to
+Deepgram STT.............................. to
+Elevenlabs TTS....................... make
+Deepgram STT.............................. make
+Deepgram STT.............................. make
+Elevenlabs TTS....................... sure
+Deepgram STT.............................. sure
+Deepgram STT.............................. sure
+Elevenlabs TTS....................... I
+Deepgram STT.............................. I
+Deepgram STT.............................. I
+Elevenlabs TTS.......................’m
+Deepgram STT..............................’m
+Deepgram STT..............................’m
+Elevenlabs TTS....................... searching
+Deepgram STT.............................. searching
+Deepgram STT.............................. searching
+Elevenlabs TTS....................... right
+Deepgram STT.............................. right
+Deepgram STT.............................. right
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................would
+Deepgram STT..............................would
+Deepgram STT..............................would
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS....................... wanna
+Deepgram STT.............................. wanna
+Deepgram STT.............................. wanna
+Elevenlabs TTS....................... focus
+Deepgram STT.............................. focus
+Deepgram STT.............................. focus
+Elevenlabs TTS....................... on
+Deepgram STT.............................. on
+Deepgram STT.............................. on
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... like
+Deepgram STT.............................. like
+Deepgram STT.............................. like
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... Los
+Deepgram STT.............................. Los
+Deepgram STT.............................. Los
+Elevenlabs TTS....................... Angeles
+Deepgram STT.............................. Angeles
+Deepgram STT.............................. Angeles
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... Orange
+Deepgram STT.............................. Orange
+Deepgram STT.............................. Orange
+Elevenlabs TTS....................... County
+Deepgram STT.............................. County
+Deepgram STT.............................. County
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... San
+Deepgram STT.............................. San
+Deepgram STT.............................. San
+Elevenlabs TTS....................... Diego
+Deepgram STT.............................. Diego
+Deepgram STT.............................. Diego
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... or
+Deepgram STT.............................. or
+Deepgram STT.............................. or
+Elevenlabs TTS....................... is
+Deepgram STT.............................. is
+Deepgram STT.............................. is
+Elevenlabs TTS....................... anywhere
+Deepgram STT.............................. anywhere
+Deepgram STT.............................. anywhere
+Elevenlabs TTS....................... in
+Deepgram STT.............................. in
+Deepgram STT.............................. in
+Elevenlabs TTS....................... the
+Deepgram STT.............................. the
+Deepgram STT.............................. the
+Elevenlabs TTS....................... state
+Deepgram STT.............................. state
+Deepgram STT.............................. state
+Elevenlabs TTS....................... okay
+Deepgram STT.............................. okay
+Deepgram STT.............................. okay
+Elevenlabs TTS....................... for
+Deepgram STT.............................. for
+Deepgram STT.............................. for
+Elevenlabs TTS....................... now
+Deepgram STT.............................. now
+Deepgram STT.............................. now
+Elevenlabs TTS.......................?
+Deepgram STT..............................?
+Deepgram STT..............................?
+Openai Response..............................Alright—yeah, just California, gotcha… That keeps it nice and broad. So, John, just to make sure I’m searching right—would you wanna focus on, like, Los Angeles, Orange County, San Diego… or is anywhere in the state okay for now?
+Elevenlabs TTS.......................Oh
+Deepgram STT..............................Oh
+Deepgram STT..............................Oh
+Elevenlabs TTS.......................—
+Deepgram STT..............................—
+Deepgram STT..............................—
+Elevenlabs TTS.......................okay
+Deepgram STT..............................okay
+Deepgram STT..............................okay
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... so
+Deepgram STT.............................. so
+Deepgram STT.............................. so
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS.......................’re
+Deepgram STT..............................’re
+Deepgram STT..............................’re
+Elevenlabs TTS....................... focused
+Deepgram STT.............................. focused
+Deepgram STT.............................. focused
+Elevenlabs TTS....................... on
+Deepgram STT.............................. on
+Deepgram STT.............................. on
+Elevenlabs TTS....................... Los
+Deepgram STT.............................. Los
+Deepgram STT.............................. Los
+Elevenlabs TTS....................... Angeles
+Deepgram STT.............................. Angeles
+Deepgram STT.............................. Angeles
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... got
+Deepgram STT.............................. got
+Deepgram STT.............................. got
+Elevenlabs TTS....................... it
+Deepgram STT.............................. it
+Deepgram STT.............................. it
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... That
+Deepgram STT.............................. That
+Deepgram STT.............................. That
+Elevenlabs TTS....................... definitely
+Deepgram STT.............................. definitely
+Deepgram STT.............................. definitely
+Elevenlabs TTS....................... helps
+Deepgram STT.............................. helps
+Deepgram STT.............................. helps
+Elevenlabs TTS....................... narrow
+Deepgram STT.............................. narrow
+Deepgram STT.............................. narrow
+Elevenlabs TTS....................... things
+Deepgram STT.............................. things
+Deepgram STT.............................. things
+Elevenlabs TTS....................... down
+Deepgram STT.............................. down
+Deepgram STT.............................. down
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... John
+Deepgram STT.............................. John
+Deepgram STT.............................. John
+Elevenlabs TTS........................
+Deepgram STT...............................
+Deepgram STT...............................
+Elevenlabs TTS....................... Just
+Deepgram STT.............................. Just
+Deepgram STT.............................. Just
+Elevenlabs TTS....................... so
+Deepgram STT.............................. so
+Deepgram STT.............................. so
+Elevenlabs TTS....................... I
+Deepgram STT.............................. I
+Deepgram STT.............................. I
+Elevenlabs TTS....................... have
+Deepgram STT.............................. have
+Deepgram STT.............................. have
+Elevenlabs TTS....................... it
+Deepgram STT.............................. it
+Deepgram STT.............................. it
+Elevenlabs TTS....................... straight
+Deepgram STT.............................. straight
+Deepgram STT.............................. straight
+Elevenlabs TTS.......................—we
+Deepgram STT..............................—we
+Deepgram STT..............................—we
+Elevenlabs TTS.......................’re
+Deepgram STT..............................’re
+Deepgram STT..............................’re
+Elevenlabs TTS....................... aiming
+Deepgram STT.............................. aiming
+Deepgram STT.............................. aiming
+Elevenlabs TTS....................... for
+Deepgram STT.............................. for
+Deepgram STT.............................. for
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... two
+Deepgram STT.............................. two
+Deepgram STT.............................. two
+Elevenlabs TTS.......................-bedroom
+Deepgram STT..............................-bedroom
+Deepgram STT..............................-bedroom
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... two
+Deepgram STT.............................. two
+Deepgram STT.............................. two
+Elevenlabs TTS.......................-b
+Deepgram STT..............................-b
+Deepgram STT..............................-b
+Elevenlabs TTS.......................ath
+Deepgram STT..............................ath
+Deepgram STT..............................ath
+Elevenlabs TTS....................... apartment
+Deepgram STT.............................. apartment
+Deepgram STT.............................. apartment
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... somewhere
+Deepgram STT.............................. somewhere
+Deepgram STT.............................. somewhere
+Elevenlabs TTS....................... in
+Deepgram STT.............................. in
+Deepgram STT.............................. in
+Elevenlabs TTS....................... L
+Deepgram STT.............................. L
+Deepgram STT.............................. L
+Elevenlabs TTS........................A
+Deepgram STT...............................A
+Deepgram STT...............................A
+Elevenlabs TTS........................,
+Deepgram STT...............................,
+Deepgram STT...............................,
+Elevenlabs TTS....................... and
+Deepgram STT.............................. and
+Deepgram STT.............................. and
+Elevenlabs TTS....................... your
+Deepgram STT.............................. your
+Deepgram STT.............................. your
+Elevenlabs TTS....................... budget
+Deepgram STT.............................. budget
+Deepgram STT.............................. budget
+Elevenlabs TTS....................... is
+Deepgram STT.............................. is
+Deepgram STT.............................. is
+Elevenlabs TTS....................... around
+Deepgram STT.............................. around
+Deepgram STT.............................. around
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... hundred
+Deepgram STT.............................. hundred
+Deepgram STT.............................. hundred
+Elevenlabs TTS....................... thousand
+Deepgram STT.............................. thousand
+Deepgram STT.............................. thousand
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... right
+Deepgram STT.............................. right
+Deepgram STT.............................. right
+Elevenlabs TTS.......................?
+Deepgram STT..............................?
+Deepgram STT..............................?
+Openai Response..............................Oh—okay, so you’re focused on Los Angeles, got it… That definitely helps narrow things down, John. Just so I have it straight—we’re aiming for a two-bedroom, two-bath apartment, somewhere in L.A., and your budget is around a hundred thousand, right?
+Elevenlabs TTS.......................Oh
+Deepgram STT..............................Oh
+Deepgram STT..............................Oh
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... okay
+Deepgram STT.............................. okay
+Deepgram STT.............................. okay
+Elevenlabs TTS.......................—the
+Deepgram STT..............................—the
+Deepgram STT..............................—the
+Elevenlabs TTS....................... Down
+Deepgram STT.............................. Down
+Deepgram STT.............................. Down
+Elevenlabs TTS.......................bridge
+Deepgram STT..............................bridge
+Deepgram STT..............................bridge
+Elevenlabs TTS....................... area
+Deepgram STT.............................. area
+Deepgram STT.............................. area
+Elevenlabs TTS....................... in
+Deepgram STT.............................. in
+Deepgram STT.............................. in
+Elevenlabs TTS....................... L
+Deepgram STT.............................. L
+Deepgram STT.............................. L
+Elevenlabs TTS........................A
+Deepgram STT...............................A
+Deepgram STT...............................A
+Elevenlabs TTS........................—
+Deepgram STT...............................—
+Deepgram STT...............................—
+Elevenlabs TTS.......................got
+Deepgram STT..............................got
+Deepgram STT..............................got
+Elevenlabs TTS....................... it
+Deepgram STT.............................. it
+Deepgram STT.............................. it
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... That
+Deepgram STT.............................. That
+Deepgram STT.............................. That
+Elevenlabs TTS....................... really
+Deepgram STT.............................. really
+Deepgram STT.............................. really
+Elevenlabs TTS....................... helps
+Deepgram STT.............................. helps
+Deepgram STT.............................. helps
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... John
+Deepgram STT.............................. John
+Deepgram STT.............................. John
+Elevenlabs TTS........................
+Deepgram STT...............................
+Deepgram STT...............................
+Elevenlabs TTS....................... Umm
+Deepgram STT.............................. Umm
+Deepgram STT.............................. Umm
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... are
+Deepgram STT.............................. are
+Deepgram STT.............................. are
+Elevenlabs TTS....................... there
+Deepgram STT.............................. there
+Deepgram STT.............................. there
+Elevenlabs TTS....................... any
+Deepgram STT.............................. any
+Deepgram STT.............................. any
+Elevenlabs TTS....................... must
+Deepgram STT.............................. must
+Deepgram STT.............................. must
+Elevenlabs TTS.......................-h
+Deepgram STT..............................-h
+Deepgram STT..............................-h
+Elevenlabs TTS.......................aves
+Deepgram STT..............................aves
+Deepgram STT..............................aves
+Elevenlabs TTS....................... for
+Deepgram STT.............................. for
+Deepgram STT.............................. for
+Elevenlabs TTS....................... you
+Deepgram STT.............................. you
+Deepgram STT.............................. you
+Elevenlabs TTS.......................?
+Deepgram STT..............................?
+Deepgram STT..............................?
+Elevenlabs TTS....................... Like
+Deepgram STT.............................. Like
+Deepgram STT.............................. Like
+Elevenlabs TTS.......................…
+Deepgram STT..............................…
+Deepgram STT..............................…
+Elevenlabs TTS....................... parking
+Deepgram STT.............................. parking
+Deepgram STT.............................. parking
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... a
+Deepgram STT.............................. a
+Deepgram STT.............................. a
+Elevenlabs TTS....................... balcony
+Deepgram STT.............................. balcony
+Deepgram STT.............................. balcony
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... pet
+Deepgram STT.............................. pet
+Deepgram STT.............................. pet
+Elevenlabs TTS.......................-friendly
+Deepgram STT..............................-friendly
+Deepgram STT..............................-friendly
+Elevenlabs TTS.......................,
+Deepgram STT..............................,
+Deepgram STT..............................,
+Elevenlabs TTS....................... anything
+Deepgram STT.............................. anything
+Deepgram STT.............................. anything
+Elevenlabs TTS....................... like
+Deepgram STT.............................. like
+Deepgram STT.............................. like
+Elevenlabs TTS....................... that
+Deepgram STT.............................. that
+Deepgram STT.............................. that
+Elevenlabs TTS.......................?
+Deepgram STT..............................?
+Deepgram STT..............................?
+Openai Response..............................Oh… okay—the Downbridge area in L.A.—got it… That really helps, John. Umm, are there any must-haves for you? Like… parking, a balcony, pet-friendly, anything like that?

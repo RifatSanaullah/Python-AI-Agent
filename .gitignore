@@ -1,0 +1,14 @@
+.env
+boomercaller
+*.db
+vosk-model*
+*_pycache_*
+recordings/
+venv/
+venv
+agent_venv/
+.idea/
+.venv/
+.vscode/
+__pycache__/
+
