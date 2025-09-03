@@ -1,1 +1,2 @@
+piper_voices/en_US-ryan-high.onnx filter=lfs diff=lfs merge=lfs -text
 *.onnx filter=lfs diff=lfs merge=lfs -text
