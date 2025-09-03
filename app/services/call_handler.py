@@ -3,12 +3,17 @@ import audioop
 import asyncio
 import logging
 import time, io
+import os
+import wave
 import numpy as np
+import webrtcvad
+from collections import deque
 from app.services.playht_service import PlayHT
 from app.services.murf_service import MurfAI
 from app.services.twilio_service import TwilioService
 from app.services.ai_service import AIService
 from app.services.voice_detector import VoiceActivityDetector
+from app.services.voicemail_detection import VoiceMailDetection
 # from app.services.ai_service_v2 import AIService
 from app.services.s3_service import S3Service
 from app.services.backend_service import BackendHandler
@@ -16,6 +21,7 @@ from app.services.polly_service import PollyService
 from app.services.deepgram_service import DeepgramService
 from app.services.assembly_ai_transcribe_service import TranscribeService
 from app.services.elevenlabs_service import ElevenLabsService
+from app.services.pipertts_service import PiperService
 from app.services.azure_service import AzureService
 # from app.services.azure_tts_service import AzureService
 from app.services.zoho_service import ZohoService
@@ -42,6 +48,7 @@ from app.services.cinc_service import CincService # Import the new unified CincS
 from app.adapters.filler_manager import FillerManager
 from app.helpers.utils import estimate_speech_duration, fast_downsample_mulaw
 from scipy.signal import resample as scipy_resample # Import to avoid name conflict
+
 
 # Configure logging
 logging.basicConfig(
@@ -76,6 +83,9 @@ class CallHandler:
         self.calls = {}
         self.additionalinfo = {}
         self.lock = {}
+        self.voice_recording_active = False
+        self.voice_accumulator = deque()
+        self.max_voice_bytes = 64000
 
     async def _get_or_create_lock(self, call_sid):
         if call_sid not in self.locks:
@@ -162,6 +172,7 @@ class CallHandler:
 
         # with open(output_file, "ab") as f:
         try:
+            count = 0
             while True:
                 data = await websocket.receive_json()
                 if data["event"] in ("connected", "start"):
@@ -259,6 +270,60 @@ class CallHandler:
 
                 if data['streamSid'] and call_id and not self.twilio_service.is_empty(call_id, 'audio_buffer'):
                     audio_data = await self.twilio_service.get_or_dequeue_audio(call_id, 'audio_buffer')
+                    # Check if we have enough audio data
+                    audio_buffer = deque(maxlen=10)
+                    if len(audio_data) == 0:
+                        print("No audio data received")
+                        return
+
+                    print(f"Audio chunk length: {len(audio_data)} bytes")
+                    audio_buffer.append(audio_data)
+                    combined_audio = b''.join(audio_buffer)
+                    print(f"Combined audio length: {len(combined_audio)} bytes")
+
+                    sample_rate = 8000
+                    samples_needed = int(sample_rate * 0.030)
+                    bytes_needed = samples_needed * 1
+
+                    if len(combined_audio) > 0 and len(combined_audio) < bytes_needed:
+                        audio_np = np.frombuffer(combined_audio, dtype=np.int8)
+                        rms = np.sqrt(np.mean(audio_np.astype(np.float32)**2))
+                        if rms > 20:
+                            if not self.voice_recording_active:
+                                self.voice_recording_active = True
+                                self.voice_accumulator = deque()
+                            
+                            if self.voice_recording_active:
+                                self.voice_accumulator.append(audio_data)
+                                current_bytes = sum(len(chunk) for chunk in self.voice_accumulator)
+                                
+                                print(f" Accumulated: {current_bytes}/{self.max_voice_bytes} bytes")
+                                
+                                if current_bytes >= self.max_voice_bytes:
+                                    final_audio = b''.join(self.voice_accumulator)
+                                    os.makedirs('recordings', exist_ok=True)
+                                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                    filename = f"recordings/voice_6sec_{call_id}_{timestamp}.wav"
+
+                                    audio_16bit_final = audioop.ulaw2lin(final_audio, 2)
+
+                                    with wave.open(filename, 'wb') as wav_file:
+                                        wav_file.setnchannels(1)
+                                        wav_file.setsampwidth(2)
+                                        wav_file.setframerate(8000)
+                                        wav_file.writeframes(audio_16bit_final)
+                                    vm_detector = VoiceMailDetection()
+                                    voicemail_level, voicemail_confidence = await vm_detector.process_voicemail(audio_file=filename)
+                                    logging.info(f"Voicemail Detection: {voicemail_level},{voicemail_confidence}")
+                                    # if voicemail_level == "voicemail":
+                                    #     count += 1
+                                    # print(count)
+                                    # if count == 2:
+                                    #     return ""
+                                    os.remove(filename)
+                                    # Stop recording
+                                    self.voice_recording_active = False
+                                    self.voice_accumulator.clear()
                     # await self.transcribe_service.transcribe(audio_data)
                     # await session['synthesis_service'].transcribe(audio_data)
                     await self.agents[call_id]['transcribe_service'].transcribe(audio_data)
@@ -1483,6 +1548,8 @@ class CallHandler:
             self.agents[call_id]["synthesis_service"] = PlayHT(self.loop)
         elif self.agents[call_id]['TTS']['name'] == 'Claude':
             self.agents[call_id]["synthesis_service"] = MurfAI(self.loop)
+        elif self.agents[call_id]['TTS']['name'] == 'Pipertts':
+            self.agents[call_id]["synthesis_service"] = PiperService(self.loop)
         else:
             self.agents[call_id]["synthesis_service"] = self.initialize_transcriber(call_id, DeepgramService)
 
@@ -1554,6 +1621,8 @@ class CallHandler:
         elif self.agents[call_id]['TTS']['name'] == 'PlayHT':
             await self.agents[call_id]['synthesis_service'].establish_connection( self.agents[call_id]['TTS']['voice']['model'], self.agents[call_id]['TTS']['model'])
         elif self.agents[call_id]['TTS']['name'] == 'Claude':
+            await self.agents[call_id]['synthesis_service'].establish_connection(self.agents[call_id]['TTS']['voice']['model'], self.agents[call_id]['TTS']['model'])
+        elif self.agents[call_id]['TTS']['name'] == 'Pipertts':
             await self.agents[call_id]['synthesis_service'].establish_connection(self.agents[call_id]['TTS']['voice']['model'], self.agents[call_id]['TTS']['model'])
         else:
             await self.agents[call_id]['synthesis_service'].establish_sp_connection(self.agents[call_id]['TTS']['voice']['model'])
@@ -1700,7 +1769,6 @@ class CallHandler:
     def process_audio_for_twilio(self, playht_audio_chunk_pcm):
    # 1. Load the WAV audio segment
         audio_segment = AudioSegment.from_wav(io.BytesIO(playht_audio_chunk_pcm)) # Use io.BytesIO for in-memory bytes
-
         # 2. Convert to 8kHz, mono, and then to mulaw (pydub handles intermediate PCM)
         # Ensure it's mono if not already, as mulaw is typically mono for telephony
         audio_segment = audio_segment.set_frame_rate(8000).set_channels(1)

@@ -6,3 +6,9 @@ vosk-model*
 recordings/
 venv/
 venv
+agent_venv/
+.idea/
+.venv/
+.vscode/
+__pycache__/
+
