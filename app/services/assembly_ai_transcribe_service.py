@@ -3,7 +3,7 @@ import asyncio
 
 class TranscribeService:
     def __init__(self,loop=None, speak_model=None):
-        self.api_key = "9576f4ea99e14b90a1c6ee4100b4536f"
+        self.api_key = ""
         aai.settings.api_key = self.api_key
         self.on_transcript = None  # Store the callback function
         self.transcriber = None
